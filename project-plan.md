@@ -293,21 +293,32 @@ The right column is a contextual panel that updates based on the currently selec
 
 ## Implementation Plan
 
-### PR 1: Foundation
+### PR 1: Foundation ✅ COMPLETED
 
 **Goal:** Project scaffolding, database, auth, and layout shell.
 
-- Initialize Next.js project with App Router, Tailwind, shadcn/ui
-- Set up Supabase project: database, auth configuration
-- Implement email magic link auth with single-user lockdown
-- Create all database tables and RLS policies (full schema from above)
-- Build the app layout shell:
-  - Header with navigation (Practice, Lessons, Repertoire, Reports) and search placeholder
-  - Two-column layout: left column (feed) + right column (repertoire focus panel)
-  - Sticky footer bar placeholder
-  - Responsive breakpoints (right column → collapsible section on mobile, footer simplification)
-- Basic routing: `/` (practice), `/lessons`, `/repertoire`, `/reports`
-- Warm visual design: color palette, typography (serif headings, sans-serif body), spacing system
+- ✅ Initialize Next.js project with App Router, Tailwind, shadcn/ui
+- ✅ Set up Supabase project: database, auth configuration
+- ✅ Implement email magic link auth with single-user lockdown
+- ✅ Create all database tables and RLS policies (full schema from above)
+- ✅ Build the app layout shell:
+  - ✅ Header with navigation (Practice, Lessons, Repertoire, Reports) and search placeholder
+  - ✅ Two-column layout: left column (feed) + right column (repertoire focus panel)
+  - ✅ Sticky footer bar placeholder
+  - ✅ Responsive breakpoints (right column → collapsible section on mobile, footer simplification)
+- ✅ Basic routing: `/` (practice), `/lessons`, `/repertoire`, `/reports`
+- ✅ Warm visual design: color palette, typography (serif headings, sans-serif body), spacing system
+
+**Implementation notes:**
+- Using `@supabase/ssr` with three-client pattern (browser, server, middleware) for Next.js 16 App Router
+- Auth callback route enforces single-user lockdown via `AUTHORIZED_EMAIL` env var
+- Middleware handles session refresh and route protection
+- RLS policies check `auth.uid() IS NOT NULL` (sufficient for single-user app)
+- Database schema includes all 11 tables, 5 enums, indexes, triggers, and RLS
+- Warm theme: cream backgrounds (oklch 0.98), warm dark foreground, muted terracotta accents
+- Typography: Inter (body via `next/font`), Lora (headings via `next/font`)
+- Layout uses route group `(app)/` to cleanly separate authenticated pages from login
+- shadcn/ui v4 (base-nova style) with custom color overrides in globals.css
 
 ### PR 2: Repertoire Database
 
