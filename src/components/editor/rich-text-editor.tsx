@@ -26,6 +26,7 @@ type RichTextEditorProps = {
   pieces: PieceSuggestion[];
   onSave?: (content: JSONContent) => Promise<void>;
   placeholder?: string;
+  readOnly?: boolean;
 };
 
 // Create the mention suggestion as a standalone extension wrapping the Suggestion plugin
@@ -71,6 +72,7 @@ export function RichTextEditor({
   pieces,
   onSave,
   placeholder: placeholderText = "Start typing...",
+  readOnly = false,
 }: RichTextEditorProps) {
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef(false);
@@ -93,22 +95,27 @@ export function RichTextEditor({
   const editor = useEditor({
     extensions,
     content: initialContent || undefined,
+    editable: !readOnly,
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: "prose-editor focus:outline-none",
+        class: readOnly
+          ? "prose-editor cursor-default"
+          : "prose-editor focus:outline-none",
       },
     },
-    onUpdate: ({ editor: e }) => {
-      // Debounced auto-save
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-      saveTimeoutRef.current = setTimeout(() => {
-        // Ensure clean JSON for server action serialization
-        void handleSave(JSON.parse(JSON.stringify(e.getJSON())));
-      }, 1500);
-    },
+    onUpdate: readOnly
+      ? undefined
+      : ({ editor: e }) => {
+          // Debounced auto-save
+          if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+          }
+          saveTimeoutRef.current = setTimeout(() => {
+            // Ensure clean JSON for server action serialization
+            void handleSave(JSON.parse(JSON.stringify(e.getJSON())));
+          }, 1500);
+        },
   });
 
   const handleSave = useCallback(
@@ -124,9 +131,9 @@ export function RichTextEditor({
     [onSave]
   );
 
-  // Save on blur
+  // Save on blur (skip in readOnly mode)
   useEffect(() => {
-    if (!editor || !onSave) return;
+    if (!editor || !onSave || readOnly) return;
 
     const handleBlur = () => {
       if (saveTimeoutRef.current) {
@@ -155,7 +162,7 @@ export function RichTextEditor({
 
   return (
     <div className="rich-text-editor">
-      <BubbleToolbar editor={editor} />
+      {!readOnly && <BubbleToolbar editor={editor} />}
       <EditorContent editor={editor} />
     </div>
   );

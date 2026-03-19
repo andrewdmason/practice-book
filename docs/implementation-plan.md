@@ -79,20 +79,26 @@
 - ✅ Auto-save with 1.5s debounce + save on blur; content persists across reloads via Supabase JSONB
 - ✅ Demo page (`/editor-demo`) for testing both practice and lesson editors with full round-trip saves
 
-## PR 5: Practice Feed & Unified Timeline
+## PR 5: Practice Feed & Unified Timeline ✅ COMPLETED
 
 **Goal:** The main daily practice view with per-piece sections and lessons inline in the feed.
 
-- Practice feed as the home/default view (left column)
-- Auto-create today's `practice_entry` on first visit or timer start, with `practice_entry_sections` generated for each active piece + Technique + Sight Reading + General Notes
-- Each day shows: date header, time summary block (from timer data), then collapsible per-piece sections with Tiptap editors
-- Empty sections stay collapsed (just the header); sections with content are expanded
-- **Lesson entries appear inline in the feed** on their date, visually distinct from practice entries
-- Today's entry is editable; previous days are read-only in the feed (click to open editable view)
-- Clicking into a lesson transitions to zen mode (full-width, no right column)
-- "New Lesson" button in the feed header
-- Infinite scroll / paginated loading for history
-- Wire up mention and task extraction on section save
+- ✅ Practice feed as the home/default view (left column)
+- ✅ Auto-create today's `practice_entry` on first visit or timer start, with `practice_entry_sections` generated for each active piece + Technique + Sight Reading + General Notes
+- ✅ Each day shows: date header, time summary block (from timer data), then collapsible per-piece sections with Tiptap editors
+- ✅ Empty sections stay collapsed (just the header); sections with content are expanded
+- ✅ **Lesson entries appear inline in the feed** on their date, visually distinct from practice entries
+- ✅ Today's entry is editable; previous days are read-only in the feed (use `readOnly` prop on RichTextEditor)
+- ✅ Clicking into a lesson transitions to zen mode (full-width, no right column) via `/lessons/[id]` route with ZenModeProvider context
+- ✅ "New Lesson" button in the feed header and lessons page
+- ✅ Infinite scroll / paginated loading for history (cursor-based by date)
+- ✅ Mention and task extraction on section save already wired up via existing `saveEditorContent` action
+
+**Implementation notes:**
+- Server actions in `src/app/(app)/feed/actions.ts`: `ensureTodayEntry()` called on home page load to ensure today's entry and auto-generated sections exist. `getFeedPage(cursor?, limit=7)` provides cursor-based pagination. `getTimeSummaryForDate(date)` generalizes timer summary logic.
+- `FeedSection` component uses shadcn Collapsible, renders editor with context-aware `readOnly` prop and save callbacks.
+- `ZenModeProvider` context wraps lesson editor to signal footer bar to hide itself.
+- `RichTextEditor` updated with `readOnly` prop: sets `editable: false`, hides BubbleToolbar, disables auto-save.
 
 ## PR 6: Lesson Goals & Repertoire Focus Panel
 
