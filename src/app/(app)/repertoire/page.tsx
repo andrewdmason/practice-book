@@ -10,7 +10,7 @@ export default async function RepertoirePage() {
 
   const [{ data: pieces }, { data: collections }, piecesWithLastPlayed] =
     await Promise.all([
-      supabase.from("pieces").select("*").order("name"),
+      supabase.from("pieces").select("*").order("sort_order").order("name"),
       supabase.from("collections").select("*, pieces(*)").order("name"),
       getPiecesWithLastPlayed(),
     ]);

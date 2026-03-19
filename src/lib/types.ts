@@ -24,6 +24,7 @@ export type Piece = {
   composer: string | null;
   status: PieceStatus;
   mastery_level: MasteryLevel;
+  sort_order: number;
   notes: string | null;
   created_at: string;
   updated_at: string;

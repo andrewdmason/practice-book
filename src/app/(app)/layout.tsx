@@ -15,6 +15,7 @@ export default async function AppLayout({
     .from("pieces")
     .select("*")
     .eq("status", "active")
+    .order("sort_order")
     .order("name");
 
   return (
