@@ -100,7 +100,7 @@
 - `ZenModeProvider` context wraps lesson editor to signal footer bar to hide itself.
 - `RichTextEditor` updated with `readOnly` prop: sets `editable: false`, hides BubbleToolbar, disables auto-save.
 
-## PR 6: Lesson Goals & Repertoire Focus Panel
+## PR 6: Lesson Goals & Repertoire Focus Panel ✅ COMPLETED
 
 **Goal:** Goal extraction from lessons, inline tasks wired to the right column, and the full repertoire focus panel.
 
@@ -112,14 +112,25 @@
   - Checkboxes for tasks and goals are interactive from the focus panel
 - Mobile: focus panel as collapsible section or tab below the feed
 
-## PR 7: Repertoire Object Pages
+## PR 7: Repertoire Object Pages ✅ COMPLETED
 
 **Goal:** Full repertoire object pages (the dedicated `/repertoire/[id]` view), completing the backlink system.
 
-- Repertoire object page shows the same content as the focus panel but as a full page: metadata, bookmarks, open tasks, open goals, and a complete reverse-chronological mention feed
-- Each mention rendered as a card: date, source type/label, context paragraph
-- Clicking a mention card navigates to the full practice or lesson entry
-- Collection pages aggregate mentions, tasks, and goals across all child pieces
+- ✅ Piece detail page wired with full mention feed (cursor-paginated with infinite scroll)
+- ✅ Piece detail page shows open goals and tasks (toggleable checkboxes)
+- ✅ Each mention rendered as a card: date, source badge, context snippet
+- ✅ Mention cards clickable to source lesson or practice entry
+- ✅ New `/repertoire/collections/[id]` collection detail page
+- ✅ Collection page aggregates child pieces, goals, tasks, and mentions across all children
+- ✅ Navigation: collection links in piece header and collection row now point to collection detail pages
+
+**Implementation notes:**
+- Extracted `resolveMentionSources` helper in `focus-panel/actions.ts` to avoid duplication across piece and collection actions
+- `getPieceMentions` and `getCollectionMentions` use cursor-based pagination (limit=20) with `created_at` cursors
+- New client components: `GoalList`, `TaskList` for toggleable checkboxes; `MentionFeed` for infinite scroll (same pattern as `PracticeFeed`)
+- New server component: `MentionCard` for individual mention display
+- Collection detail page reuses all object page components for consistent UX
+- Build verified clean: no TypeScript errors, all routes properly registered
 
 ## PR 8: Reporting
 

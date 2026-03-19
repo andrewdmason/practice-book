@@ -6,8 +6,14 @@ import { PieceDetailHeader } from "@/components/repertoire/piece-detail-header";
 import { PieceMasteryControl } from "@/components/repertoire/piece-mastery-control";
 import { PieceNotes } from "@/components/repertoire/piece-notes";
 import { BookmarkList } from "@/components/repertoire/bookmark-list";
-import { Card, CardContent } from "@/components/ui/card";
+import { GoalList } from "@/components/repertoire/goal-list";
+import { TaskList } from "@/components/repertoire/task-list";
+import { MentionFeed } from "@/components/repertoire/mention-feed";
 import { Separator } from "@/components/ui/separator";
+import {
+  getPieceFocusData,
+  getPieceMentions,
+} from "@/app/(app)/focus-panel/actions";
 import type { PieceWithBookmarks, Collection } from "@/lib/types";
 
 export default async function PieceDetailPage({
@@ -30,14 +36,22 @@ export default async function PieceDetailPage({
 
   const typedPiece = piece as unknown as PieceWithBookmarks;
 
-  let collection: Collection | null = null;
-  if (typedPiece.collection_id) {
-    const { data } = await supabase
-      .from("collections")
-      .select("*")
-      .eq("id", typedPiece.collection_id)
-      .single();
-    collection = data as Collection | null;
+  const [collection, focusData, mentionPage] = await Promise.all([
+    typedPiece.collection_id
+      ? supabase
+          .from("collections")
+          .select("*")
+          .eq("id", typedPiece.collection_id)
+          .single()
+          .then(({ data }) => data as Collection | null)
+      : Promise.resolve(null),
+    getPieceFocusData(id),
+    getPieceMentions(id),
+  ]);
+
+  async function loadMoreMentions(cursor: string) {
+    "use server";
+    return getPieceMentions(id, cursor);
   }
 
   return (
@@ -69,15 +83,16 @@ export default async function PieceDetailPage({
           bookmarks={typedPiece.bookmarks ?? []}
         />
 
+        {(focusData.goals.length > 0 || focusData.tasks.length > 0) && (
+          <Separator />
+        )}
+
+        <GoalList initialGoals={focusData.goals} />
+        <TaskList initialTasks={focusData.tasks} />
+
         <Separator />
 
-        <Card>
-          <CardContent className="py-8 text-center text-muted-foreground">
-            <p className="text-sm">
-              Practice mentions will appear here once the editor is connected.
-            </p>
-          </CardContent>
-        </Card>
+        <MentionFeed initialData={mentionPage} loadMore={loadMoreMentions} />
       </div>
     </div>
   );

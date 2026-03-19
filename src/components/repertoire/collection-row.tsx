@@ -1,6 +1,7 @@
 "use client";
 
-import { MoreHorizontalIcon, PencilIcon, Trash2Icon, ChevronRightIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ExternalLinkIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon, ChevronRightIcon } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -29,6 +30,8 @@ export function CollectionRow({
   pieces: Piece[];
   allCollections: Collection[];
 }) {
+  const router = useRouter();
+
   return (
     <Collapsible defaultOpen={pieces.length > 0}>
       <div className="group flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-muted/50 transition-colors">
@@ -58,6 +61,13 @@ export function CollectionRow({
             <MoreHorizontalIcon />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onSelect={() => router.push(`/repertoire/collections/${collection.id}`)}
+            >
+              <ExternalLinkIcon />
+              View details
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <CollectionFormDialog
               collection={collection}
               trigger={

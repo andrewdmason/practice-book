@@ -2,7 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import type { PieceStatus, MasteryLevel } from "@/lib/types";
+import type {
+  PieceStatus,
+  MasteryLevel,
+  Task,
+  Goal,
+  Mention,
+  MentionPage,
+  MentionWithSource,
+  Collection,
+  Piece,
+} from "@/lib/types";
 
 function revalidateRepertoire(pieceId?: string) {
   revalidatePath("/repertoire");
@@ -282,4 +292,137 @@ export async function deleteBookmark(id: string, pieceId: string) {
 
   revalidateRepertoire(pieceId);
   return { success: true };
+}
+
+// --- Collection detail ---
+
+export async function getCollectionFocusData(
+  collectionId: string
+): Promise<{ tasks: Task[]; goals: Goal[] }> {
+  const supabase = await createClient();
+
+  const { data: pieces } = await supabase
+    .from("pieces")
+    .select("id")
+    .eq("collection_id", collectionId);
+
+  const pieceIds = (pieces ?? []).map((p) => p.id);
+  if (pieceIds.length === 0) {
+    return { tasks: [], goals: [] };
+  }
+
+  const [{ data: tasks }, { data: goals }] = await Promise.all([
+    supabase
+      .from("tasks")
+      .select("*")
+      .in("piece_id", pieceIds)
+      .eq("completed", false)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("goals")
+      .select("*")
+      .in("piece_id", pieceIds)
+      .eq("completed", false)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  return {
+    tasks: (tasks ?? []) as Task[],
+    goals: (goals ?? []) as Goal[],
+  };
+}
+
+export async function getCollectionMentions(
+  collectionId: string,
+  cursor?: string,
+  limit = 20
+): Promise<MentionPage> {
+  const supabase = await createClient();
+
+  const { data: pieces } = await supabase
+    .from("pieces")
+    .select("id")
+    .eq("collection_id", collectionId);
+
+  const pieceIds = (pieces ?? []).map((p) => p.id);
+  if (pieceIds.length === 0) {
+    return { items: [], nextCursor: null };
+  }
+
+  let query = supabase
+    .from("mentions")
+    .select("*")
+    .in("piece_id", pieceIds)
+    .order("created_at", { ascending: false })
+    .limit(limit + 1);
+
+  if (cursor) {
+    query = query.lt("created_at", cursor);
+  }
+
+  const { data: rawMentions } = await query;
+  const rows = rawMentions ?? [];
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const items = await resolveMentionSources(page as Mention[]);
+
+  return {
+    items,
+    nextCursor: hasMore ? page[page.length - 1].created_at : null,
+  };
+}
+
+async function resolveMentionSources(
+  rawMentions: Mention[]
+): Promise<MentionWithSource[]> {
+  if (rawMentions.length === 0) return [];
+
+  const supabase = await createClient();
+
+  const lessonIds = rawMentions
+    .filter((m) => m.source_type === "lesson")
+    .map((m) => m.source_id);
+  const practiceEntryIds = rawMentions
+    .filter((m) => m.source_type === "practice_entry")
+    .map((m) => m.source_id);
+
+  let lessonDates: Record<string, string> = {};
+  let practiceDates: Record<string, string> = {};
+
+  if (lessonIds.length > 0) {
+    const { data: lessons } = await supabase
+      .from("lessons")
+      .select("id, date")
+      .in("id", lessonIds);
+    if (lessons) {
+      lessonDates = Object.fromEntries(lessons.map((l) => [l.id, l.date]));
+    }
+  }
+
+  if (practiceEntryIds.length > 0) {
+    const { data: sections } = await supabase
+      .from("practice_entry_sections")
+      .select("id, practice_entries(date)")
+      .in("id", practiceEntryIds);
+    if (sections) {
+      for (const s of sections) {
+        const entry = s.practice_entries as unknown as { date: string } | null;
+        if (entry) {
+          practiceDates[s.id] = entry.date;
+        }
+      }
+    }
+  }
+
+  return rawMentions.map((m) => {
+    const isLesson = m.source_type === "lesson";
+    const date = isLesson
+      ? lessonDates[m.source_id]
+      : practiceDates[m.source_id];
+    return {
+      ...m,
+      source_date: date ?? m.created_at.slice(0, 10),
+      source_label: isLesson ? "Lesson" : "Practice",
+    };
+  });
 }

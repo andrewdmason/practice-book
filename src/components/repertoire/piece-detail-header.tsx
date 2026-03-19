@@ -27,7 +27,7 @@ export function PieceDetailHeader({
           <>
             <span>&middot;</span>
             <Link
-              href="/repertoire"
+              href={`/repertoire/collections/${collection.id}`}
               className="hover:text-foreground transition-colors"
             >
               {collection.name}
