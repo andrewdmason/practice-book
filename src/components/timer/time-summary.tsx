@@ -5,7 +5,7 @@ import { formatElapsed } from "@/lib/timer-utils";
 import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
 import type { TimeSummaryEntry } from "@/lib/types";
 
-export function TimeSummary({ entries }: { entries: TimeSummaryEntry[] }) {
+export function TimeSummary({ entries, label = "Today" }: { entries: TimeSummaryEntry[]; label?: string }) {
   if (entries.length === 0) return null;
 
   const totalSeconds = entries.reduce((sum, e) => sum + e.total_seconds, 0);
@@ -15,7 +15,7 @@ export function TimeSummary({ entries }: { entries: TimeSummaryEntry[] }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-medium">
           <ClockIcon className="size-4 text-muted-foreground" />
-          Today
+          {label}
         </div>
         <span className="text-sm font-semibold tabular-nums">
           {formatElapsed(totalSeconds)}

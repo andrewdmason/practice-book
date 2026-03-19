@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useTimer } from "@/components/timer/timer-context";
+import { useZenMode } from "@/components/layout/zen-mode-context";
 import { formatElapsed } from "@/lib/timer-utils";
 import type { TimerTarget } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ function targetsMatch(a: TimerTarget | null, b: TimerTarget): boolean {
 }
 
 export function FooterBar() {
+  const isZenMode = useZenMode();
   const {
     isRunning,
     currentTarget,
@@ -78,6 +80,8 @@ export function FooterBar() {
   const allTargets = [...pieceTargets, ...specialTargets];
 
   const selectedValue = currentTarget ? targetKey(currentTarget) : undefined;
+
+  if (isZenMode) return null;
 
   return (
     <footer className="sticky bottom-0 z-40 border-t bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">

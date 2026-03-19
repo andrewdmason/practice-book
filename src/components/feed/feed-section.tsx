@@ -1,0 +1,128 @@
+"use client";
+
+import { useCallback, useState } from "react";
+import { ChevronRightIcon, MusicIcon, BookOpenIcon, PenLineIcon, MessageSquareIcon } from "lucide-react";
+import type { JSONContent } from "@tiptap/core";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { RichTextEditor } from "@/components/editor/rich-text-editor";
+import { saveEditorContent } from "@/app/(app)/editor/actions";
+import type { PracticeEntrySection, PieceSuggestion } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+const CATEGORY_LABELS: Record<string, string> = {
+  technique: "Technique",
+  sight_reading: "Sight Reading",
+  general: "General Notes",
+};
+
+const CATEGORY_ICONS: Record<string, typeof MusicIcon> = {
+  piece: MusicIcon,
+  technique: BookOpenIcon,
+  sight_reading: BookOpenIcon,
+  general: PenLineIcon,
+};
+
+function hasContent(content: unknown): boolean {
+  if (!content) return false;
+  const doc = content as { content?: { type: string }[] };
+  if (!doc.content || doc.content.length === 0) return false;
+  // A single empty paragraph doesn't count
+  if (
+    doc.content.length === 1 &&
+    doc.content[0].type === "paragraph" &&
+    !("content" in doc.content[0])
+  ) {
+    return false;
+  }
+  return true;
+}
+
+type FeedSectionProps = {
+  section: PracticeEntrySection;
+  isToday: boolean;
+  pieces: PieceSuggestion[];
+};
+
+export function FeedSection({ section, isToday, pieces }: FeedSectionProps) {
+  const sectionHasContent = hasContent(section.content);
+  const [isOpen, setIsOpen] = useState(sectionHasContent);
+
+  const label =
+    section.category === "piece"
+      ? section.piece_name ?? "Unknown Piece"
+      : CATEGORY_LABELS[section.category] ?? section.category;
+
+  const subtitle =
+    section.category === "piece" ? section.composer : null;
+
+  const Icon = CATEGORY_ICONS[section.category] ?? MessageSquareIcon;
+
+  const handleSave = useCallback(
+    async (content: JSONContent) => {
+      await saveEditorContent("practice_entry", section.id, content);
+    },
+    [section.id]
+  );
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger
+        className={cn(
+          "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50",
+          isOpen && "bg-muted/30"
+        )}
+      >
+        <ChevronRightIcon
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-transform",
+            isOpen && "rotate-90"
+          )}
+        />
+        <Icon className="size-4 shrink-0 text-muted-foreground" />
+        <span className="font-medium truncate">{label}</span>
+        {subtitle && (
+          <span className="text-muted-foreground truncate text-xs">
+            {subtitle}
+          </span>
+        )}
+        {!sectionHasContent && (
+          <span className="ml-auto text-xs text-muted-foreground/50">
+            empty
+          </span>
+        )}
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="pl-9 pr-3 pb-3 pt-1">
+          {isToday ? (
+            <RichTextEditor
+              context="practice_entry"
+              sourceType="practice_entry"
+              sourceId={section.id}
+              initialContent={section.content as JSONContent | null}
+              pieces={pieces}
+              onSave={handleSave}
+              placeholder="Write your notes..."
+            />
+          ) : sectionHasContent ? (
+            <RichTextEditor
+              context="practice_entry"
+              sourceType="practice_entry"
+              sourceId={section.id}
+              initialContent={section.content as JSONContent | null}
+              pieces={pieces}
+              readOnly
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground/50 italic">
+              No notes recorded
+            </p>
+          )}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}

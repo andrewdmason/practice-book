@@ -144,3 +144,34 @@ export type PieceSuggestion = {
   name: string;
   composer: string | null;
 };
+
+// Feed types
+export type PracticeEntrySection = {
+  id: string;
+  practice_entry_id: string;
+  piece_id: string | null;
+  category: EntrySectionCategory;
+  content: unknown;
+  sort_order: number;
+  piece_name?: string | null;
+  composer?: string | null;
+};
+
+export type FeedPracticeEntry = {
+  id: string;
+  date: string;
+  sections: PracticeEntrySection[];
+};
+
+export type FeedLesson = {
+  id: string;
+  date: string;
+  content: unknown;
+};
+
+export type FeedDay = {
+  date: string;
+  practiceEntry: FeedPracticeEntry | null;
+  lessons: FeedLesson[];
+  timeSummary: TimeSummaryEntry[];
+};
