@@ -37,6 +37,15 @@ export async function createPiece(formData: FormData) {
     return { error: "Name is required" };
   }
 
+  // New pieces go to end of sort order
+  const { data: maxRow } = await supabase
+    .from("pieces")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .single();
+  const nextOrder = (maxRow?.sort_order ?? 0) + 1;
+
   const { error } = await supabase.from("pieces").insert({
     name,
     composer,
@@ -44,6 +53,7 @@ export async function createPiece(formData: FormData) {
     status,
     mastery_level: masteryLevel,
     notes,
+    sort_order: nextOrder,
   });
 
   if (error) {
@@ -180,6 +190,24 @@ export async function updatePieceDetails(
   }
 
   revalidateRepertoire(id);
+  return { success: true };
+}
+
+export async function reorderPieces(orderedIds: string[]) {
+  const supabase = await createClient();
+
+  const updates = orderedIds.map((id, index) =>
+    supabase.from("pieces").update({ sort_order: index }).eq("id", id)
+  );
+
+  const results = await Promise.all(updates);
+  const error = results.find((r) => r.error)?.error;
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidateRepertoire();
   return { success: true };
 }
 
