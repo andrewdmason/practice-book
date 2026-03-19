@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { useTimer } from "@/components/timer/timer-context";
 import { useZenMode } from "@/components/layout/zen-mode-context";
+import { MetronomeControl } from "@/components/metronome/metronome-control";
 import { formatElapsed } from "@/lib/timer-utils";
 import type { TimerTarget } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -243,6 +244,11 @@ export function FooterBar() {
           })}
         </div>
 
+        {/* Metronome control - right aligned */}
+        <div className="hidden md:flex ml-auto shrink-0">
+          <MetronomeControl />
+        </div>
+
         {/* Clear focus button */}
         {showClear && (
           <button
@@ -254,8 +260,8 @@ export function FooterBar() {
           </button>
         )}
 
-        {/* Mobile: select dropdown */}
-        <div className="flex md:hidden flex-1 justify-end">
+        {/* Mobile: select dropdown + metronome */}
+        <div className="flex md:hidden flex-1 items-center justify-end gap-2">
           <Select value={selectedValue ?? ""} onValueChange={handleSelectChange}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Select piece..." />
@@ -270,6 +276,7 @@ export function FooterBar() {
               <SelectItem value="sight_reading">Sight Reading</SelectItem>
             </SelectContent>
           </Select>
+          <MetronomeControl />
         </div>
       </div>
     </div>
