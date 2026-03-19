@@ -3,10 +3,10 @@ import { BookOpenIcon, MusicIcon } from "lucide-react";
 import type { MentionWithSource } from "@/lib/types";
 
 export function MentionCard({ mention }: { mention: MentionWithSource }) {
-  const href =
-    mention.source_type === "lesson"
-      ? `/lessons/${mention.source_id}`
-      : `/`;
+  const isLesson = mention.source_label === "Lesson";
+  const href = isLesson
+    ? `/?date=${mention.source_date}`
+    : `/`;
 
   const date = new Date(mention.source_date + "T00:00:00");
   const formatted = date.toLocaleDateString("en-US", {
@@ -21,7 +21,7 @@ export function MentionCard({ mention }: { mention: MentionWithSource }) {
     >
       <div className="flex items-center gap-2 mb-1.5">
         <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
-          {mention.source_type === "lesson" ? (
+          {isLesson ? (
             <BookOpenIcon className="size-3" />
           ) : (
             <MusicIcon className="size-3" />

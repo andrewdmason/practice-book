@@ -29,15 +29,6 @@ export type Piece = {
   updated_at: string;
 };
 
-export type Bookmark = {
-  id: string;
-  piece_id: string;
-  name: string;
-  measure_start: number;
-  measure_end: number | null;
-  created_at: string;
-};
-
 // Timer types
 export type PracticeSession = {
   id: string;
@@ -69,10 +60,6 @@ export type TimeSummaryEntry = {
 };
 
 // Composite types for views
-export type PieceWithBookmarks = Piece & {
-  bookmarks: Bookmark[];
-};
-
 export type CollectionWithPieces = Collection & {
   pieces: Piece[];
 };
@@ -104,7 +91,8 @@ export const MASTERY_LEVELS: MasteryLevel[] = [
 ];
 
 // Editor types
-export type SourceType = "practice_entry" | "lesson";
+export type SourceType = "practice_entry";
+export type PracticeEntryType = "practice" | "lesson";
 export type EntrySectionCategory = "piece" | "technique" | "sight_reading" | "general";
 
 export type Mention = {
@@ -161,8 +149,7 @@ export type SearchResultType =
   | "piece"
   | "collection"
   | "practice_entry"
-  | "lesson"
-  | "bookmark";
+  | "lesson";
 
 export type SearchResult = {
   result_type: SearchResultType;
@@ -218,18 +205,13 @@ export type PracticeEntrySection = {
 export type FeedPracticeEntry = {
   id: string;
   date: string;
+  type: PracticeEntryType;
   sections: PracticeEntrySection[];
-};
-
-export type FeedLesson = {
-  id: string;
-  date: string;
-  content: unknown;
 };
 
 export type FeedDay = {
   date: string;
   practiceEntry: FeedPracticeEntry | null;
-  lessons: FeedLesson[];
+  lessons: FeedPracticeEntry[];
   timeSummary: TimeSummaryEntry[];
 };

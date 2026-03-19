@@ -247,79 +247,6 @@ export async function deleteCollection(id: string) {
   return { success: true };
 }
 
-// --- Bookmarks ---
-
-export async function createBookmark(formData: FormData) {
-  const supabase = await createClient();
-
-  const pieceId = formData.get("piece_id") as string;
-  const name = formData.get("name") as string;
-  const measureStart = parseInt(formData.get("measure_start") as string, 10);
-  const measureEndStr = formData.get("measure_end") as string;
-  const measureEnd = measureEndStr ? parseInt(measureEndStr, 10) : null;
-
-  if (!name || !pieceId || isNaN(measureStart)) {
-    return { error: "Name and starting measure are required" };
-  }
-
-  const { error } = await supabase.from("bookmarks").insert({
-    piece_id: pieceId,
-    name,
-    measure_start: measureStart,
-    measure_end: measureEnd,
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  revalidateRepertoire(pieceId);
-  return { success: true };
-}
-
-export async function updateBookmark(id: string, formData: FormData) {
-  const supabase = await createClient();
-
-  const pieceId = formData.get("piece_id") as string;
-  const name = formData.get("name") as string;
-  const measureStart = parseInt(formData.get("measure_start") as string, 10);
-  const measureEndStr = formData.get("measure_end") as string;
-  const measureEnd = measureEndStr ? parseInt(measureEndStr, 10) : null;
-
-  if (!name || isNaN(measureStart)) {
-    return { error: "Name and starting measure are required" };
-  }
-
-  const { error } = await supabase
-    .from("bookmarks")
-    .update({
-      name,
-      measure_start: measureStart,
-      measure_end: measureEnd,
-    })
-    .eq("id", id);
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  revalidateRepertoire(pieceId);
-  return { success: true };
-}
-
-export async function deleteBookmark(id: string, pieceId: string) {
-  const supabase = await createClient();
-
-  const { error } = await supabase.from("bookmarks").delete().eq("id", id);
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  revalidateRepertoire(pieceId);
-  return { success: true };
-}
-
 // --- Collection detail ---
 
 export async function getCollectionFocusData(
@@ -396,50 +323,31 @@ async function resolveMentionSources(
 
   const supabase = await createClient();
 
-  const lessonIds = rawMentions
-    .filter((m) => m.source_type === "lesson")
-    .map((m) => m.source_id);
-  const practiceEntryIds = rawMentions
-    .filter((m) => m.source_type === "practice_entry")
-    .map((m) => m.source_id);
+  const sectionIds = rawMentions.map((m) => m.source_id);
 
-  let lessonDates: Record<string, string> = {};
-  let practiceDates: Record<string, string> = {};
+  const sectionDates: Record<string, { date: string; type: string }> = {};
 
-  if (lessonIds.length > 0) {
-    const { data: lessons } = await supabase
-      .from("lessons")
-      .select("id, date")
-      .in("id", lessonIds);
-    if (lessons) {
-      lessonDates = Object.fromEntries(lessons.map((l) => [l.id, l.date]));
-    }
-  }
-
-  if (practiceEntryIds.length > 0) {
+  if (sectionIds.length > 0) {
     const { data: sections } = await supabase
       .from("practice_entry_sections")
-      .select("id, practice_entries(date)")
-      .in("id", practiceEntryIds);
+      .select("id, practice_entries(date, type)")
+      .in("id", sectionIds);
     if (sections) {
       for (const s of sections) {
-        const entry = s.practice_entries as unknown as { date: string } | null;
+        const entry = s.practice_entries as unknown as { date: string; type: string } | null;
         if (entry) {
-          practiceDates[s.id] = entry.date;
+          sectionDates[s.id] = { date: entry.date, type: entry.type };
         }
       }
     }
   }
 
   return rawMentions.map((m) => {
-    const isLesson = m.source_type === "lesson";
-    const date = isLesson
-      ? lessonDates[m.source_id]
-      : practiceDates[m.source_id];
+    const info = sectionDates[m.source_id];
     return {
       ...m,
-      source_date: date ?? m.created_at.slice(0, 10),
-      source_label: isLesson ? "Lesson" : "Practice",
+      source_date: info?.date ?? m.created_at.slice(0, 10),
+      source_label: info?.type === "lesson" ? "Lesson" : "Practice",
     };
   });
 }

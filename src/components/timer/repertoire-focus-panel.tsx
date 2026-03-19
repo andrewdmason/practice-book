@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
-  BookmarkIcon,
   CheckCircle2Icon,
   ExternalLinkIcon,
   MessageSquareTextIcon,
@@ -24,7 +23,6 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
 import type {
-  Bookmark,
   MasteryLevel,
   MentionWithSource,
   Task,
@@ -91,7 +89,6 @@ function PieceDetail({ pieceId }: { pieceId: string }) {
     name: string;
     composer: string | null;
     mastery_level: string;
-    bookmarks: Bookmark[];
   } | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [mentions, setMentions] = useState<MentionWithSource[]>([]);
@@ -101,10 +98,9 @@ function PieceDetail({ pieceId }: { pieceId: string }) {
     setLoaded(false);
     const supabase = createClient();
 
-    // Fetch piece + bookmarks
     supabase
       .from("pieces")
-      .select("name, composer, mastery_level, bookmarks(*)")
+      .select("name, composer, mastery_level")
       .eq("id", pieceId)
       .single()
       .then(({ data }) => {
@@ -113,7 +109,6 @@ function PieceDetail({ pieceId }: { pieceId: string }) {
             name: data.name,
             composer: data.composer,
             mastery_level: data.mastery_level,
-            bookmarks: (data.bookmarks as Bookmark[]) ?? [],
           });
         }
       });
@@ -183,30 +178,8 @@ function PieceDetail({ pieceId }: { pieceId: string }) {
           </FocusSection>
         )}
 
-        {/* Bookmarks */}
-        {piece.bookmarks.length > 0 && (
-          <FocusSection
-            icon={<BookmarkIcon className="size-3.5" />}
-            title="Bookmarks"
-          >
-            {piece.bookmarks.map((bk) => (
-              <div
-                key={bk.id}
-                className="flex items-center justify-between text-sm"
-              >
-                <span>{bk.name}</span>
-                <span className="text-muted-foreground text-xs">
-                  {bk.measure_end
-                    ? `mm. ${bk.measure_start}\u2013${bk.measure_end}`
-                    : `m. ${bk.measure_start}`}
-                </span>
-              </div>
-            ))}
-          </FocusSection>
-        )}
-
         {/* Empty state */}
-        {loaded && tasks.length === 0 && mentions.length === 0 && piece.bookmarks.length === 0 && (
+        {loaded && tasks.length === 0 && mentions.length === 0 && (
           <p className="text-sm text-muted-foreground">
             No tasks or mentions yet.
           </p>
@@ -292,10 +265,10 @@ function TaskRow({
 }
 
 function MentionRow({ mention }: { mention: MentionWithSource }) {
-  const href =
-    mention.source_type === "lesson"
-      ? `/lessons/${mention.source_id}`
-      : `/`; // practice entries navigate to home feed
+  const isLesson = mention.source_label === "Lesson";
+  const href = isLesson
+    ? `/?date=${mention.source_date}`
+    : `/`; // navigate to home feed
 
   return (
     <Link

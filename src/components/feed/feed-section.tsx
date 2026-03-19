@@ -47,9 +47,10 @@ type FeedSectionProps = {
   isToday: boolean;
   pieces: PieceSuggestion[];
   timeSeconds?: number;
+  editorContext?: "practice_entry" | "lesson";
 };
 
-export function FeedSection({ section, isToday, pieces, timeSeconds }: FeedSectionProps) {
+export function FeedSection({ section, isToday, pieces, timeSeconds, editorContext = "practice_entry" }: FeedSectionProps) {
   const sectionHasContent = hasContent(section.content);
   const [isOpen, setIsOpen] = useState(sectionHasContent);
 
@@ -103,7 +104,7 @@ export function FeedSection({ section, isToday, pieces, timeSeconds }: FeedSecti
         <div className="pl-9 pr-3 pb-3 pt-1">
           {isToday ? (
             <RichTextEditor
-              context="practice_entry"
+              context={editorContext}
               sourceType="practice_entry"
               sourceId={section.id}
               initialContent={section.content as JSONContent | null}
@@ -113,7 +114,7 @@ export function FeedSection({ section, isToday, pieces, timeSeconds }: FeedSecti
             />
           ) : sectionHasContent ? (
             <RichTextEditor
-              context="practice_entry"
+              context={editorContext}
               sourceType="practice_entry"
               sourceId={section.id}
               initialContent={section.content as JSONContent | null}

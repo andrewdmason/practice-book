@@ -14,7 +14,6 @@ const RESULT_TYPE_ORDER: SearchResultType[] = [
   "collection",
   "lesson",
   "practice_entry",
-  "bookmark",
 ];
 
 const RESULT_TYPE_LABELS: Record<SearchResultType, string> = {
@@ -22,7 +21,6 @@ const RESULT_TYPE_LABELS: Record<SearchResultType, string> = {
   collection: "Collections",
   practice_entry: "Practice Notes",
   lesson: "Lessons",
-  bookmark: "Bookmarks",
 };
 
 function groupResults(results: SearchResult[]) {

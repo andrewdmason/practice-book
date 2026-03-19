@@ -14,16 +14,10 @@ export async function saveEditorContent(
 ) {
   const supabase = await createClient();
 
-  // 1. Save content to the source table
-  if (sourceType === "practice_entry") {
+  // 1. Save content to the section
+  {
     const { error } = await supabase
       .from("practice_entry_sections")
-      .update({ content, updated_at: new Date().toISOString() })
-      .eq("id", sourceId);
-    if (error) return { error: error.message };
-  } else {
-    const { error } = await supabase
-      .from("lessons")
       .update({ content, updated_at: new Date().toISOString() })
       .eq("id", sourceId);
     if (error) return { error: error.message };
@@ -52,9 +46,9 @@ export async function saveEditorContent(
   // 3. Extract and sync tasks + goal blocks (preserve completed state from DB)
   const tasks = extractTasks(content);
 
-  // For practice entry sections, look up the section's piece_id as fallback
+  // Look up the section's piece_id as fallback for task piece association
   let sectionPieceId: string | null = null;
-  if (sourceType === "practice_entry") {
+  {
     const { data: section } = await supabase
       .from("practice_entry_sections")
       .select("piece_id")

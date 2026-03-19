@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { PlusIcon, LibraryIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PieceFormDialog } from "./piece-form-dialog";
 import { CollectionFormDialog } from "./collection-form-dialog";
@@ -18,32 +19,21 @@ import type {
 } from "@/lib/types";
 import { PIECE_STATUS_LABELS } from "@/lib/types";
 
-type StatusGroup = {
-  status: PieceStatus;
-  standalonePieces: Piece[];
-  collections: { collection: Collection; pieces: Piece[] }[];
-};
+const TABS: PieceStatus[] = ["active", "upcoming", "archived"];
 
-function groupByStatus(
+function getStatusCount(
+  status: PieceStatus,
   pieces: Piece[],
-  collectionsWithPieces: CollectionWithPieces[]
-): StatusGroup[] {
-  const statuses: PieceStatus[] = ["active", "upcoming", "archived"];
-
-  return statuses.map((status) => {
-    const standalonePieces = pieces.filter(
-      (p) => p.collection_id === null && p.status === status
-    );
-
-    const collections = collectionsWithPieces
-      .map((c) => ({
-        collection: c,
-        pieces: c.pieces.filter((p) => p.status === status),
-      }))
-      .filter((c) => c.pieces.length > 0);
-
-    return { status, standalonePieces, collections };
-  });
+  collections: CollectionWithPieces[]
+): number {
+  const standalone = pieces.filter(
+    (p) => p.collection_id === null && p.status === status
+  ).length;
+  const inCollections = collections.reduce(
+    (sum, c) => sum + c.pieces.filter((p) => p.status === status).length,
+    0
+  );
+  return standalone + inCollections;
 }
 
 export function RepertoireList({
@@ -55,9 +45,21 @@ export function RepertoireList({
   collections: CollectionWithPieces[];
   stalePieces?: PieceWithLastPlayed[];
 }) {
-  const statusGroups = groupByStatus(pieces, collections);
+  const [activeTab, setActiveTab] = useState<PieceStatus>("active");
   const allCollections: Collection[] = collections;
   const hasAnyPieces = pieces.length > 0;
+
+  const standalonePieces = pieces.filter(
+    (p) => p.collection_id === null && p.status === activeTab
+  );
+  const filteredCollections = collections
+    .map((c) => ({
+      collection: c,
+      pieces: c.pieces.filter((p) => p.status === activeTab),
+    }))
+    .filter((c) => c.pieces.length > 0);
+  const totalCount = standalonePieces.length +
+    filteredCollections.reduce((sum, c) => sum + c.pieces.length, 0);
 
   return (
     <div className="space-y-6">
@@ -84,7 +86,36 @@ export function RepertoireList({
         </div>
       </div>
 
-      <GettingStaleSection stalePieces={stalePieces} />
+      {/* Tab bar */}
+      <div className="flex gap-1 border-b">
+        {TABS.map((tab) => {
+          const count = getStatusCount(tab, pieces, collections);
+          const isActive = activeTab === tab;
+          return (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+                isActive
+                  ? "border-foreground text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+              }`}
+            >
+              {PIECE_STATUS_LABELS[tab]}
+              {count > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] px-1.5 py-0 min-w-5 h-5 justify-center"
+                >
+                  {count}
+                </Badge>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeTab === "active" && <GettingStaleSection stalePieces={stalePieces} />}
 
       {!hasAnyPieces && (
         <Card>
@@ -94,42 +125,33 @@ export function RepertoireList({
         </Card>
       )}
 
-      {statusGroups.map((group) => {
-        const totalCount =
-          group.standalonePieces.length +
-          group.collections.reduce((sum, c) => sum + c.pieces.length, 0);
-        if (totalCount === 0) return null;
+      {hasAnyPieces && totalCount === 0 && (
+        <p className="text-sm text-muted-foreground py-8 text-center">
+          No {PIECE_STATUS_LABELS[activeTab].toLowerCase()} pieces.
+        </p>
+      )}
 
-        return (
-          <Card key={group.status}>
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-base">
-                  {PIECE_STATUS_LABELS[group.status]}
-                </CardTitle>
-                <Badge variant="secondary">{totalCount}</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="px-1 pb-2">
-              {group.collections.map(({ collection, pieces: collPieces }) => (
-                <CollectionRow
-                  key={collection.id}
-                  collection={collection}
-                  pieces={collPieces}
-                  allCollections={allCollections}
-                />
-              ))}
-              {group.standalonePieces.map((piece) => (
-                <PieceRow
-                  key={piece.id}
-                  piece={piece}
-                  collections={allCollections}
-                />
-              ))}
-            </CardContent>
-          </Card>
-        );
-      })}
+      {totalCount > 0 && (
+        <Card>
+          <CardContent className="px-1 py-2">
+            {filteredCollections.map(({ collection, pieces: collPieces }) => (
+              <CollectionRow
+                key={collection.id}
+                collection={collection}
+                pieces={collPieces}
+                allCollections={allCollections}
+              />
+            ))}
+            {standalonePieces.map((piece) => (
+              <PieceRow
+                key={piece.id}
+                piece={piece}
+                collections={allCollections}
+              />
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
