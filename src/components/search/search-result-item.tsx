@@ -5,7 +5,6 @@ import {
   FolderOpen,
   BookOpen,
   PenLine,
-  Bookmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SearchResult, TypeaheadResult, SearchResultType } from "@/lib/types";
@@ -18,7 +17,6 @@ const typeConfig: Record<
   collection: { icon: FolderOpen, label: "Collection" },
   practice_entry: { icon: PenLine, label: "Practice" },
   lesson: { icon: BookOpen, label: "Lesson" },
-  bookmark: { icon: Bookmark, label: "Bookmark" },
 };
 
 function formatDate(dateStr: string | null) {

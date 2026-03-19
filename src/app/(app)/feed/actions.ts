@@ -7,35 +7,15 @@ import type {
   TimeSummaryEntry,
   FeedDay,
   FeedPracticeEntry,
-  FeedLesson,
   EntrySectionCategory,
+  PracticeEntryType,
 } from "@/lib/types";
 
 /**
- * Ensure today's practice entry and sections exist.
- * Creates the entry row and sections for each active piece + technique + sight_reading + general.
+ * Ensure sections exist for a practice entry (technique, sight_reading, general + active pieces).
  */
-export async function ensureTodayEntry(): Promise<string> {
+async function ensureSections(entryId: string): Promise<void> {
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
-
-  // Get or create today's practice entry
-  let { data: entry } = await supabase
-    .from("practice_entries")
-    .select("id")
-    .eq("date", today)
-    .single();
-
-  if (!entry) {
-    const { data: newEntry } = await supabase
-      .from("practice_entries")
-      .insert({ date: today })
-      .select("id")
-      .single();
-    entry = newEntry;
-  }
-
-  if (!entry) throw new Error("Failed to create practice entry");
 
   // Fetch active pieces
   const { data: activePieces } = await supabase
@@ -48,7 +28,7 @@ export async function ensureTodayEntry(): Promise<string> {
   const { data: existingSections } = await supabase
     .from("practice_entry_sections")
     .select("piece_id, category")
-    .eq("practice_entry_id", entry.id);
+    .eq("practice_entry_id", entryId);
 
   const existingKeys = new Set(
     (existingSections ?? []).map(
@@ -70,7 +50,7 @@ export async function ensureTodayEntry(): Promise<string> {
   for (const piece of activePieces ?? []) {
     if (!existingKeys.has(`piece:${piece.id}`)) {
       toInsert.push({
-        practice_entry_id: entry.id,
+        practice_entry_id: entryId,
         piece_id: piece.id,
         category: "piece",
         sort_order: sortOrder++,
@@ -87,7 +67,7 @@ export async function ensureTodayEntry(): Promise<string> {
   for (const cat of fixedCategories) {
     if (!existingKeys.has(`${cat}:`)) {
       toInsert.push({
-        practice_entry_id: entry.id,
+        practice_entry_id: entryId,
         piece_id: null,
         category: cat,
         sort_order: sortOrder++,
@@ -98,6 +78,36 @@ export async function ensureTodayEntry(): Promise<string> {
   if (toInsert.length > 0) {
     await supabase.from("practice_entry_sections").insert(toInsert);
   }
+}
+
+/**
+ * Ensure today's practice entry and sections exist.
+ * Creates the entry row and sections for each active piece + technique + sight_reading + general.
+ */
+export async function ensureTodayEntry(): Promise<string> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Get or create today's practice entry
+  let { data: entry } = await supabase
+    .from("practice_entries")
+    .select("id")
+    .eq("date", today)
+    .eq("type", "practice")
+    .single();
+
+  if (!entry) {
+    const { data: newEntry } = await supabase
+      .from("practice_entries")
+      .insert({ date: today, type: "practice" })
+      .select("id")
+      .single();
+    entry = newEntry;
+  }
+
+  if (!entry) throw new Error("Failed to create practice entry");
+
+  await ensureSections(entry.id);
 
   return entry.id;
 }
@@ -115,7 +125,7 @@ async function ensureEntryForDate(
   // Create entry
   const { data: entry } = await supabase
     .from("practice_entries")
-    .insert({ date })
+    .insert({ date, type: "practice" })
     .select("id, date")
     .single();
 
@@ -248,16 +258,16 @@ export async function getFeedPage(
 ): Promise<{ items: FeedDay[]; nextCursor: string | null }> {
   const supabase = await createClient();
 
-  // Get distinct dates that have practice entries or lessons
+  // Get distinct dates that have practice entries, lessons, or timer sessions
   const today = new Date().toISOString().slice(0, 10);
   const beforeDate = cursor ?? today;
 
-  // Fetch practice entries for the date range
+  // Fetch all entries (practice + lesson) for the date range
   let peQuery = supabase
     .from("practice_entries")
-    .select("id, date")
+    .select("id, date, type")
     .order("date", { ascending: false })
-    .limit(limit);
+    .limit(limit * 3); // multiple entries per day possible
 
   if (cursor) {
     peQuery = peQuery.lt("date", beforeDate);
@@ -265,22 +275,7 @@ export async function getFeedPage(
     peQuery = peQuery.lte("date", beforeDate);
   }
 
-  const { data: practiceEntries } = await peQuery;
-
-  // Also fetch lessons in the same date range
-  let lessonsQuery = supabase
-    .from("lessons")
-    .select("id, date, content")
-    .order("date", { ascending: false })
-    .limit(limit * 3); // lessons can have multiple per day
-
-  if (cursor) {
-    lessonsQuery = lessonsQuery.lt("date", beforeDate);
-  } else {
-    lessonsQuery = lessonsQuery.lte("date", beforeDate);
-  }
-
-  const { data: lessons } = await lessonsQuery;
+  const { data: allEntries } = await peQuery;
 
   // Also fetch dates from practice sessions (timer data without notes)
   let sessionsQuery = supabase
@@ -299,8 +294,7 @@ export async function getFeedPage(
 
   // Collect all unique dates
   const dateSet = new Set<string>();
-  for (const pe of practiceEntries ?? []) dateSet.add(pe.date);
-  for (const l of lessons ?? []) dateSet.add(l.date);
+  for (const pe of allEntries ?? []) dateSet.add(pe.date);
   for (const s of sessionDates ?? []) dateSet.add(s.date);
 
   const allDates = Array.from(dateSet)
@@ -317,25 +311,28 @@ export async function getFeedPage(
   for (const date of allDates) {
     const timeSummary = await getTimeSummaryForDate(date);
 
-    let pe = (practiceEntries ?? []).find((p) => p.date === date);
+    const dateEntries = (allEntries ?? []).filter((e) => e.date === date);
+    let practiceEntry = dateEntries.find((e) => e.type === "practice");
+    const lessonEntries = dateEntries.filter((e) => e.type === "lesson");
 
     // For days with timer data but no practice entry, create one with sections
-    if (!pe && timeSummary.length > 0) {
-      pe = await ensureEntryForDate(date, timeSummary);
+    if (!practiceEntry && timeSummary.length > 0) {
+      practiceEntry = { ...(await ensureEntryForDate(date, timeSummary)), type: "practice" };
     }
 
-    let feedEntry: FeedPracticeEntry | null = null;
-    if (pe) {
-      // Fetch sections with piece info
+    async function buildFeedEntry(
+      entry: { id: string; date: string; type: string }
+    ): Promise<FeedPracticeEntry> {
       const { data: sections } = await supabase
         .from("practice_entry_sections")
         .select("id, practice_entry_id, piece_id, category, content, sort_order, pieces(name, composer)")
-        .eq("practice_entry_id", pe.id)
+        .eq("practice_entry_id", entry.id)
         .order("sort_order");
 
-      feedEntry = {
-        id: pe.id,
-        date: pe.date,
+      return {
+        id: entry.id,
+        date: entry.date,
+        type: entry.type as PracticeEntryType,
         sections: (sections ?? []).map((s) => ({
           id: s.id,
           practice_entry_id: s.practice_entry_id,
@@ -349,14 +346,13 @@ export async function getFeedPage(
       };
     }
 
-    const dayLessons: FeedLesson[] = (lessons ?? [])
-      .filter((l) => l.date === date)
-      .map((l) => ({ id: l.id, date: l.date, content: l.content }));
+    const feedPractice = practiceEntry ? await buildFeedEntry(practiceEntry) : null;
+    const feedLessons = await Promise.all(lessonEntries.map(buildFeedEntry));
 
     items.push({
       date,
-      practiceEntry: feedEntry,
-      lessons: dayLessons,
+      practiceEntry: feedPractice,
+      lessons: feedLessons,
       timeSummary,
     });
   }
@@ -364,14 +360,10 @@ export async function getFeedPage(
   // Determine next cursor
   const lastDate = allDates[allDates.length - 1];
   // Check if there are more entries before the last date
-  const [{ count: moreCount }, { count: moreLessonCount }, { count: moreSessionCount }] =
+  const [{ count: moreCount }, { count: moreSessionCount }] =
     await Promise.all([
       supabase
         .from("practice_entries")
-        .select("id", { count: "exact", head: true })
-        .lt("date", lastDate),
-      supabase
-        .from("lessons")
         .select("id", { count: "exact", head: true })
         .lt("date", lastDate),
       supabase
@@ -381,7 +373,7 @@ export async function getFeedPage(
     ]);
 
   const hasMore =
-    (moreCount ?? 0) > 0 || (moreLessonCount ?? 0) > 0 || (moreSessionCount ?? 0) > 0;
+    (moreCount ?? 0) > 0 || (moreSessionCount ?? 0) > 0;
 
   return {
     items,
@@ -391,20 +383,23 @@ export async function getFeedPage(
 
 /**
  * Create a new lesson for a given date (defaults to today).
+ * Creates a practice_entry with type='lesson' and auto-creates sections.
  */
 export async function createLesson(date?: string): Promise<string> {
   const supabase = await createClient();
   const lessonDate = date ?? new Date().toISOString().slice(0, 10);
 
   const { data, error } = await supabase
-    .from("lessons")
-    .insert({ date: lessonDate })
+    .from("practice_entries")
+    .insert({ date: lessonDate, type: "lesson" })
     .select("id")
     .single();
 
   if (error || !data) {
     throw new Error(error?.message ?? "Failed to create lesson");
   }
+
+  await ensureSections(data.id);
 
   revalidatePath("/");
   revalidatePath("/lessons");

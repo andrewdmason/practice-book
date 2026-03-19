@@ -17,32 +17,13 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function getContentPreview(content: unknown): string {
-  if (!content) return "Empty lesson";
-  const doc = content as {
-    content?: Array<{ content?: Array<{ text?: string }> }>;
-  };
-  if (!doc.content) return "Empty lesson";
-
-  const texts: string[] = [];
-  for (const node of doc.content) {
-    if (node.content) {
-      for (const inline of node.content) {
-        if (inline.text) texts.push(inline.text);
-      }
-    }
-    if (texts.join(" ").length > 150) break;
-  }
-
-  return texts.join(" ").slice(0, 150) || "Empty lesson";
-}
-
 export default async function LessonsPage() {
   const supabase = await createClient();
 
   const { data: lessons } = await supabase
-    .from("lessons")
-    .select("id, date, content")
+    .from("practice_entries")
+    .select("id, date")
+    .eq("type", "lesson")
     .order("date", { ascending: false });
 
   async function handleNewLesson() {
@@ -86,9 +67,6 @@ export default async function LessonsPage() {
                           Lesson
                         </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {getContentPreview(lesson.content)}
-                      </p>
                     </div>
                   </div>
                 </CardContent>

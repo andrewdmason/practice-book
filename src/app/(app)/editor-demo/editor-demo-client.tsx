@@ -30,7 +30,7 @@ export function EditorDemoClient({
 
   const handleSaveLesson = useCallback(
     async (content: JSONContent) => {
-      await saveEditorContent("lesson", lessonId, content);
+      await saveEditorContent("practice_entry", lessonId, content);
     },
     [lessonId]
   );
@@ -76,7 +76,7 @@ export function EditorDemoClient({
           <div className="rounded-lg border bg-card p-4">
             <RichTextEditor
               context="lesson"
-              sourceType="lesson"
+              sourceType="practice_entry"
               sourceId={lessonId}
               initialContent={lessonContent}
               pieces={pieces}

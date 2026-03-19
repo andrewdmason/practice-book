@@ -48,50 +48,31 @@ async function resolveMentionSources(
 
   const supabase = await createClient();
 
-  const lessonIds = rawMentions
-    .filter((m) => m.source_type === "lesson")
-    .map((m) => m.source_id);
-  const practiceEntryIds = rawMentions
-    .filter((m) => m.source_type === "practice_entry")
-    .map((m) => m.source_id);
+  const sectionIds = rawMentions.map((m) => m.source_id);
 
-  let lessonDates: Record<string, string> = {};
-  let practiceDates: Record<string, string> = {};
+  const sectionDates: Record<string, { date: string; type: string }> = {};
 
-  if (lessonIds.length > 0) {
-    const { data: lessons } = await supabase
-      .from("lessons")
-      .select("id, date")
-      .in("id", lessonIds);
-    if (lessons) {
-      lessonDates = Object.fromEntries(lessons.map((l) => [l.id, l.date]));
-    }
-  }
-
-  if (practiceEntryIds.length > 0) {
+  if (sectionIds.length > 0) {
     const { data: sections } = await supabase
       .from("practice_entry_sections")
-      .select("id, practice_entries(date)")
-      .in("id", practiceEntryIds);
+      .select("id, practice_entries(date, type)")
+      .in("id", sectionIds);
     if (sections) {
       for (const s of sections) {
-        const entry = s.practice_entries as unknown as { date: string } | null;
+        const entry = s.practice_entries as unknown as { date: string; type: string } | null;
         if (entry) {
-          practiceDates[s.id] = entry.date;
+          sectionDates[s.id] = { date: entry.date, type: entry.type };
         }
       }
     }
   }
 
   return rawMentions.map((m) => {
-    const isLesson = m.source_type === "lesson";
-    const date = isLesson
-      ? lessonDates[m.source_id]
-      : practiceDates[m.source_id];
+    const info = sectionDates[m.source_id];
     return {
       ...m,
-      source_date: date ?? m.created_at.slice(0, 10),
-      source_label: isLesson ? "Lesson" : "Practice",
+      source_date: info?.date ?? m.created_at.slice(0, 10),
+      source_label: info?.type === "lesson" ? "Lesson" : "Practice",
     };
   });
 }
@@ -142,7 +123,7 @@ export async function toggleTaskCompleted(taskId: string, completed: boolean) {
   }
 
   // 2. Sync the checked state back into the editor JSON content
-  if (task?.source_type === "practice_entry") {
+  if (task) {
     const { data: section } = await supabase
       .from("practice_entry_sections")
       .select("content")
@@ -154,22 +135,6 @@ export async function toggleTaskCompleted(taskId: string, completed: boolean) {
       if (updated) {
         await supabase
           .from("practice_entry_sections")
-          .update({ content: updated })
-          .eq("id", task.source_id);
-      }
-    }
-  } else if (task?.source_type === "lesson") {
-    const { data: lesson } = await supabase
-      .from("lessons")
-      .select("content")
-      .eq("id", task.source_id)
-      .single();
-
-    if (lesson?.content) {
-      const updated = updateTaskChecked(lesson.content, taskId, completed);
-      if (updated) {
-        await supabase
-          .from("lessons")
           .update({ content: updated })
           .eq("id", task.source_id);
       }

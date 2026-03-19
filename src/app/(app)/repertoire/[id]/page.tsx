@@ -4,7 +4,6 @@ import { ArrowLeftIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PieceDetailHeader } from "@/components/repertoire/piece-detail-header";
 import { PieceMasteryControl } from "@/components/repertoire/piece-mastery-control";
-import { BookmarkList } from "@/components/repertoire/bookmark-list";
 import { TaskList } from "@/components/repertoire/task-list";
 import { MentionFeed } from "@/components/repertoire/mention-feed";
 import { Separator } from "@/components/ui/separator";
@@ -12,7 +11,7 @@ import {
   getPieceFocusData,
   getPieceMentions,
 } from "@/app/(app)/focus-panel/actions";
-import type { PieceWithBookmarks, Collection } from "@/lib/types";
+import type { Piece, Collection } from "@/lib/types";
 
 export default async function PieceDetailPage({
   params,
@@ -24,7 +23,7 @@ export default async function PieceDetailPage({
 
   const { data: piece } = await supabase
     .from("pieces")
-    .select("*, bookmarks(*)")
+    .select("*")
     .eq("id", id)
     .single();
 
@@ -32,7 +31,7 @@ export default async function PieceDetailPage({
     notFound();
   }
 
-  const typedPiece = piece as unknown as PieceWithBookmarks;
+  const typedPiece = piece as Piece;
 
   const [collection, focusData, mentionPage] = await Promise.all([
     typedPiece.collection_id
@@ -68,13 +67,6 @@ export default async function PieceDetailPage({
         <PieceMasteryControl
           pieceId={typedPiece.id}
           initialLevel={typedPiece.mastery_level}
-        />
-
-        <Separator />
-
-        <BookmarkList
-          pieceId={typedPiece.id}
-          bookmarks={typedPiece.bookmarks ?? []}
         />
 
         {focusData.tasks.length > 0 && <Separator />}

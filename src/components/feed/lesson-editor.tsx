@@ -1,19 +1,16 @@
 "use client";
 
-import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
-import type { JSONContent } from "@tiptap/core";
 import { Button } from "@/components/ui/button";
-import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { ZenModeProvider } from "@/components/layout/zen-mode-context";
-import { saveEditorContent } from "@/app/(app)/editor/actions";
-import type { PieceSuggestion } from "@/lib/types";
+import { FeedSection } from "./feed-section";
+import type { PracticeEntrySection, PieceSuggestion } from "@/lib/types";
 
 type LessonEditorProps = {
   lessonId: string;
   lessonDate: string;
-  initialContent: JSONContent | null;
+  sections: PracticeEntrySection[];
   pieces: PieceSuggestion[];
 };
 
@@ -30,17 +27,15 @@ function formatLessonDate(dateStr: string): string {
 export function LessonEditor({
   lessonId,
   lessonDate,
-  initialContent,
+  sections,
   pieces,
 }: LessonEditorProps) {
   const router = useRouter();
 
-  const handleSave = useCallback(
-    async (content: JSONContent) => {
-      await saveEditorContent("lesson", lessonId, content);
-    },
-    [lessonId]
-  );
+  const sortedSections = [...sections].sort((a, b) => {
+    const order = { technique: 0, sight_reading: 1, piece: 2, general: 3 };
+    return (order[a.category] ?? 2) - (order[b.category] ?? 2);
+  });
 
   return (
     <ZenModeProvider>
@@ -61,16 +56,16 @@ export function LessonEditor({
           </p>
         </div>
 
-        <div className="rounded-lg border bg-card p-4 sm:p-6">
-          <RichTextEditor
-            context="lesson"
-            sourceType="lesson"
-            sourceId={lessonId}
-            initialContent={initialContent}
-            pieces={pieces}
-            onSave={handleSave}
-            placeholder="Write your lesson notes..."
-          />
+        <div className="rounded-lg border bg-card p-2">
+          {sortedSections.map((section) => (
+            <FeedSection
+              key={section.id}
+              section={section}
+              isToday={true}
+              pieces={pieces}
+              editorContext="lesson"
+            />
+          ))}
         </div>
       </div>
     </ZenModeProvider>

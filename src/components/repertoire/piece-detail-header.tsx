@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PencilIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArchiveIcon, PencilIcon, RotateCcwIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "./status-badge";
 import { MasteryBadge } from "./mastery-badge";
-import { updatePieceDetails } from "@/app/(app)/repertoire/actions";
+import { ArchiveDialog } from "./archive-dialog";
+import { updatePieceDetails, updatePieceStatus } from "@/app/(app)/repertoire/actions";
 import type { Piece, Collection } from "@/lib/types";
 
 export function PieceDetailHeader({
@@ -18,11 +20,14 @@ export function PieceDetailHeader({
   piece: Piece;
   collection: Collection | null;
 }) {
+  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(piece.name);
   const [composer, setComposer] = useState(piece.composer ?? "");
   const [notes, setNotes] = useState(piece.notes ?? "");
   const [saving, setSaving] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [reactivating, setReactivating] = useState(false);
 
   async function handleSave() {
     setSaving(true);
@@ -42,6 +47,13 @@ export function PieceDetailHeader({
     setComposer(piece.composer ?? "");
     setNotes(piece.notes ?? "");
     setEditing(false);
+  }
+
+  async function handleReactivate() {
+    setReactivating(true);
+    await updatePieceStatus(piece.id, "active");
+    setReactivating(false);
+    router.refresh();
   }
 
   if (editing) {
@@ -119,6 +131,35 @@ export function PieceDetailHeader({
           {notes}
         </p>
       )}
+
+      <div className="mt-4">
+        {piece.status === "archived" ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleReactivate}
+            disabled={reactivating}
+          >
+            <RotateCcwIcon data-icon="inline-start" />
+            {reactivating ? "Reactivating..." : "Reactivate"}
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setArchiveOpen(true)}
+          >
+            <ArchiveIcon data-icon="inline-start" />
+            Archive
+          </Button>
+        )}
+      </div>
+
+      <ArchiveDialog
+        piece={piece}
+        open={archiveOpen}
+        onOpenChange={setArchiveOpen}
+      />
     </div>
   );
 }

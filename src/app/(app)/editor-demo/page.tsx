@@ -12,27 +12,47 @@ export default async function EditorDemoPage() {
     .eq("status", "active")
     .order("name");
 
-  // Create or get a demo lesson for testing saves
+  // Create or get a demo lesson entry for testing saves
   const today = new Date().toISOString().split("T")[0];
   const { data: existingLesson } = await supabase
-    .from("lessons")
-    .select("id, content")
+    .from("practice_entries")
+    .select("id")
     .eq("date", today)
+    .eq("type", "lesson")
     .single();
 
-  let lessonId: string;
-  let lessonContent = null;
+  let lessonEntryId: string;
 
   if (existingLesson) {
-    lessonId = existingLesson.id;
-    lessonContent = existingLesson.content;
+    lessonEntryId = existingLesson.id;
   } else {
-    const { data: newLesson } = await supabase
-      .from("lessons")
-      .insert({ date: today })
+    const { data: newEntry } = await supabase
+      .from("practice_entries")
+      .insert({ date: today, type: "lesson" })
       .select("id")
       .single();
-    lessonId = newLesson!.id;
+    lessonEntryId = newEntry!.id;
+  }
+
+  // Get the general section of the lesson entry
+  let { data: lessonSection } = await supabase
+    .from("practice_entry_sections")
+    .select("id, content")
+    .eq("practice_entry_id", lessonEntryId)
+    .eq("category", "general")
+    .single();
+
+  if (!lessonSection) {
+    const { data: newSection } = await supabase
+      .from("practice_entry_sections")
+      .insert({
+        practice_entry_id: lessonEntryId,
+        category: "general",
+        sort_order: 0,
+      })
+      .select("id, content")
+      .single();
+    lessonSection = newSection;
   }
 
   // Create or get a demo practice entry section
@@ -40,12 +60,13 @@ export default async function EditorDemoPage() {
     .from("practice_entries")
     .select("id")
     .eq("date", today)
+    .eq("type", "practice")
     .single();
 
   if (!existingEntry) {
     const { data: newEntry } = await supabase
       .from("practice_entries")
-      .insert({ date: today })
+      .insert({ date: today, type: "practice" })
       .select("id")
       .single();
     existingEntry = newEntry;
@@ -80,8 +101,8 @@ export default async function EditorDemoPage() {
   return (
     <EditorDemoClient
       pieces={(pieces as PieceSuggestion[]) ?? []}
-      lessonId={lessonId}
-      lessonContent={lessonContent}
+      lessonId={lessonSection!.id}
+      lessonContent={lessonSection!.content}
       sectionId={sectionId}
       sectionContent={sectionContent}
     />
