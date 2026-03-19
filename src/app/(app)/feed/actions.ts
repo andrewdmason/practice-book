@@ -326,7 +326,7 @@ export async function getFeedPage(
     const lessonEntries = dateEntries.filter((e) => e.type === "lesson");
 
     // For days with timer data but no practice entry, create one with sections
-    if (!practiceEntry && timeSummary.length > 0) {
+    if (!practiceEntry && timeSummary.length > 0 && typeFilter !== "lesson") {
       practiceEntry = { ...(await ensureEntryForDate(date, timeSummary)), type: "practice" };
     }
 
