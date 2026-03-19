@@ -151,6 +151,11 @@ export type MentionWithSource = Mention & {
   source_label: string;
 };
 
+export type MentionPage = {
+  items: MentionWithSource[];
+  nextCursor: string | null;
+};
+
 export type RepertoireOverviewItem = {
   id: string;
   name: string;

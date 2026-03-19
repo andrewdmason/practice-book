@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import type {
   Task,
   Goal,
+  Mention,
   MentionWithSource,
+  MentionPage,
   RepertoireOverviewItem,
   MasteryLevel,
 } from "@/lib/types";
@@ -41,62 +43,97 @@ export async function getPieceFocusData(pieceId: string): Promise<{
     .order("created_at", { ascending: false })
     .limit(5);
 
-  // Resolve source dates for mentions
-  const mentions: MentionWithSource[] = [];
-  if (rawMentions && rawMentions.length > 0) {
-    const lessonIds = rawMentions
-      .filter((m) => m.source_type === "lesson")
-      .map((m) => m.source_id);
-    const practiceEntryIds = rawMentions
-      .filter((m) => m.source_type === "practice_entry")
-      .map((m) => m.source_id);
-
-    let lessonDates: Record<string, string> = {};
-    let practiceDates: Record<string, string> = {};
-
-    if (lessonIds.length > 0) {
-      const { data: lessons } = await supabase
-        .from("lessons")
-        .select("id, date")
-        .in("id", lessonIds);
-      if (lessons) {
-        lessonDates = Object.fromEntries(lessons.map((l) => [l.id, l.date]));
-      }
-    }
-
-    if (practiceEntryIds.length > 0) {
-      // practice_entry source_id references practice_entry_sections
-      const { data: sections } = await supabase
-        .from("practice_entry_sections")
-        .select("id, practice_entries(date)")
-        .in("id", practiceEntryIds);
-      if (sections) {
-        for (const s of sections) {
-          const entry = s.practice_entries as unknown as { date: string } | null;
-          if (entry) {
-            practiceDates[s.id] = entry.date;
-          }
-        }
-      }
-    }
-
-    for (const m of rawMentions) {
-      const isLesson = m.source_type === "lesson";
-      const date = isLesson
-        ? lessonDates[m.source_id]
-        : practiceDates[m.source_id];
-      mentions.push({
-        ...m,
-        source_date: date ?? m.created_at.slice(0, 10),
-        source_label: isLesson ? "Lesson" : "Practice",
-      });
-    }
-  }
+  const mentions = await resolveMentionSources(rawMentions ?? []);
 
   return {
     tasks: (tasks ?? []) as Task[],
     goals: (goals ?? []) as Goal[],
     mentions,
+  };
+}
+
+async function resolveMentionSources(
+  rawMentions: Mention[]
+): Promise<MentionWithSource[]> {
+  if (rawMentions.length === 0) return [];
+
+  const supabase = await createClient();
+
+  const lessonIds = rawMentions
+    .filter((m) => m.source_type === "lesson")
+    .map((m) => m.source_id);
+  const practiceEntryIds = rawMentions
+    .filter((m) => m.source_type === "practice_entry")
+    .map((m) => m.source_id);
+
+  let lessonDates: Record<string, string> = {};
+  let practiceDates: Record<string, string> = {};
+
+  if (lessonIds.length > 0) {
+    const { data: lessons } = await supabase
+      .from("lessons")
+      .select("id, date")
+      .in("id", lessonIds);
+    if (lessons) {
+      lessonDates = Object.fromEntries(lessons.map((l) => [l.id, l.date]));
+    }
+  }
+
+  if (practiceEntryIds.length > 0) {
+    const { data: sections } = await supabase
+      .from("practice_entry_sections")
+      .select("id, practice_entries(date)")
+      .in("id", practiceEntryIds);
+    if (sections) {
+      for (const s of sections) {
+        const entry = s.practice_entries as unknown as { date: string } | null;
+        if (entry) {
+          practiceDates[s.id] = entry.date;
+        }
+      }
+    }
+  }
+
+  return rawMentions.map((m) => {
+    const isLesson = m.source_type === "lesson";
+    const date = isLesson
+      ? lessonDates[m.source_id]
+      : practiceDates[m.source_id];
+    return {
+      ...m,
+      source_date: date ?? m.created_at.slice(0, 10),
+      source_label: isLesson ? "Lesson" : "Practice",
+    };
+  });
+}
+
+export async function getPieceMentions(
+  pieceId: string,
+  cursor?: string,
+  limit = 20
+): Promise<MentionPage> {
+  const supabase = await createClient();
+
+  let query = supabase
+    .from("mentions")
+    .select("*")
+    .eq("piece_id", pieceId)
+    .order("created_at", { ascending: false })
+    .limit(limit + 1);
+
+  if (cursor) {
+    query = query.lt("created_at", cursor);
+  }
+
+  const { data: rawMentions } = await query;
+  const rows = rawMentions ?? [];
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const items = await resolveMentionSources(page as Mention[]);
+
+  return {
+    items,
+    nextCursor: hasMore ? page[page.length - 1].created_at : null,
   };
 }
 
