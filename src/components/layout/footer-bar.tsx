@@ -78,22 +78,22 @@ export function FooterBar() {
 
   const setFocusUrl = useCallback(
     (key: string | null) => {
+      const typeParam = searchParams.get("type");
+      const buildUrl = (focusKey: string | null) => {
+        const params = new URLSearchParams();
+        if (focusKey) params.set("focus", focusKey);
+        if (typeParam) params.set("type", typeParam);
+        const qs = params.toString();
+        return qs ? `/?${qs}` : "/";
+      };
+
       if (pathname !== "/") {
-        // Navigate to home with focus
-        if (key) {
-          router.push(`/?focus=${key}`);
-        } else {
-          router.push("/");
-        }
+        router.push(buildUrl(key));
         return;
       }
-      if (key) {
-        router.replace(`/?focus=${key}`, { scroll: false });
-      } else {
-        router.replace("/", { scroll: false });
-      }
+      router.replace(buildUrl(key), { scroll: false });
     },
-    [pathname, router]
+    [pathname, router, searchParams]
   );
 
   const handlePillClick = (target: TimerTarget) => {
@@ -178,6 +178,7 @@ export function FooterBar() {
   const showClear = !isRunning && focusedTarget !== null;
 
   if (isZenMode) return null;
+  if (pathname !== "/" && !isRunning) return null;
 
   return (
     <div className="sticky top-14 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">

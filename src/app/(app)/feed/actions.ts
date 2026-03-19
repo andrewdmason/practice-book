@@ -254,7 +254,8 @@ async function getTimeSummaryForDate(
  */
 export async function getFeedPage(
   cursor?: string,
-  limit = 7
+  limit = 7,
+  typeFilter?: "practice" | "lesson"
 ): Promise<{ items: FeedDay[]; nextCursor: string | null }> {
   const supabase = await createClient();
 
@@ -269,6 +270,10 @@ export async function getFeedPage(
     .order("date", { ascending: false })
     .limit(limit * 3); // multiple entries per day possible
 
+  if (typeFilter) {
+    peQuery = peQuery.eq("type", typeFilter);
+  }
+
   if (cursor) {
     peQuery = peQuery.lt("date", beforeDate);
   } else {
@@ -278,19 +283,24 @@ export async function getFeedPage(
   const { data: allEntries } = await peQuery;
 
   // Also fetch dates from practice sessions (timer data without notes)
-  let sessionsQuery = supabase
-    .from("practice_sessions")
-    .select("date")
-    .order("date", { ascending: false })
-    .limit(limit);
+  // Skip when filtering to lessons only (lessons don't have timer data)
+  let sessionDates: { date: string }[] | null = null;
+  if (typeFilter !== "lesson") {
+    let sessionsQuery = supabase
+      .from("practice_sessions")
+      .select("date")
+      .order("date", { ascending: false })
+      .limit(limit);
 
-  if (cursor) {
-    sessionsQuery = sessionsQuery.lt("date", beforeDate);
-  } else {
-    sessionsQuery = sessionsQuery.lte("date", beforeDate);
+    if (cursor) {
+      sessionsQuery = sessionsQuery.lt("date", beforeDate);
+    } else {
+      sessionsQuery = sessionsQuery.lte("date", beforeDate);
+    }
+
+    const result = await sessionsQuery;
+    sessionDates = result.data;
   }
-
-  const { data: sessionDates } = await sessionsQuery;
 
   // Collect all unique dates
   const dateSet = new Set<string>();
@@ -325,7 +335,7 @@ export async function getFeedPage(
     ): Promise<FeedPracticeEntry> {
       const { data: sections } = await supabase
         .from("practice_entry_sections")
-        .select("id, practice_entry_id, piece_id, category, content, sort_order, pieces(name, composer)")
+        .select("id, practice_entry_id, piece_id, category, content, sort_order, time_override_seconds, pieces(name, composer)")
         .eq("practice_entry_id", entry.id)
         .order("sort_order");
 
@@ -342,6 +352,7 @@ export async function getFeedPage(
           sort_order: s.sort_order,
           piece_name: (s.pieces as unknown as { name: string; composer: string | null } | null)?.name ?? null,
           composer: (s.pieces as unknown as { name: string; composer: string | null } | null)?.composer ?? null,
+          time_override_seconds: s.time_override_seconds,
         })),
       };
     }
@@ -360,25 +371,47 @@ export async function getFeedPage(
   // Determine next cursor
   const lastDate = allDates[allDates.length - 1];
   // Check if there are more entries before the last date
-  const [{ count: moreCount }, { count: moreSessionCount }] =
-    await Promise.all([
-      supabase
-        .from("practice_entries")
-        .select("id", { count: "exact", head: true })
-        .lt("date", lastDate),
-      supabase
-        .from("practice_sessions")
-        .select("id", { count: "exact", head: true })
-        .lt("date", lastDate),
-    ]);
+  let moreEntriesQuery = supabase
+    .from("practice_entries")
+    .select("id", { count: "exact", head: true })
+    .lt("date", lastDate);
 
-  const hasMore =
-    (moreCount ?? 0) > 0 || (moreSessionCount ?? 0) > 0;
+  if (typeFilter) {
+    moreEntriesQuery = moreEntriesQuery.eq("type", typeFilter);
+  }
+
+  const { count: moreCount } = await moreEntriesQuery;
+
+  let hasMore = (moreCount ?? 0) > 0;
+
+  if (!hasMore && typeFilter !== "lesson") {
+    const { count: moreSessionCount } = await supabase
+      .from("practice_sessions")
+      .select("id", { count: "exact", head: true })
+      .lt("date", lastDate);
+    hasMore = (moreSessionCount ?? 0) > 0;
+  }
 
   return {
     items,
     nextCursor: hasMore ? lastDate : null,
   };
+}
+
+/**
+ * Update the time override for a practice entry section.
+ * Pass null to clear the override and revert to timer-derived time.
+ */
+export async function updateSectionTime(
+  sectionId: string,
+  totalSeconds: number | null
+): Promise<void> {
+  const supabase = await createClient();
+  await supabase
+    .from("practice_entry_sections")
+    .update({ time_override_seconds: totalSeconds })
+    .eq("id", sectionId);
+  revalidatePath("/");
 }
 
 /**
@@ -402,6 +435,5 @@ export async function createLesson(date?: string): Promise<string> {
   await ensureSections(data.id);
 
   revalidatePath("/");
-  revalidatePath("/lessons");
   return data.id;
 }

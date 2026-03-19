@@ -200,6 +200,7 @@ export type PracticeEntrySection = {
   sort_order: number;
   piece_name?: string | null;
   composer?: string | null;
+  time_override_seconds?: number | null;
 };
 
 export type FeedPracticeEntry = {

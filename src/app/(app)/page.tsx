@@ -4,15 +4,23 @@ import { PracticeFeed } from "@/components/feed/practice-feed";
 import { ensureTodayEntry, getFeedPage } from "@/app/(app)/feed/actions";
 import { getStreakData } from "@/app/(app)/reports/actions";
 import { createClient } from "@/lib/supabase/server";
-import type { PieceSuggestion } from "@/lib/types";
+import type { PieceSuggestion, PracticeEntryType } from "@/lib/types";
 
-export default async function PracticePage() {
+export default async function FeedPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string }>;
+}) {
+  const { type: typeParam } = await searchParams;
+  const typeFilter: PracticeEntryType | undefined =
+    typeParam === "practice" || typeParam === "lesson" ? typeParam : undefined;
+
   // Ensure today's entry and sections exist
   await ensureTodayEntry();
 
   // Fetch initial feed data + streak in parallel
   const [initialData, streakData, supabase] = await Promise.all([
-    getFeedPage(),
+    getFeedPage(undefined, 7, typeFilter),
     getStreakData(),
     createClient(),
   ]);
@@ -28,9 +36,11 @@ export default async function PracticePage() {
     <TwoColumnLayout
       left={
         <PracticeFeed
+          key={typeFilter ?? "all"}
           initialData={initialData}
           pieces={(pieces as PieceSuggestion[]) ?? []}
           streak={streakData}
+          typeFilter={typeFilter}
         />
       }
       right={<RepertoireFocusPanel />}

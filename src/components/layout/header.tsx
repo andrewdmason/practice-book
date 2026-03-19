@@ -14,8 +14,7 @@ import { cn } from "@/lib/utils";
 import { useSearch } from "@/components/search/search-provider";
 
 const navItems = [
-  { label: "Practice", href: "/" },
-  { label: "Lessons", href: "/lessons" },
+  { label: "Sessions", href: "/" },
   { label: "Repertoire", href: "/repertoire" },
   { label: "Reports", href: "/reports" },
 ];

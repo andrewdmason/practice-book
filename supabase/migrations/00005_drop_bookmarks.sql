@@ -4,6 +4,7 @@
 DROP TABLE IF EXISTS bookmarks CASCADE;
 
 -- Recreate search_all without the bookmarks UNION ALL block
+DROP FUNCTION IF EXISTS search_all;
 CREATE OR REPLACE FUNCTION search_all(
   search_query text,
   result_limit int DEFAULT 50
