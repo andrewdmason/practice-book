@@ -41,19 +41,27 @@
 - "Getting Stale" section (active pieces with last\_played \> 14 days, using placeholder data until timer is wired)
 - Status transitions (active → archived, etc.) with mastery level prompt on archive
 
-## PR 3: Timer
+## PR 3: Timer ✅ COMPLETED
 
 **Goal:** Working practice timer with piece switching, time logging, and right-column context switching.
 
-- Sticky footer timer bar with start/stop and elapsed time display
-- Pill buttons for each active piece + Technique + Sight Reading
-- Continuous switching behavior (click a new pill, attribution changes, timer keeps running)
-- Switching pieces updates the right column's repertoire focus panel (show selected piece's context, or repertoire overview when on Technique/Sight Reading/stopped)
-- Write `practice_sessions` and `timer_entries` to Supabase
-- Auto-generate time summary for the current day
-- Wire up `last_played` on repertoire (computed from timer\_entries)
-- "Getting Stale" now uses real data
-- Mobile: dropdown picker replacing pill buttons
+- ✅ Sticky footer timer bar with start/stop and elapsed time display
+- ✅ Pill buttons for each active piece + Technique + Sight Reading
+- ✅ Continuous switching behavior (click a new pill, attribution changes, timer keeps running)
+- ✅ Switching pieces updates the right column's repertoire focus panel (show selected piece's context, or repertoire overview when on Technique/Sight Reading/stopped)
+- ✅ Write `practice_sessions` and `timer_entries` to Supabase
+- ✅ Auto-generate time summary for the current day
+- ✅ Wire up `last_played` on repertoire (computed from timer\_entries)
+- ✅ "Getting Stale" now uses real data
+- ✅ Mobile: dropdown picker replacing pill buttons
+
+**Implementation notes:**
+- React Context (`TimerContext`) manages cross-component timer state with localStorage persistence
+- Server actions handle all timer mutations (start/switch/stop sessions)
+- Elapsed time updates via `setInterval` at 1s granularity, calculated from `Date.now() - sessionStartedAt`
+- Abandoned session cleanup: if a stored session is >12 hours old, auto-close it on mount
+- JWT expiry set to 1 year in local Supabase for dev convenience
+- Dev login button added to bypass auth in development (uses service role key to auto-sign in `andrew@mason.io`)
 
 ## PR 4: Rich Text Editor
 

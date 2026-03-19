@@ -80,6 +80,28 @@ function LoginForm() {
             </Button>
           </form>
         )}
+
+        {process.env.NODE_ENV === "development" && (
+          <>
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">dev</span>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                window.location.href = "/auth/dev-login";
+              }}
+            >
+              Dev login
+            </Button>
+          </>
+        )}
       </CardContent>
     </Card>
   );

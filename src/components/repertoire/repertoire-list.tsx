@@ -14,6 +14,7 @@ import type {
   Collection,
   CollectionWithPieces,
   PieceStatus,
+  PieceWithLastPlayed,
 } from "@/lib/types";
 import { PIECE_STATUS_LABELS } from "@/lib/types";
 
@@ -48,9 +49,11 @@ function groupByStatus(
 export function RepertoireList({
   pieces,
   collections,
+  stalePieces = [],
 }: {
   pieces: Piece[];
   collections: CollectionWithPieces[];
+  stalePieces?: PieceWithLastPlayed[];
 }) {
   const statusGroups = groupByStatus(pieces, collections);
   const allCollections: Collection[] = collections;
@@ -81,7 +84,7 @@ export function RepertoireList({
         </div>
       </div>
 
-      <GettingStaleSection />
+      <GettingStaleSection stalePieces={stalePieces} />
 
       {!hasAnyPieces && (
         <Card>

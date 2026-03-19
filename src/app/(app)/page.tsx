@@ -1,5 +1,6 @@
 import { TwoColumnLayout } from "@/components/layout/two-column-layout";
 import { Card, CardContent } from "@/components/ui/card";
+import { RepertoireFocusPanel } from "@/components/timer/repertoire-focus-panel";
 
 export default function PracticePage() {
   return (
@@ -14,13 +15,7 @@ export default function PracticePage() {
           </Card>
         </div>
       }
-      right={
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            <p>Repertoire focus panel will appear here</p>
-          </CardContent>
-        </Card>
-      }
+      right={<RepertoireFocusPanel />}
     />
   );
 }
