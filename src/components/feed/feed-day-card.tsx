@@ -140,13 +140,15 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
 
   return (
     <div className="space-y-3">
-      {/* Date header */}
-      <div className="flex items-center gap-2">
-        <CalendarIcon className="size-4 text-muted-foreground" />
-        <h3 className="font-serif text-lg font-semibold">
-          {formatDateHeader(day.date)}
-        </h3>
-      </div>
+      {/* Date header — only shown when there are practice sections */}
+      {hasPracticeSections && (
+        <div className="flex items-center gap-2">
+          <CalendarIcon className="size-4 text-muted-foreground" />
+          <h3 className="font-serif text-lg font-semibold">
+            {formatDateHeader(day.date)}
+          </h3>
+        </div>
+      )}
 
       {/* Practice entry sections */}
       {hasPracticeSections && day.practiceEntry && (
@@ -164,7 +166,7 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
         <div key={lesson.id} className="space-y-3">
           <div className="flex items-center gap-2">
             <BookOpenIcon className="size-4 text-muted-foreground" />
-            <h3 className="font-serif text-lg font-semibold">Lesson</h3>
+            <h3 className="font-serif text-lg font-semibold">Lesson &middot; {formatDateHeader(day.date)}</h3>
           </div>
           <EntryCard
             entry={lesson}
