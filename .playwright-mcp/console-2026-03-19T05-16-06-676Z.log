@@ -1,0 +1,35 @@
+[     248ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/editor-demo:0
+[  105669ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/editor-demo:0
+[  105671ms] Error: Cannot access id on the server. You cannot dot into a temporary client reference from a server component. You can only pass the value through to the client.
+    at walkBlock (about://React/Server/file:///Users/andrew/conductor/workspaces/practice-book/auckland-v2/.next/dev/server/chunks/ssr/_0h1_3tw._.js?24:243:61)
+    at extractMentions (about://React/Server/file:///Users/andrew/conductor/workspaces/practice-book/auckland-v2/.next/dev/server/chunks/ssr/_0h1_3tw._.js?25:257:13)
+    at saveEditorContent (about://React/Server/file:///Users/andrew/conductor/workspaces/practice-book/auckland-v2/.next/dev/server/chunks/ssr/_0h1_3tw._.js?26:412:199)
+    at resolveErrorDev (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_0p3wegg._.js:1919:105)
+    at processFullStringRow (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_0p3wegg._.js:2434:29)
+    at processFullBinaryRow (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_0p3wegg._.js:2393:9)
+    at processBinaryChunk (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_0p3wegg._.js:2502:221)
+    at progress (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_0p3wegg._.js:2689:13)
+[  119095ms] RangeError: Empty text nodes are not allowed
+    at new TextNode (http://localhost:3000/_next/static/chunks/node_modules_08v3wxz._.js:1578:29)
+    at Schema.text (http://localhost:3000/_next/static/chunks/node_modules_08v3wxz._.js:2428:16)
+    at InputRule.handler (http://localhost:3000/_next/static/chunks/src_084zxek._.js:588:41)
+    at http://localhost:3000/_next/static/chunks/node_modules_%40tiptap_core_dist_128dtwc._.js:3259:30
+    at Array.forEach (<anonymous>)
+    at run (http://localhost:3000/_next/static/chunks/node_modules_%40tiptap_core_dist_128dtwc._.js:3238:11)
+    at Plugin.handleTextInput (http://localhost:3000/_next/static/chunks/node_modules_%40tiptap_core_dist_128dtwc._.js:3322:24)
+    at http://localhost:3000/_next/static/chunks/node_modules_prosemirror-view_dist_index_05vhghm.js:4684:56
+    at EditorView.someProp (http://localhost:3000/_next/static/chunks/node_modules_prosemirror-view_dist_index_05vhghm.js:5034:46)
+    at readDOMChange (http://localhost:3000/_next/static/chunks/node_modules_prosemirror-view_dist_index_05vhghm.js:4684:23)
+    at DOMObserver.handleDOMChange (http://localhost:3000/_next/static/chunks/node_modules_prosemirror-view_dist_index_05vhghm.js:4852:79)
+    at DOMObserver.flush (http://localhost:3000/_next/static/chunks/node_modules_prosemirror-view_dist_index_05vhghm.js:4293:18)
+    at DOMObserver.observer (http://localhost:3000/_next/static/chunks/node_modules_prosemirror-view_dist_index_05vhghm.js:4135:22)
+[  122124ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/editor-demo:0
+[  122126ms] Error: Cannot access id on the server. You cannot dot into a temporary client reference from a server component. You can only pass the value through to the client.
+    at walkBlock (about://React/Server/file:///Users/andrew/conductor/workspaces/practice-book/auckland-v2/.next/dev/server/chunks/ssr/_0h1_3tw._.js?24:243:61)
+    at extractMentions (about://React/Server/file:///Users/andrew/conductor/workspaces/practice-book/auckland-v2/.next/dev/server/chunks/ssr/_0h1_3tw._.js?25:257:13)
+    at saveEditorContent (about://React/Server/file:///Users/andrew/conductor/workspaces/practice-book/auckland-v2/.next/dev/server/chunks/ssr/_0h1_3tw._.js?26:412:199)
+    at resolveErrorDev (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_0p3wegg._.js:1919:105)
+    at processFullStringRow (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_0p3wegg._.js:2434:29)
+    at processFullBinaryRow (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_0p3wegg._.js:2393:9)
+    at processBinaryChunk (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_0p3wegg._.js:2502:221)
+    at progress (http://localhost:3000/_next/static/chunks/node_modules_next_dist_compiled_react-server-dom-turbopack_0p3wegg._.js:2689:13)
