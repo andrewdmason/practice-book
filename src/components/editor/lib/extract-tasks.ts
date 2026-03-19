@@ -1,14 +1,19 @@
 import type { JSONContent } from "@tiptap/core";
+import type { TaskStyle } from "@/lib/types";
 
 export type ExtractedTask = {
   taskId: string;
   text: string;
   completed: boolean;
   pieceId: string | null;
+  style: TaskStyle;
 };
 
 function getTextContent(node: JSONContent): string {
   if (node.text) return node.text;
+  if (node.type === "metronomeMarking" && node.attrs?.bpm) {
+    return `♩=${node.attrs.bpm}`;
+  }
   if (!node.content) return "";
   return node.content.map(getTextContent).join("");
 }
@@ -27,8 +32,8 @@ function findPieceMentionId(node: JSONContent): string | null {
 }
 
 /**
- * Walk a Tiptap JSON document and extract all task items.
- * If a task contains a piece mention, links it to that piece.
+ * Walk a Tiptap JSON document and extract all task items and goal blocks.
+ * Both are stored as tasks; goal blocks get style: 'goal'.
  */
 export function extractTasks(doc: JSONContent): ExtractedTask[] {
   const tasks: ExtractedTask[] = [];
@@ -41,7 +46,16 @@ export function extractTasks(doc: JSONContent): ExtractedTask[] {
       const pieceId = findPieceMentionId(node);
 
       if (text) {
-        tasks.push({ taskId, text, completed, pieceId });
+        tasks.push({ taskId, text, completed, pieceId, style: "default" });
+      }
+    } else if (node.type === "goalBlock") {
+      const taskId = (node.attrs?.goalId as string) || crypto.randomUUID();
+      const text = getTextContent(node).trim();
+      const completed = (node.attrs?.completed as boolean) ?? false;
+      const pieceId = findPieceMentionId(node);
+
+      if (text) {
+        tasks.push({ taskId, text, completed, pieceId, style: "goal" });
       }
     }
 

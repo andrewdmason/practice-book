@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PlusIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FeedDayCard } from "./feed-day-card";
@@ -17,6 +17,8 @@ type PracticeFeedProps = {
 
 export function PracticeFeed({ initialData, pieces, streak }: PracticeFeedProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const focusKey = searchParams.get("focus");
   const [feedDays, setFeedDays] = useState(initialData.items);
   const [cursor, setCursor] = useState(initialData.nextCursor);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -89,7 +91,7 @@ export function PracticeFeed({ initialData, pieces, streak }: PracticeFeedProps)
         </p>
       ) : (
         feedDays.map((day) => (
-          <FeedDayCard key={day.date} day={day} pieces={pieces} />
+          <FeedDayCard key={day.date} day={day} pieces={pieces} focusKey={focusKey} />
         ))
       )}
 

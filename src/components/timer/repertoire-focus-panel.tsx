@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeftIcon,
@@ -9,7 +10,6 @@ import {
   ExternalLinkIcon,
   MessageSquareTextIcon,
   MusicIcon,
-  TargetIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,45 +20,64 @@ import { getTodaySummary } from "@/app/(app)/timer/actions";
 import {
   getPieceFocusData,
   toggleTaskCompleted,
-  toggleGoalCompleted,
-  getRepertoireOverview,
 } from "@/app/(app)/focus-panel/actions";
 import { createClient } from "@/lib/supabase/client";
 import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
 import type {
   Bookmark,
-  Goal,
   MasteryLevel,
   MentionWithSource,
-  RepertoireOverviewItem,
   Task,
+  TimerTarget,
   TimeSummaryEntry,
 } from "@/lib/types";
 
 export function RepertoireFocusPanel() {
-  const { isRunning, currentTarget } = useTimer();
-  const [focusedPieceId, setFocusedPieceId] = useState<string | null>(null);
+  const router = useRouter();
+  const { isRunning, currentTarget, focusedTarget, setFocusedTarget, activePieces } = useTimer();
 
-  // Timer piece selection takes precedence over manual focus
+  // Determine active target: timer target when running, focused target from pills otherwise
+  const activeTarget = isRunning ? currentTarget : focusedTarget;
+
   const activePieceId =
-    currentTarget?.category === "piece" ? currentTarget.pieceId : focusedPieceId;
-  const isFromOverview = currentTarget?.category !== "piece" && focusedPieceId !== null;
+    activeTarget?.category === "piece" ? activeTarget.pieceId : null;
+
+  const handleFocusItem = useCallback(
+    (focusKey: string) => {
+      if (isRunning) return;
+      let target: TimerTarget;
+      if (focusKey === "technique") {
+        target = { category: "technique" };
+      } else if (focusKey === "sight_reading") {
+        target = { category: "sight_reading" };
+      } else {
+        const piece = activePieces.find((p) => p.id === focusKey);
+        if (!piece) return;
+        target = {
+          category: "piece",
+          pieceId: piece.id,
+          pieceName: piece.name,
+          composer: piece.composer,
+        };
+      }
+      setFocusedTarget(target);
+      router.replace(`/?focus=${focusKey}`, { scroll: false });
+    },
+    [isRunning, activePieces, setFocusedTarget, router]
+  );
 
   if (activePieceId) {
-    return (
-      <PieceDetail
-        pieceId={activePieceId}
-        showBack={isFromOverview}
-        onBack={() => setFocusedPieceId(null)}
-      />
-    );
+    return <PieceDetail pieceId={activePieceId} />;
   }
+
+  const showCategory = activeTarget?.category != null && activeTarget.category !== "piece";
 
   return (
     <PracticeOverview
       isRunning={isRunning}
-      currentCategory={currentTarget?.category ?? null}
-      onSelectPiece={setFocusedPieceId}
+      showCategoryCard={showCategory}
+      currentCategory={activeTarget?.category ?? null}
+      onFocusItem={handleFocusItem}
     />
   );
 }
@@ -67,15 +86,7 @@ export function RepertoireFocusPanel() {
 // Piece Detail
 // ---------------------------------------------------------------------------
 
-function PieceDetail({
-  pieceId,
-  showBack,
-  onBack,
-}: {
-  pieceId: string;
-  showBack: boolean;
-  onBack: () => void;
-}) {
+function PieceDetail({ pieceId }: { pieceId: string }) {
   const [piece, setPiece] = useState<{
     name: string;
     composer: string | null;
@@ -83,7 +94,6 @@ function PieceDetail({
     bookmarks: Bookmark[];
   } | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
   const [mentions, setMentions] = useState<MentionWithSource[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -108,10 +118,9 @@ function PieceDetail({
         }
       });
 
-    // Fetch focus data (tasks, goals, mentions)
+    // Fetch focus data (tasks, mentions)
     getPieceFocusData(pieceId).then((data) => {
       setTasks(data.tasks);
-      setGoals(data.goals);
       setMentions(data.mentions);
       setLoaded(true);
     });
@@ -130,15 +139,6 @@ function PieceDetail({
   return (
     <Card>
       <CardHeader className="pb-3">
-        {showBack && (
-          <button
-            onClick={onBack}
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2 -mt-1"
-          >
-            <ArrowLeftIcon className="size-3" />
-            Back to overview
-          </button>
-        )}
         <div className="flex items-start justify-between">
           <div>
             <CardTitle className="text-base">{piece.name}</CardTitle>
@@ -154,34 +154,17 @@ function PieceDetail({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Goals */}
-        {loaded && goals.length > 0 && (
-          <FocusSection
-            icon={<TargetIcon className="size-3.5" />}
-            title="Goals"
-            count={goals.length}
-          >
-            {goals.map((goal) => (
-              <GoalRow key={goal.id} goal={goal} onToggle={(completed) => {
-                setGoals((prev) =>
-                  prev.filter((g) => g.id !== goal.id)
-                );
-              }} />
-            ))}
-          </FocusSection>
-        )}
-
         {/* Tasks */}
         {loaded && tasks.length > 0 && (
           <FocusSection
             icon={<CheckCircle2Icon className="size-3.5" />}
             title="Tasks"
-            count={tasks.length}
+            count={tasks.filter((t) => !t.completed).length}
           >
             {tasks.map((task) => (
               <TaskRow key={task.id} task={task} onToggle={(completed) => {
                 setTasks((prev) =>
-                  prev.filter((t) => t.id !== task.id)
+                  prev.map((t) => t.id === task.id ? { ...t, completed } : t)
                 );
               }} />
             ))}
@@ -223,9 +206,9 @@ function PieceDetail({
         )}
 
         {/* Empty state */}
-        {loaded && goals.length === 0 && tasks.length === 0 && mentions.length === 0 && piece.bookmarks.length === 0 && (
+        {loaded && tasks.length === 0 && mentions.length === 0 && piece.bookmarks.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            No goals, tasks, or mentions yet.
+            No tasks or mentions yet.
           </p>
         )}
 
@@ -276,35 +259,6 @@ function FocusSection({
 // Row components
 // ---------------------------------------------------------------------------
 
-function GoalRow({
-  goal,
-  onToggle,
-}: {
-  goal: Goal;
-  onToggle: (completed: boolean) => void;
-}) {
-  const [isPending, startTransition] = useTransition();
-
-  return (
-    <label className="flex items-start gap-2 text-sm cursor-pointer group">
-      <Checkbox
-        className="mt-0.5"
-        checked={false}
-        disabled={isPending}
-        onCheckedChange={() => {
-          onToggle(true);
-          startTransition(() => {
-            toggleGoalCompleted(goal.id, true);
-          });
-        }}
-      />
-      <span className={`flex-1 ${isPending ? "opacity-50" : ""}`}>
-        {goal.text}
-      </span>
-    </label>
-  );
-}
-
 function TaskRow({
   task,
   onToggle,
@@ -312,22 +266,25 @@ function TaskRow({
   task: Task;
   onToggle: (completed: boolean) => void;
 }) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   return (
     <label className="flex items-start gap-2 text-sm cursor-pointer group">
       <Checkbox
         className="mt-0.5"
-        checked={false}
+        checked={task.completed}
         disabled={isPending}
-        onCheckedChange={() => {
-          onToggle(true);
-          startTransition(() => {
-            toggleTaskCompleted(task.id, true);
+        onCheckedChange={(checked) => {
+          const completed = !!checked;
+          onToggle(completed);
+          startTransition(async () => {
+            await toggleTaskCompleted(task.id, completed);
+            router.refresh();
           });
         }}
       />
-      <span className={`flex-1 ${isPending ? "opacity-50" : ""}`}>
+      <span className={`flex-1 ${task.completed ? "line-through text-muted-foreground" : ""} ${isPending ? "opacity-50" : ""}`}>
         {task.text}
       </span>
     </label>
@@ -358,30 +315,28 @@ function MentionRow({ mention }: { mention: MentionWithSource }) {
 }
 
 // ---------------------------------------------------------------------------
-// Practice Overview
+// Practice Overview (sidebar when no piece is focused)
 // ---------------------------------------------------------------------------
 
 function PracticeOverview({
   isRunning,
+  showCategoryCard,
   currentCategory,
-  onSelectPiece,
+  onFocusItem,
 }: {
   isRunning: boolean;
+  showCategoryCard: boolean;
   currentCategory: string | null;
-  onSelectPiece: (pieceId: string) => void;
+  onFocusItem: (focusKey: string) => void;
 }) {
   const [summary, setSummary] = useState<TimeSummaryEntry[]>([]);
-  const [overview, setOverview] = useState<RepertoireOverviewItem[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    Promise.all([getTodaySummary(), getRepertoireOverview()]).then(
-      ([summaryData, overviewData]) => {
-        setSummary(summaryData);
-        setOverview(overviewData);
-        setLoaded(true);
-      }
-    );
+    getTodaySummary().then((data) => {
+      setSummary(data);
+      setLoaded(true);
+    });
   }, [isRunning]);
 
   if (!loaded) {
@@ -394,7 +349,7 @@ function PracticeOverview({
     );
   }
 
-  if (isRunning && currentCategory) {
+  if (showCategoryCard && currentCategory) {
     const label =
       TIMER_CATEGORY_LABELS[currentCategory] ?? currentCategory;
     return (
@@ -406,7 +361,7 @@ function PracticeOverview({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {summary.length > 0 && <TimeSummary entries={summary} />}
+          {summary.length > 0 && <TimeSummary entries={summary} onItemClick={onFocusItem} />}
         </CardContent>
       </Card>
     );
@@ -417,68 +372,17 @@ function PracticeOverview({
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Repertoire</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {summary.length > 0 && (
+      <CardContent>
+        {summary.length > 0 ? (
           <div>
             <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
               Today&apos;s Practice
             </h4>
-            <TimeSummary entries={summary} />
-          </div>
-        )}
-
-        {overview.length > 0 ? (
-          <div>
-            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-              Active Pieces
-            </h4>
-            <div className="space-y-1">
-              {overview.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => onSelectPiece(item.id)}
-                  className="w-full text-left rounded-md px-2 py-1.5 hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">
-                        {item.name}
-                      </p>
-                      {item.composer && (
-                        <p className="text-xs text-muted-foreground truncate">
-                          {item.composer}
-                        </p>
-                      )}
-                    </div>
-                    <MasteryBadge level={item.mastery_level} size="sm" />
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[11px] text-muted-foreground">
-                      {item.last_played
-                        ? `Last played ${formatRelativeDate(item.last_played)}`
-                        : "Never played"}
-                    </span>
-                    {(item.open_tasks > 0 || item.open_goals > 0) && (
-                      <span className="text-[11px] text-muted-foreground">
-                        &middot;{" "}
-                        {[
-                          item.open_goals > 0 &&
-                            `${item.open_goals} goal${item.open_goals !== 1 ? "s" : ""}`,
-                          item.open_tasks > 0 &&
-                            `${item.open_tasks} task${item.open_tasks !== 1 ? "s" : ""}`,
-                        ]
-                          .filter(Boolean)
-                          .join(", ")}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
+            <TimeSummary entries={summary} onItemClick={onFocusItem} />
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">
-            No active pieces. Add pieces in Repertoire to get started.
+            Select a piece or category from the bar above to focus your practice.
           </p>
         )}
       </CardContent>
@@ -496,20 +400,4 @@ function formatDate(dateStr: string): string {
     month: "short",
     day: "numeric",
   });
-}
-
-function formatRelativeDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return "today";
-  if (diffDays === 1) return "yesterday";
-  if (diffDays < 7) return `${diffDays} days ago`;
-  if (diffDays < 30) {
-    const weeks = Math.floor(diffDays / 7);
-    return `${weeks} week${weeks !== 1 ? "s" : ""} ago`;
-  }
-  return formatDate(dateStr.slice(0, 10));
 }

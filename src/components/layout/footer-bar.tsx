@@ -1,6 +1,8 @@
 "use client";
 
-import { PlayIcon, SquareIcon, MusicIcon, BookOpenIcon } from "lucide-react";
+import { useCallback, useEffect } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { PlayIcon, SquareIcon, MusicIcon, BookOpenIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -26,9 +28,16 @@ function targetsMatch(a: TimerTarget | null, b: TimerTarget): boolean {
 
 export function FooterBar() {
   const isZenMode = useZenMode();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const focusParam = searchParams.get("focus");
+
   const {
     isRunning,
     currentTarget,
+    focusedTarget,
+    setFocusedTarget,
     sessionElapsedSeconds,
     activePieces,
     startTimer,
@@ -36,12 +45,112 @@ export function FooterBar() {
     stopTimer,
   } = useTimer();
 
-  const handlePillClick = (target: TimerTarget) => {
-    if (targetsMatch(currentTarget, target)) return;
-    if (isRunning) {
-      switchTarget(target);
+  // The visually active target: current (when running) or focused (when stopped)
+  const activeTarget = isRunning ? currentTarget : focusedTarget;
+
+  // Sync URL focus param → focusedTarget on mount and param changes (only on home page)
+  useEffect(() => {
+    if (pathname !== "/" || isRunning) return;
+    if (!focusParam) {
+      if (focusedTarget) setFocusedTarget(null);
+      return;
+    }
+    // Check if focusParam matches the current focusedTarget already
+    if (focusedTarget && targetKey(focusedTarget) === focusParam) return;
+
+    if (focusParam === "technique") {
+      setFocusedTarget({ category: "technique" });
+    } else if (focusParam === "sight_reading") {
+      setFocusedTarget({ category: "sight_reading" });
     } else {
+      const piece = activePieces.find((p) => p.id === focusParam);
+      if (piece) {
+        setFocusedTarget({
+          category: "piece",
+          pieceId: piece.id,
+          pieceName: piece.name,
+          composer: piece.composer,
+        });
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusParam, pathname]);
+
+  const setFocusUrl = useCallback(
+    (key: string | null) => {
+      if (pathname !== "/") {
+        // Navigate to home with focus
+        if (key) {
+          router.push(`/?focus=${key}`);
+        } else {
+          router.push("/");
+        }
+        return;
+      }
+      if (key) {
+        router.replace(`/?focus=${key}`, { scroll: false });
+      } else {
+        router.replace("/", { scroll: false });
+      }
+    },
+    [pathname, router]
+  );
+
+  const handlePillClick = (target: TimerTarget) => {
+    const key = targetKey(target);
+    if (isRunning) {
+      if (!targetsMatch(activeTarget, target)) {
+        switchTarget(target);
+      }
+      return;
+    }
+    // If already focused on this target, deselect
+    if (targetsMatch(focusedTarget, target)) {
+      setFocusedTarget(null);
+      setFocusUrl(null);
+      return;
+    }
+    setFocusedTarget(target);
+    setFocusUrl(key);
+  };
+
+  const clearFocus = useCallback(() => {
+    if (!isRunning) {
+      setFocusedTarget(null);
+      setFocusUrl(null);
+    }
+  }, [isRunning, setFocusedTarget, setFocusUrl]);
+
+  // Escape key clears focus
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && focusedTarget && !isRunning) {
+        clearFocus();
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [focusedTarget, isRunning, clearFocus]);
+
+  const pieceTargets: TimerTarget[] = activePieces.map((p) => ({
+    category: "piece",
+    pieceId: p.id,
+    pieceName: p.name,
+    composer: p.composer,
+  }));
+
+  const specialTargets: TimerTarget[] = [
+    { category: "technique" },
+    { category: "sight_reading" },
+  ];
+
+  const allTargets = [...specialTargets, ...pieceTargets];
+
+  const handlePlayClick = () => {
+    const target = focusedTarget ?? allTargets[0];
+    if (target) {
       startTimer(target);
+      setFocusedTarget(null);
     }
   };
 
@@ -65,34 +174,21 @@ export function FooterBar() {
     handlePillClick(target);
   };
 
-  const pieceTargets: TimerTarget[] = activePieces.map((p) => ({
-    category: "piece",
-    pieceId: p.id,
-    pieceName: p.name,
-    composer: p.composer,
-  }));
-
-  const specialTargets: TimerTarget[] = [
-    { category: "technique" },
-    { category: "sight_reading" },
-  ];
-
-  const allTargets = [...pieceTargets, ...specialTargets];
-
-  const selectedValue = currentTarget ? targetKey(currentTarget) : undefined;
+  const selectedValue = activeTarget ? targetKey(activeTarget) : undefined;
+  const showClear = !isRunning && focusedTarget !== null;
 
   if (isZenMode) return null;
 
   return (
-    <footer className="sticky bottom-0 z-40 border-t bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:px-6">
+    <div className="sticky top-14 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+      <div className="mx-auto flex h-12 max-w-7xl items-center gap-3 px-4 sm:px-6">
         {/* Play / Stop */}
         <Button
           variant={isRunning ? "destructive" : "default"}
           size="icon"
           className="size-9 shrink-0"
-          onClick={isRunning ? stopTimer : undefined}
-          disabled={!isRunning && activePieces.length === 0}
+          onClick={isRunning ? stopTimer : handlePlayClick}
+          disabled={!isRunning && allTargets.length === 0}
           aria-label={isRunning ? "Stop timer" : "Start timer"}
         >
           {isRunning ? (
@@ -116,7 +212,7 @@ export function FooterBar() {
         <div className="hidden md:flex flex-1 items-center gap-1.5 overflow-x-auto scrollbar-none">
           {allTargets.map((target) => {
             const key = targetKey(target);
-            const isActive = targetsMatch(currentTarget, target);
+            const isActive = targetsMatch(activeTarget, target);
             const label =
               target.category === "piece"
                 ? target.pieceName
@@ -146,9 +242,20 @@ export function FooterBar() {
           })}
         </div>
 
+        {/* Clear focus button */}
+        {showClear && (
+          <button
+            onClick={clearFocus}
+            className="hidden md:inline-flex items-center justify-center size-7 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            aria-label="Clear selection"
+          >
+            <XIcon className="size-3.5" />
+          </button>
+        )}
+
         {/* Mobile: select dropdown */}
         <div className="flex md:hidden flex-1 justify-end">
-          <Select value={selectedValue} onValueChange={handleSelectChange}>
+          <Select value={selectedValue ?? ""} onValueChange={handleSelectChange}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Select piece..." />
             </SelectTrigger>
@@ -164,6 +271,6 @@ export function FooterBar() {
           </Select>
         </div>
       </div>
-    </footer>
+    </div>
   );
 }

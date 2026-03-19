@@ -4,9 +4,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PieceDetailHeader } from "@/components/repertoire/piece-detail-header";
 import { PieceMasteryControl } from "@/components/repertoire/piece-mastery-control";
-import { PieceNotes } from "@/components/repertoire/piece-notes";
 import { BookmarkList } from "@/components/repertoire/bookmark-list";
-import { GoalList } from "@/components/repertoire/goal-list";
 import { TaskList } from "@/components/repertoire/task-list";
 import { MentionFeed } from "@/components/repertoire/mention-feed";
 import { Separator } from "@/components/ui/separator";
@@ -74,20 +72,13 @@ export default async function PieceDetailPage({
 
         <Separator />
 
-        <PieceNotes pieceId={typedPiece.id} initialNotes={typedPiece.notes} />
-
-        <Separator />
-
         <BookmarkList
           pieceId={typedPiece.id}
           bookmarks={typedPiece.bookmarks ?? []}
         />
 
-        {(focusData.goals.length > 0 || focusData.tasks.length > 0) && (
-          <Separator />
-        )}
+        {focusData.tasks.length > 0 && <Separator />}
 
-        <GoalList initialGoals={focusData.goals} />
         <TaskList initialTasks={focusData.tasks} />
 
         <Separator />

@@ -5,7 +5,15 @@ import { formatElapsed } from "@/lib/timer-utils";
 import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
 import type { TimeSummaryEntry } from "@/lib/types";
 
-export function TimeSummary({ entries, label = "Today" }: { entries: TimeSummaryEntry[]; label?: string }) {
+export function TimeSummary({
+  entries,
+  label = "Today",
+  onItemClick,
+}: {
+  entries: TimeSummaryEntry[];
+  label?: string;
+  onItemClick?: (focusKey: string) => void;
+}) {
   if (entries.length === 0) return null;
 
   const totalSeconds = entries.reduce((sum, e) => sum + e.total_seconds, 0);
@@ -24,23 +32,31 @@ export function TimeSummary({ entries, label = "Today" }: { entries: TimeSummary
 
       <div className="space-y-1">
         {entries.map((entry) => {
-          const label =
+          const entryLabel =
             entry.piece_name ?? TIMER_CATEGORY_LABELS[entry.category] ?? entry.category;
           const Icon = entry.category === "piece" ? MusicIcon : BookOpenIcon;
+          const focusKey = entry.piece_id ?? entry.category;
+          const clickable = !!onItemClick;
 
           return (
-            <div
-              key={entry.piece_id ?? entry.category}
-              className="flex items-center justify-between py-1 text-sm"
+            <button
+              key={focusKey}
+              onClick={() => onItemClick?.(focusKey)}
+              disabled={!clickable}
+              className={`flex w-full items-center justify-between py-1 text-sm rounded-md px-1 -mx-1 transition-colors ${
+                clickable
+                  ? "hover:bg-muted/50 cursor-pointer"
+                  : "cursor-default"
+              }`}
             >
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Icon className="size-3.5" />
-                <span className="truncate">{label}</span>
+                <span className="truncate">{entryLabel}</span>
               </div>
               <span className="tabular-nums text-muted-foreground">
                 {formatElapsed(entry.total_seconds)}
               </span>
-            </div>
+            </button>
           );
         })}
       </div>

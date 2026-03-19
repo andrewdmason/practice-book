@@ -116,6 +116,8 @@ export type Mention = {
   created_at: string;
 };
 
+export type TaskStyle = "default" | "goal";
+
 export type Task = {
   id: string;
   source_type: SourceType;
@@ -123,18 +125,7 @@ export type Task = {
   piece_id: string | null;
   text: string;
   completed: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
-export type Goal = {
-  id: string;
-  lesson_id: string;
-  piece_id: string | null;
-  text: string;
-  content: unknown;
-  completed: boolean;
-  note: string | null;
+  style: TaskStyle;
   created_at: string;
   updated_at: string;
 };
@@ -171,7 +162,6 @@ export type SearchResultType =
   | "collection"
   | "practice_entry"
   | "lesson"
-  | "goal"
   | "bookmark";
 
 export type SearchResult = {
@@ -211,7 +201,6 @@ export type RepertoireOverviewItem = {
   mastery_level: MasteryLevel;
   last_played: string | null;
   open_tasks: number;
-  open_goals: number;
 };
 
 // Feed types

@@ -22,8 +22,8 @@ export default async function AppLayout({
       <div className="flex min-h-full flex-1 flex-col">
         <Header />
         <TimerProvider activePieces={(activePieces as Piece[]) ?? []}>
-          <div className="flex flex-1 flex-col">{children}</div>
           <FooterBar />
+          <div className="flex flex-1 flex-col">{children}</div>
         </TimerProvider>
       </div>
     </SearchProvider>

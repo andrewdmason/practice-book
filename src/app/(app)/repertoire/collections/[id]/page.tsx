@@ -3,7 +3,6 @@ import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { MasteryBadge } from "@/components/repertoire/mastery-badge";
-import { GoalList } from "@/components/repertoire/goal-list";
 import { TaskList } from "@/components/repertoire/task-list";
 import { MentionFeed } from "@/components/repertoire/mention-feed";
 import { Separator } from "@/components/ui/separator";
@@ -103,11 +102,8 @@ export default async function CollectionDetailPage({
           </div>
         )}
 
-        {(focusData.goals.length > 0 || focusData.tasks.length > 0) && (
-          <Separator />
-        )}
+        {focusData.tasks.length > 0 && <Separator />}
 
-        <GoalList initialGoals={focusData.goals} />
         <TaskList initialTasks={focusData.tasks} />
 
         <Separator />

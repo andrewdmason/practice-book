@@ -33,7 +33,7 @@ export function TwoColumnLayout({
       <div
         className={`lg:block lg:w-80 xl:w-96 lg:shrink-0 ${mobileOpen ? "block" : "hidden lg:block"}`}
       >
-        <div className="lg:sticky lg:top-20">{right}</div>
+        <div className="lg:sticky lg:top-[6.5rem]">{right}</div>
       </div>
     </div>
   );

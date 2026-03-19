@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { extractMentions } from "@/components/editor/lib/extract-mentions";
 import { extractTasks } from "@/components/editor/lib/extract-tasks";
-import { extractGoals } from "@/components/editor/lib/extract-goals";
 import type { JSONContent } from "@tiptap/core";
 import type { SourceType } from "@/lib/types";
 
@@ -50,8 +49,20 @@ export async function saveEditorContent(
     if (error) console.error("Failed to insert mentions:", error.message);
   }
 
-  // 3. Extract and sync tasks (preserve completed state from DB)
+  // 3. Extract and sync tasks + goal blocks (preserve completed state from DB)
   const tasks = extractTasks(content);
+
+  // For practice entry sections, look up the section's piece_id as fallback
+  let sectionPieceId: string | null = null;
+  if (sourceType === "practice_entry") {
+    const { data: section } = await supabase
+      .from("practice_entry_sections")
+      .select("piece_id")
+      .eq("id", sourceId)
+      .single();
+    sectionPieceId = section?.piece_id ?? null;
+  }
+
   const { data: existingTasks } = await supabase
     .from("tasks")
     .select("id, completed")
@@ -74,44 +85,13 @@ export async function saveEditorContent(
         id: t.taskId,
         source_type: sourceType,
         source_id: sourceId,
-        piece_id: t.pieceId,
+        piece_id: t.pieceId ?? sectionPieceId,
         text: t.text,
         completed: existingCompletedMap.get(t.taskId) ?? t.completed,
+        style: t.style,
       }))
     );
     if (error) console.error("Failed to insert tasks:", error.message);
-  }
-
-  // 4. Extract and sync goals (lesson only)
-  if (sourceType === "lesson") {
-    const goals = extractGoals(content);
-    const { data: existingGoals } = await supabase
-      .from("goals")
-      .select("id, completed, note")
-      .eq("lesson_id", sourceId);
-
-    const existingGoalMap = new Map(
-      existingGoals?.map((g) => [g.id, { completed: g.completed, note: g.note }]) ?? []
-    );
-
-    await supabase.from("goals").delete().eq("lesson_id", sourceId);
-
-    if (goals.length > 0) {
-      const { error } = await supabase.from("goals").insert(
-        goals.map((g) => {
-          const existing = existingGoalMap.get(g.goalId);
-          return {
-            id: g.goalId,
-            lesson_id: sourceId,
-            piece_id: g.pieceId,
-            text: g.text,
-            completed: existing?.completed ?? g.completed,
-            note: existing?.note ?? null,
-          };
-        })
-      );
-      if (error) console.error("Failed to insert goals:", error.message);
-    }
   }
 
   revalidatePath("/");
