@@ -340,24 +340,20 @@ function PracticeOverview({
     );
   }
 
+  if (summary.length === 0) return null;
+
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Repertoire</CardTitle>
       </CardHeader>
       <CardContent>
-        {summary.length > 0 ? (
-          <div>
-            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-              Today&apos;s Practice
-            </h4>
-            <TimeSummary entries={summary} onItemClick={onFocusItem} />
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Select a piece or category from the bar above to focus your practice.
-          </p>
-        )}
+        <div>
+          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+            Today&apos;s Practice
+          </h4>
+          <TimeSummary entries={summary} onItemClick={onFocusItem} />
+        </div>
       </CardContent>
     </Card>
   );
