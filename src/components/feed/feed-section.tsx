@@ -1,13 +1,8 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { ChevronRightIcon, MusicIcon, BookOpenIcon, PenLineIcon, MessageSquareIcon } from "lucide-react";
+import { MusicIcon, BookOpenIcon, PenLineIcon, MessageSquareIcon, PlusIcon } from "lucide-react";
 import type { JSONContent } from "@tiptap/core";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { saveEditorContent } from "@/app/(app)/editor/actions";
 import { updateSectionTime } from "@/app/(app)/feed/actions";
@@ -55,7 +50,7 @@ type FeedSectionProps = {
 
 export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOverride, editorContext = "practice_entry" }: FeedSectionProps) {
   const sectionHasContent = hasContent(section.content);
-  const [isOpen, setIsOpen] = useState(sectionHasContent);
+  const [isEditorVisible, setIsEditorVisible] = useState(sectionHasContent);
   const [isTimeDialogOpen, setIsTimeDialogOpen] = useState(false);
   const [optimisticTime, setOptimisticTime] = useState<number | null | undefined>(undefined);
 
@@ -94,25 +89,29 @@ export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOver
   );
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger
+    <div className="group/section">
+      <div
         className={cn(
-          "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50",
-          isOpen && "bg-muted/30"
+          "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors",
+          isEditorVisible && "bg-muted/30"
         )}
       >
-        <ChevronRightIcon
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform",
-            isOpen && "rotate-90"
-          )}
-        />
         <Icon className="size-4 shrink-0 text-muted-foreground" />
         <span className="font-medium truncate">{label}</span>
         {subtitle && (
           <span className="text-muted-foreground truncate text-xs">
             {subtitle}
           </span>
+        )}
+        {!isEditorVisible && (
+          <button
+            type="button"
+            onClick={() => setIsEditorVisible(true)}
+            className="ml-1 shrink-0 opacity-0 group-hover/section:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+            title="Add notes"
+          >
+            <PlusIcon className="size-3.5" />
+          </button>
         )}
         <span
           className={cn(
@@ -131,7 +130,7 @@ export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOver
               ? "empty"
               : null}
         </span>
-      </CollapsibleTrigger>
+      </div>
       {section.category !== "general" && (
         <TimeEditDialog
           open={isTimeDialogOpen}
@@ -140,34 +139,19 @@ export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOver
           onSave={handleTimeSave}
         />
       )}
-      <CollapsibleContent>
-        <div className="pl-9 pr-3 pb-3 pt-1">
-          {isToday ? (
-            <RichTextEditor
-              context={editorContext}
-              sourceType="practice_entry"
-              sourceId={section.id}
-              initialContent={section.content as JSONContent | null}
-              pieces={pieces}
-              onSave={handleSave}
-              placeholder="Write your notes..."
-            />
-          ) : sectionHasContent ? (
-            <RichTextEditor
-              context={editorContext}
-              sourceType="practice_entry"
-              sourceId={section.id}
-              initialContent={section.content as JSONContent | null}
-              pieces={pieces}
-              readOnly
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground/50 italic">
-              No notes recorded
-            </p>
-          )}
+      {isEditorVisible && (
+        <div className="pl-9 pr-3 pb-1 pt-0.5 prose-editor-compact">
+          <RichTextEditor
+            context={editorContext}
+            sourceType="practice_entry"
+            sourceId={section.id}
+            initialContent={section.content as JSONContent | null}
+            pieces={pieces}
+            onSave={handleSave}
+            placeholder="Write your notes..."
+          />
         </div>
-      </CollapsibleContent>
-    </Collapsible>
+      )}
+    </div>
   );
 }

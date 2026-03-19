@@ -17,6 +17,7 @@ import { useTimer } from "@/components/timer/timer-context";
 import { TimeSummary } from "@/components/timer/time-summary";
 import { getTodaySummary } from "@/app/(app)/timer/actions";
 import {
+  getCategoryFocusData,
   getPieceFocusData,
   toggleTaskCompleted,
 } from "@/app/(app)/focus-panel/actions";
@@ -68,13 +69,15 @@ export function RepertoireFocusPanel() {
     return <PieceDetail pieceId={activePieceId} />;
   }
 
-  const showCategory = activeTarget?.category != null && activeTarget.category !== "piece";
+  const activeCategory = activeTarget?.category !== "piece" ? activeTarget?.category : null;
+
+  if (activeCategory === "technique" || activeCategory === "sight_reading") {
+    return <CategoryDetail category={activeCategory} />;
+  }
 
   return (
     <PracticeOverview
       isRunning={isRunning}
-      showCategoryCard={showCategory}
-      currentCategory={activeTarget?.category ?? null}
       onFocusItem={handleFocusItem}
     />
   );
@@ -288,18 +291,70 @@ function MentionRow({ mention }: { mention: MentionWithSource }) {
 }
 
 // ---------------------------------------------------------------------------
-// Practice Overview (sidebar when no piece is focused)
+// Category Detail (sidebar when a category like technique/sight_reading is focused)
+// ---------------------------------------------------------------------------
+
+function CategoryDetail({
+  category,
+}: {
+  category: "technique" | "sight_reading";
+}) {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  const label = TIMER_CATEGORY_LABELS[category] ?? category;
+
+  useEffect(() => {
+    setLoaded(false);
+    getCategoryFocusData(category).then((data) => {
+      setTasks(data.tasks);
+      setLoaded(true);
+    });
+  }, [category]);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <MusicIcon className="size-4" />
+          {label}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loaded && tasks.length > 0 && (
+          <FocusSection
+            icon={<CheckCircle2Icon className="size-3.5" />}
+            title="Tasks"
+            count={tasks.filter((t) => !t.completed).length}
+          >
+            {tasks.map((task) => (
+              <TaskRow key={task.id} task={task} onToggle={(completed) => {
+                setTasks((prev) =>
+                  prev.map((t) => t.id === task.id ? { ...t, completed } : t)
+                );
+              }} />
+            ))}
+          </FocusSection>
+        )}
+        {loaded && tasks.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            No tasks yet.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Practice Overview (sidebar when no piece/category is focused)
 // ---------------------------------------------------------------------------
 
 function PracticeOverview({
   isRunning,
-  showCategoryCard,
-  currentCategory,
   onFocusItem,
 }: {
   isRunning: boolean;
-  showCategoryCard: boolean;
-  currentCategory: string | null;
   onFocusItem: (focusKey: string) => void;
 }) {
   const [summary, setSummary] = useState<TimeSummaryEntry[]>([]);
@@ -322,23 +377,7 @@ function PracticeOverview({
     );
   }
 
-  if (showCategoryCard && currentCategory) {
-    const label =
-      TIMER_CATEGORY_LABELS[currentCategory] ?? currentCategory;
-    return (
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <MusicIcon className="size-4" />
-            {label}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {summary.length > 0 && <TimeSummary entries={summary} onItemClick={onFocusItem} />}
-        </CardContent>
-      </Card>
-    );
-  }
+  if (summary.length === 0) return null;
 
   return (
     <Card>
@@ -346,18 +385,12 @@ function PracticeOverview({
         <CardTitle className="text-base">Repertoire</CardTitle>
       </CardHeader>
       <CardContent>
-        {summary.length > 0 ? (
-          <div>
-            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-              Today&apos;s Practice
-            </h4>
-            <TimeSummary entries={summary} onItemClick={onFocusItem} />
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Select a piece or category from the bar above to focus your practice.
-          </p>
-        )}
+        <div>
+          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+            Today&apos;s Practice
+          </h4>
+          <TimeSummary entries={summary} onItemClick={onFocusItem} />
+        </div>
       </CardContent>
     </Card>
   );

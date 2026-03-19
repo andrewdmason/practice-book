@@ -112,6 +112,16 @@
   line-height: 1.7;
 }
 
+.prose-editor-compact .prose-editor {
+  min-height: unset;
+}
+
+.prose-editor-compact .prose-editor > p:last-child:has(> .ProseMirror-trailingBreak:only-child) {
+  font-size: 0;
+  line-height: 0;
+  margin: 0;
+}
+
 .prose-editor:focus {
   outline: none;
 }

@@ -77,6 +77,32 @@ async function resolveMentionSources(
   });
 }
 
+export async function getCategoryFocusData(
+  category: "technique" | "sight_reading"
+): Promise<{ tasks: Task[] }> {
+  const supabase = await createClient();
+
+  // Find all section IDs for this category
+  const { data: sections } = await supabase
+    .from("practice_entry_sections")
+    .select("id")
+    .eq("category", category);
+
+  if (!sections || sections.length === 0) return { tasks: [] };
+
+  const sectionIds = sections.map((s) => s.id);
+
+  // Fetch open tasks from those sections
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("*")
+    .in("source_id", sectionIds)
+    .eq("completed", false)
+    .order("created_at", { ascending: false });
+
+  return { tasks: (tasks ?? []) as Task[] };
+}
+
 export async function getPieceMentions(
   pieceId: string,
   cursor?: string,
