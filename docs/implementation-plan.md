@@ -63,19 +63,21 @@
 - JWT expiry set to 1 year in local Supabase for dev convenience
 - Dev login button added to bypass auth in development (uses service role key to auto-sign in `andrew@mason.io`)
 
-## PR 4: Rich Text Editor
+## PR 4: Rich Text Editor ✅ COMPLETED
 
 **Goal:** Tiptap editor with @ mentions, inline tasks, metronome markings, and /goal command.
 
-- Tiptap integration with a clean, Notion-like editing experience
-- Custom inline nodes:
-  - Piece mention (`@` trigger, fuzzy autocomplete from repertoire)
-  - Metronome marking (`@120` → `♩=120` styled tag)
-  - Inline task (`[]` trigger creates interactive checkbox)
-- `/goal` slash command that creates an inline goal block (for lesson editor)
-- Extraction on save: parse Tiptap document and upsert records into `mentions` and `tasks` tables
-- Floating toolbar for mobile
-- Headings, bold, italic, bullet lists — standard rich text basics
+- ✅ Tiptap integration with a clean, Notion-like editing experience (Floating UI positioning)
+- ✅ Custom inline nodes:
+  - Piece mention (`@` trigger, fuzzy autocomplete from repertoire) with styled pill + music icon
+  - Metronome marking (`@120` → `♩=120` styled tag in secondary color)
+  - Inline task (`[ ]` trigger creates interactive checkbox with taskId for persistence)
+- ✅ `/goal` slash command that creates an inline goal block (lesson editor only) with border accent + Target icon
+- ✅ Extraction on save: parse Tiptap document and upsert records into `mentions`, `tasks`, and `goals` tables
+- ✅ BubbleMenu floating toolbar for text selection formatting (bold, italic, headings, lists, blockquote)
+- ✅ Headings (H2, H3), bold, italic, bullet lists, ordered lists, blockquote
+- ✅ Auto-save with 1.5s debounce + save on blur; content persists across reloads via Supabase JSONB
+- ✅ Demo page (`/editor-demo`) for testing both practice and lesson editors with full round-trip saves
 
 ## PR 5: Practice Feed & Unified Timeline
 

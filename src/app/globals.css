@@ -98,3 +98,110 @@
     font-family: var(--font-lora);
   }
 }
+
+/* Tiptap / ProseMirror editor styles */
+.prose-editor {
+  min-height: 6rem;
+  line-height: 1.7;
+}
+
+.prose-editor:focus {
+  outline: none;
+}
+
+.prose-editor p {
+  margin: 0.25em 0;
+}
+
+.prose-editor h2 {
+  font-family: var(--font-lora);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.25em;
+}
+
+.prose-editor h3 {
+  font-family: var(--font-lora);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-top: 0.75em;
+  margin-bottom: 0.25em;
+}
+
+.prose-editor ul,
+.prose-editor ol {
+  padding-left: 1.25em;
+  margin: 0.25em 0;
+}
+
+.prose-editor ul {
+  list-style-type: disc;
+}
+
+.prose-editor ol {
+  list-style-type: decimal;
+}
+
+.prose-editor li {
+  margin: 0.125em 0;
+}
+
+.prose-editor blockquote {
+  border-left: 4px solid var(--muted);
+  padding-left: 1rem;
+  font-style: italic;
+  color: var(--muted-foreground);
+  margin: 0.5em 0;
+}
+
+.prose-editor strong {
+  font-weight: 600;
+}
+
+.prose-editor em {
+  font-style: italic;
+}
+
+/* Placeholder */
+.prose-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--muted-foreground);
+  pointer-events: none;
+  height: 0;
+}
+
+/* Task list styles */
+.prose-editor ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.prose-editor ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0.25em 0;
+}
+
+.prose-editor ul[data-type="taskList"] li > label {
+  flex-shrink: 0;
+  margin-top: 0.25em;
+}
+
+.prose-editor ul[data-type="taskList"] li > label input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.25rem;
+  accent-color: var(--primary);
+}
+
+.prose-editor ul[data-type="taskList"] li > div {
+  flex: 1;
+}
+
+.prose-editor ul[data-type="taskList"] li[data-checked="true"] > div {
+  text-decoration: line-through;
+  color: var(--muted-foreground);
+}

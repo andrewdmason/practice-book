@@ -102,3 +102,45 @@ export const MASTERY_LEVELS: MasteryLevel[] = [
   "performance_ready",
   "memorized",
 ];
+
+// Editor types
+export type SourceType = "practice_entry" | "lesson";
+export type EntrySectionCategory = "piece" | "technique" | "sight_reading" | "general";
+
+export type Mention = {
+  id: string;
+  piece_id: string;
+  source_type: SourceType;
+  source_id: string;
+  context_snippet: string | null;
+  created_at: string;
+};
+
+export type Task = {
+  id: string;
+  source_type: SourceType;
+  source_id: string;
+  piece_id: string | null;
+  text: string;
+  completed: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Goal = {
+  id: string;
+  lesson_id: string;
+  piece_id: string | null;
+  text: string;
+  content: unknown;
+  completed: boolean;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PieceSuggestion = {
+  id: string;
+  name: string;
+  composer: string | null;
+};
