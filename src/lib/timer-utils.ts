@@ -17,6 +17,13 @@ export function daysSince(isoDate: string | null): number | null {
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
+export function formatMinutes(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.round((totalSeconds % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
 export const TIMER_CATEGORY_LABELS: Record<string, string> = {
   piece: "Piece",
   technique: "Technique",

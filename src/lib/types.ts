@@ -145,6 +145,26 @@ export type PieceSuggestion = {
   composer: string | null;
 };
 
+// Report types
+export type WeeklyPracticeData = {
+  weekStart: string; // YYYY-MM-DD (Monday)
+  weekLabel: string; // "Mar 10"
+  totalSeconds: number;
+};
+
+export type PieceBreakdownData = {
+  pieceId: string | null;
+  label: string;
+  totalSeconds: number;
+  category: TimerCategory;
+};
+
+export type StreakData = {
+  currentStreak: number;
+  daysPracticedThisWeek: number;
+  thisWeekDays: boolean[]; // Mon-Sun
+};
+
 // Focus panel types
 export type MentionWithSource = Mention & {
   source_date: string;

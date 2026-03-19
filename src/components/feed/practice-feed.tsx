@@ -6,14 +6,16 @@ import { PlusIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FeedDayCard } from "./feed-day-card";
 import { getFeedPage, createLesson } from "@/app/(app)/feed/actions";
-import type { FeedDay, PieceSuggestion } from "@/lib/types";
+import { StreakBadge } from "@/components/reports/streak-card";
+import type { FeedDay, PieceSuggestion, StreakData } from "@/lib/types";
 
 type PracticeFeedProps = {
   initialData: { items: FeedDay[]; nextCursor: string | null };
   pieces: PieceSuggestion[];
+  streak?: StreakData;
 };
 
-export function PracticeFeed({ initialData, pieces }: PracticeFeedProps) {
+export function PracticeFeed({ initialData, pieces, streak }: PracticeFeedProps) {
   const router = useRouter();
   const [feedDays, setFeedDays] = useState(initialData.items);
   const [cursor, setCursor] = useState(initialData.nextCursor);
@@ -61,7 +63,10 @@ export function PracticeFeed({ initialData, pieces }: PracticeFeedProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold tracking-tight">Practice</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-semibold tracking-tight">Practice</h2>
+          {streak && <StreakBadge data={streak} />}
+        </div>
         <Button
           variant="outline"
           size="sm"
