@@ -6,14 +6,12 @@ import { PlusIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FeedDayCard } from "./feed-day-card";
 import { getFeedPage, createLesson } from "@/app/(app)/feed/actions";
-import { StreakBadge } from "@/components/reports/streak-card";
 import { cn } from "@/lib/utils";
-import type { FeedDay, PieceSuggestion, PracticeEntryType, StreakData } from "@/lib/types";
+import type { FeedDay, PieceSuggestion, PracticeEntryType } from "@/lib/types";
 
 type PracticeFeedProps = {
   initialData: { items: FeedDay[]; nextCursor: string | null };
   pieces: PieceSuggestion[];
-  streak?: StreakData;
   typeFilter?: PracticeEntryType;
 };
 
@@ -23,7 +21,7 @@ const typeFilterOptions = [
   { value: "lesson" as const, label: "Lessons" },
 ];
 
-export function PracticeFeed({ initialData, pieces, streak, typeFilter }: PracticeFeedProps) {
+export function PracticeFeed({ initialData, pieces, typeFilter }: PracticeFeedProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const focusKey = searchParams.get("focus");
@@ -82,27 +80,6 @@ export function PracticeFeed({ initialData, pieces, streak, typeFilter }: Practi
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold tracking-tight">Sessions</h2>
-          {streak && <StreakBadge data={streak} />}
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleNewLesson}
-          disabled={isPending}
-        >
-          {isPending ? (
-            <Loader2Icon className="size-4 animate-spin" />
-          ) : (
-            <PlusIcon className="size-4" />
-          )}
-          New Lesson
-        </Button>
-      </div>
-
       {/* Type filter */}
       <div className="flex items-center gap-1.5">
         {typeFilterOptions.map((opt) => (
@@ -119,6 +96,20 @@ export function PracticeFeed({ initialData, pieces, streak, typeFilter }: Practi
             {opt.label}
           </button>
         ))}
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto"
+          onClick={handleNewLesson}
+          disabled={isPending}
+        >
+          {isPending ? (
+            <Loader2Icon className="size-4 animate-spin" />
+          ) : (
+            <PlusIcon className="size-4" />
+          )}
+          New Lesson
+        </Button>
       </div>
 
       {/* Feed days */}

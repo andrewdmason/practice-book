@@ -57,6 +57,23 @@ export const CustomTaskItem = TaskItem.extend({
     ];
   },
 
+  addKeyboardShortcuts() {
+    return {
+      Enter: () => {
+        // Instead of creating a new task item, exit the task list and create a paragraph
+        const { state } = this.editor;
+        const { $from } = state.selection;
+
+        // Check if we're inside a taskItem
+        const taskItem = $from.node(-1)?.type.name === "taskItem" ? $from.node(-1) : null;
+        if (!taskItem) return false;
+
+        // Split out of the task list into a new paragraph
+        return this.editor.chain().splitBlock().liftListItem("taskItem").run();
+      },
+    };
+  },
+
   // Auto-assign taskId on creation if not set
   onCreate() {
     const { doc, tr } = this.editor.state;

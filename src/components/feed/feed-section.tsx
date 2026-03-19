@@ -140,7 +140,7 @@ export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOver
         />
       )}
       {isEditorVisible && (
-        <div className="pl-9 pr-3 pb-1 pt-0.5 [&_.prose-editor]:min-h-[1.5rem]">
+        <div className="pl-9 pr-3 pb-1 pt-0.5 prose-editor-compact">
           <RichTextEditor
             context={editorContext}
             sourceType="practice_entry"
