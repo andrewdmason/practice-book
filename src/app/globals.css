@@ -187,7 +187,10 @@
 
 .prose-editor ul[data-type="taskList"] li > label {
   flex-shrink: 0;
-  margin-top: 0.25em;
+  display: flex;
+  align-items: center;
+  height: 1.7em;
+  margin-top: 0.18em;
 }
 
 .prose-editor ul[data-type="taskList"] li > label input[type="checkbox"] {
