@@ -1,0 +1,10 @@
+[     912ms] [ERROR] Base UI: A component that acts as a button expected a native <button> because the `nativeButton` prop is true. Rendering a non-<button> removes native button semantics, which can impact forms and accessibility. Use a real <button> in the `render` prop, or set `nativeButton` to `false`.
+    at DialogTrigger (http://localhost:3001/_next/static/chunks/src_0~y8cvn._.js:233:214)
+    at CollectionFormDialog (http://localhost:3001/_next/static/chunks/src_0~y8cvn._.js:1346:215)
+    at RepertoireList (http://localhost:3001/_next/static/chunks/src_0~y8cvn._.js:2687:231)
+    at RepertoirePage (about://React/Server/file:///Users/andrew/conductor/workspaces/practice-book/rio-de-janeiro/.next/dev/server/chunks/ssr/%5Broot-of-the-server%5D__0y7cd1a._.js?15:83:270) @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:3272
+[     913ms] [ERROR] Base UI: A component that acts as a button expected a native <button> because the `nativeButton` prop is true. Rendering a non-<button> removes native button semantics, which can impact forms and accessibility. Use a real <button> in the `render` prop, or set `nativeButton` to `false`.
+    at DialogTrigger (http://localhost:3001/_next/static/chunks/src_0~y8cvn._.js:233:214)
+    at PieceFormDialog (http://localhost:3001/_next/static/chunks/src_0~y8cvn._.js:955:215)
+    at RepertoireList (http://localhost:3001/_next/static/chunks/src_0~y8cvn._.js:2711:231)
+    at RepertoirePage (about://React/Server/file:///Users/andrew/conductor/workspaces/practice-book/rio-de-janeiro/.next/dev/server/chunks/ssr/%5Broot-of-the-server%5D__0y7cd1a._.js?15:83:270) @ http://localhost:3001/_next/static/chunks/node_modules_next_dist_115brz8._.js:3272
