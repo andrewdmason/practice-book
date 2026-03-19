@@ -165,6 +165,34 @@ export type StreakData = {
   thisWeekDays: boolean[]; // Mon-Sun
 };
 
+// Search types
+export type SearchResultType =
+  | "piece"
+  | "collection"
+  | "practice_entry"
+  | "lesson"
+  | "goal"
+  | "bookmark";
+
+export type SearchResult = {
+  result_type: SearchResultType;
+  id: string;
+  title: string;
+  subtitle: string | null;
+  preview: string | null;
+  date: string | null;
+  url: string;
+  rank: number;
+};
+
+export type TypeaheadResult = {
+  id: string;
+  name: string;
+  composer: string | null;
+  type: "piece" | "collection";
+  url: string;
+};
+
 // Focus panel types
 export type MentionWithSource = Mention & {
   source_date: string;
