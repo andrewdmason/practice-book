@@ -11,6 +11,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { useSearch } from "@/components/search/search-provider";
 
 const navItems = [
   { label: "Practice", href: "/" },
@@ -46,6 +47,7 @@ function NavLink({
 
 export function Header() {
   const pathname = usePathname();
+  const { open: openSearch } = useSearch();
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -79,7 +81,7 @@ export function Header() {
             variant="outline"
             size="sm"
             className="hidden sm:flex items-center gap-2 text-muted-foreground"
-            disabled
+            onClick={openSearch}
           >
             <Search className="h-3.5 w-3.5" />
             <span className="text-xs">Search...</span>
