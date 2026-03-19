@@ -7,15 +7,23 @@ import { Button } from "@/components/ui/button";
 import { FeedDayCard } from "./feed-day-card";
 import { getFeedPage, createLesson } from "@/app/(app)/feed/actions";
 import { StreakBadge } from "@/components/reports/streak-card";
-import type { FeedDay, PieceSuggestion, StreakData } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import type { FeedDay, PieceSuggestion, PracticeEntryType, StreakData } from "@/lib/types";
 
 type PracticeFeedProps = {
   initialData: { items: FeedDay[]; nextCursor: string | null };
   pieces: PieceSuggestion[];
   streak?: StreakData;
+  typeFilter?: PracticeEntryType;
 };
 
-export function PracticeFeed({ initialData, pieces, streak }: PracticeFeedProps) {
+const typeFilterOptions = [
+  { value: undefined, label: "All" },
+  { value: "practice" as const, label: "Practice" },
+  { value: "lesson" as const, label: "Lessons" },
+];
+
+export function PracticeFeed({ initialData, pieces, streak, typeFilter }: PracticeFeedProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const focusKey = searchParams.get("focus");
@@ -25,17 +33,28 @@ export function PracticeFeed({ initialData, pieces, streak }: PracticeFeedProps)
   const [isPending, startTransition] = useTransition();
   const sentinelRef = useRef<HTMLDivElement>(null);
 
+  const setTypeFilter = (value: PracticeEntryType | undefined) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) {
+      params.set("type", value);
+    } else {
+      params.delete("type");
+    }
+    const qs = params.toString();
+    router.replace(qs ? `/?${qs}` : "/", { scroll: false });
+  };
+
   const loadMore = useCallback(async () => {
     if (!cursor || loadingMore) return;
     setLoadingMore(true);
     try {
-      const result = await getFeedPage(cursor);
+      const result = await getFeedPage(cursor, 7, typeFilter);
       setFeedDays((prev) => [...prev, ...result.items]);
       setCursor(result.nextCursor);
     } finally {
       setLoadingMore(false);
     }
-  }, [cursor, loadingMore]);
+  }, [cursor, loadingMore, typeFilter]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -66,7 +85,7 @@ export function PracticeFeed({ initialData, pieces, streak }: PracticeFeedProps)
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold tracking-tight">Practice</h2>
+          <h2 className="text-xl font-semibold tracking-tight">Sessions</h2>
           {streak && <StreakBadge data={streak} />}
         </div>
         <Button
@@ -84,10 +103,32 @@ export function PracticeFeed({ initialData, pieces, streak }: PracticeFeedProps)
         </Button>
       </div>
 
+      {/* Type filter */}
+      <div className="flex items-center gap-1.5">
+        {typeFilterOptions.map((opt) => (
+          <button
+            key={opt.label}
+            onClick={() => setTypeFilter(opt.value)}
+            className={cn(
+              "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+              typeFilter === opt.value
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+            )}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
       {/* Feed days */}
       {feedDays.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-8">
-          No practice entries yet. Start the timer to begin!
+          {typeFilter === "lesson"
+            ? "No lessons yet. Click New Lesson to get started!"
+            : typeFilter === "practice"
+              ? "No practice entries yet. Start the timer to begin!"
+              : "No entries yet. Start the timer or add a lesson!"}
         </p>
       ) : (
         feedDays.map((day) => (

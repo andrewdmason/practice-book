@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState, useTransition } from "react";
 import { ChevronRightIcon, MusicIcon, BookOpenIcon, PenLineIcon, MessageSquareIcon } from "lucide-react";
 import type { JSONContent } from "@tiptap/core";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/collapsible";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { saveEditorContent } from "@/app/(app)/editor/actions";
+import { updateSectionTime } from "@/app/(app)/feed/actions";
 import { formatElapsed } from "@/lib/timer-utils";
 import type { PracticeEntrySection, PieceSuggestion } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -47,12 +48,41 @@ type FeedSectionProps = {
   isToday: boolean;
   pieces: PieceSuggestion[];
   timeSeconds?: number;
+  hasTimeOverride?: boolean;
   editorContext?: "practice_entry" | "lesson";
 };
 
-export function FeedSection({ section, isToday, pieces, timeSeconds, editorContext = "practice_entry" }: FeedSectionProps) {
+function secondsToMinutes(s: number): string {
+  return String(Math.round(s / 60));
+}
+
+function parseTimeInput(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  // Support "HH:MM:SS", "MM:SS", or just minutes
+  const colonParts = trimmed.split(":");
+  if (colonParts.length === 3) {
+    const [h, m, s] = colonParts.map(Number);
+    if ([h, m, s].some(isNaN)) return null;
+    return h * 3600 + m * 60 + s;
+  }
+  if (colonParts.length === 2) {
+    const [m, s] = colonParts.map(Number);
+    if ([m, s].some(isNaN)) return null;
+    return m * 60 + s;
+  }
+  const mins = Number(trimmed);
+  if (isNaN(mins) || mins < 0) return null;
+  return Math.round(mins * 60);
+}
+
+export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOverride, editorContext = "practice_entry" }: FeedSectionProps) {
   const sectionHasContent = hasContent(section.content);
   const [isOpen, setIsOpen] = useState(sectionHasContent);
+  const [isEditingTime, setIsEditingTime] = useState(false);
+  const [timeInputValue, setTimeInputValue] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const timeInputRef = useRef<HTMLInputElement>(null);
 
   const label =
     section.category === "piece"
@@ -70,6 +100,32 @@ export function FeedSection({ section, isToday, pieces, timeSeconds, editorConte
     },
     [section.id]
   );
+
+  const handleTimeClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (section.category === "general") return;
+    setTimeInputValue(timeSeconds ? secondsToMinutes(timeSeconds) : "");
+    setIsEditingTime(true);
+    setTimeout(() => timeInputRef.current?.select(), 0);
+  };
+
+  const handleTimeSave = () => {
+    setIsEditingTime(false);
+    const newSeconds = parseTimeInput(timeInputValue);
+    // If input was empty or 0, clear the override
+    const valueToSave = newSeconds === null || newSeconds === 0 ? null : newSeconds;
+    startTransition(async () => {
+      await updateSectionTime(section.id, valueToSave);
+    });
+  };
+
+  const handleTimeKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleTimeSave();
+    } else if (e.key === "Escape") {
+      setIsEditingTime(false);
+    }
+  };
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -92,13 +148,43 @@ export function FeedSection({ section, isToday, pieces, timeSeconds, editorConte
             {subtitle}
           </span>
         )}
-        <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground/50">
-          {timeSeconds != null && timeSeconds > 0
-            ? formatElapsed(timeSeconds)
-            : !sectionHasContent
-              ? "empty"
-              : null}
-        </span>
+        {isEditingTime ? (
+          <span
+            className="ml-auto shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <input
+              ref={timeInputRef}
+              type="text"
+              value={timeInputValue}
+              onChange={(e) => setTimeInputValue(e.target.value)}
+              onBlur={handleTimeSave}
+              onKeyDown={handleTimeKeyDown}
+              placeholder="min"
+              className="w-14 rounded border bg-background px-1.5 py-0.5 text-xs tabular-nums text-right focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "ml-auto shrink-0 text-xs tabular-nums",
+              section.category !== "general" && "cursor-pointer hover:text-foreground",
+              hasTimeOverride
+                ? "text-foreground/70"
+                : "text-muted-foreground/50"
+            )}
+            onClick={section.category !== "general" ? handleTimeClick : undefined}
+            title={section.category !== "general" ? "Click to edit time" : undefined}
+          >
+            {isPending
+              ? "..."
+              : timeSeconds != null && timeSeconds > 0
+                ? formatElapsed(timeSeconds)
+                : !sectionHasContent
+                  ? "empty"
+                  : null}
+          </span>
+        )}
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="pl-9 pr-3 pb-3 pt-1">

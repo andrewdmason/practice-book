@@ -91,7 +91,8 @@ function EntryCard({
             section={section}
             isToday={isToday}
             pieces={pieces}
-            timeSeconds={getSectionTime(section, timeSummary)}
+            timeSeconds={section.time_override_seconds ?? getSectionTime(section, timeSummary)}
+            hasTimeOverride={section.time_override_seconds != null}
             editorContext={entry.type === "lesson" ? "lesson" : "practice_entry"}
           />
         ))}
