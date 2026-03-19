@@ -145,6 +145,22 @@ export type PieceSuggestion = {
   composer: string | null;
 };
 
+// Focus panel types
+export type MentionWithSource = Mention & {
+  source_date: string;
+  source_label: string;
+};
+
+export type RepertoireOverviewItem = {
+  id: string;
+  name: string;
+  composer: string | null;
+  mastery_level: MasteryLevel;
+  last_played: string | null;
+  open_tasks: number;
+  open_goals: number;
+};
+
 // Feed types
 export type PracticeEntrySection = {
   id: string;

@@ -13,9 +13,18 @@ const masteryClasses: Record<MasteryLevel, string> = {
     "bg-primary/10 text-primary border-primary/20",
 };
 
-export function MasteryBadge({ level }: { level: MasteryLevel }) {
+export function MasteryBadge({
+  level,
+  size = "default",
+}: {
+  level: MasteryLevel;
+  size?: "default" | "sm";
+}) {
   return (
-    <Badge variant="outline" className={masteryClasses[level]}>
+    <Badge
+      variant="outline"
+      className={`${masteryClasses[level]} ${size === "sm" ? "text-[10px] px-1.5 py-0" : ""}`}
+    >
       {MASTERY_LEVEL_LABELS[level]}
     </Badge>
   );
