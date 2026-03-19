@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useTransition } from "react";
+import { useCallback, useState } from "react";
 import { ChevronRightIcon, MusicIcon, BookOpenIcon, PenLineIcon, MessageSquareIcon } from "lucide-react";
 import type { JSONContent } from "@tiptap/core";
 import {
@@ -12,6 +12,7 @@ import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { saveEditorContent } from "@/app/(app)/editor/actions";
 import { updateSectionTime } from "@/app/(app)/feed/actions";
 import { formatElapsed } from "@/lib/timer-utils";
+import { TimeEditDialog } from "@/components/feed/time-edit-dialog";
 import type { PracticeEntrySection, PieceSuggestion } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -52,37 +53,13 @@ type FeedSectionProps = {
   editorContext?: "practice_entry" | "lesson";
 };
 
-function secondsToMinutes(s: number): string {
-  return String(Math.round(s / 60));
-}
-
-function parseTimeInput(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  // Support "HH:MM:SS", "MM:SS", or just minutes
-  const colonParts = trimmed.split(":");
-  if (colonParts.length === 3) {
-    const [h, m, s] = colonParts.map(Number);
-    if ([h, m, s].some(isNaN)) return null;
-    return h * 3600 + m * 60 + s;
-  }
-  if (colonParts.length === 2) {
-    const [m, s] = colonParts.map(Number);
-    if ([m, s].some(isNaN)) return null;
-    return m * 60 + s;
-  }
-  const mins = Number(trimmed);
-  if (isNaN(mins) || mins < 0) return null;
-  return Math.round(mins * 60);
-}
-
 export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOverride, editorContext = "practice_entry" }: FeedSectionProps) {
   const sectionHasContent = hasContent(section.content);
   const [isOpen, setIsOpen] = useState(sectionHasContent);
-  const [isEditingTime, setIsEditingTime] = useState(false);
-  const [timeInputValue, setTimeInputValue] = useState("");
-  const [isPending, startTransition] = useTransition();
-  const timeInputRef = useRef<HTMLInputElement>(null);
+  const [isTimeDialogOpen, setIsTimeDialogOpen] = useState(false);
+  const [optimisticTime, setOptimisticTime] = useState<number | null | undefined>(undefined);
+
+  const displayTime = optimisticTime !== undefined ? optimisticTime : timeSeconds;
 
   const label =
     section.category === "piece"
@@ -104,28 +81,17 @@ export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOver
   const handleTimeClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (section.category === "general") return;
-    setTimeInputValue(timeSeconds ? secondsToMinutes(timeSeconds) : "");
-    setIsEditingTime(true);
-    setTimeout(() => timeInputRef.current?.select(), 0);
+    setIsTimeDialogOpen(true);
   };
 
-  const handleTimeSave = () => {
-    setIsEditingTime(false);
-    const newSeconds = parseTimeInput(timeInputValue);
-    // If input was empty or 0, clear the override
-    const valueToSave = newSeconds === null || newSeconds === 0 ? null : newSeconds;
-    startTransition(async () => {
-      await updateSectionTime(section.id, valueToSave);
-    });
-  };
-
-  const handleTimeKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleTimeSave();
-    } else if (e.key === "Escape") {
-      setIsEditingTime(false);
-    }
-  };
+  const handleTimeSave = useCallback(
+    (seconds: number | null) => {
+      setIsTimeDialogOpen(false);
+      setOptimisticTime(seconds);
+      updateSectionTime(section.id, seconds);
+    },
+    [section.id]
+  );
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -148,44 +114,32 @@ export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOver
             {subtitle}
           </span>
         )}
-        {isEditingTime ? (
-          <span
-            className="ml-auto shrink-0"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <input
-              ref={timeInputRef}
-              type="text"
-              value={timeInputValue}
-              onChange={(e) => setTimeInputValue(e.target.value)}
-              onBlur={handleTimeSave}
-              onKeyDown={handleTimeKeyDown}
-              placeholder="min"
-              className="w-14 rounded border bg-background px-1.5 py-0.5 text-xs tabular-nums text-right focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-          </span>
-        ) : (
-          <span
-            className={cn(
-              "ml-auto shrink-0 text-xs tabular-nums",
-              section.category !== "general" && "cursor-pointer hover:text-foreground",
-              hasTimeOverride
-                ? "text-foreground/70"
-                : "text-muted-foreground/50"
-            )}
-            onClick={section.category !== "general" ? handleTimeClick : undefined}
-            title={section.category !== "general" ? "Click to edit time" : undefined}
-          >
-            {isPending
-              ? "..."
-              : timeSeconds != null && timeSeconds > 0
-                ? formatElapsed(timeSeconds)
-                : !sectionHasContent
-                  ? "empty"
-                  : null}
-          </span>
-        )}
+        <span
+          className={cn(
+            "ml-auto shrink-0 text-xs tabular-nums",
+            section.category !== "general" && "cursor-pointer hover:text-foreground",
+            hasTimeOverride || optimisticTime !== undefined
+              ? "text-foreground/70"
+              : "text-muted-foreground/50"
+          )}
+          onClick={section.category !== "general" ? handleTimeClick : undefined}
+          title={section.category !== "general" ? "Click to edit time" : undefined}
+        >
+          {displayTime != null && displayTime > 0
+            ? formatElapsed(displayTime)
+            : !sectionHasContent
+              ? "empty"
+              : null}
+        </span>
       </CollapsibleTrigger>
+      {section.category !== "general" && (
+        <TimeEditDialog
+          open={isTimeDialogOpen}
+          onOpenChange={setIsTimeDialogOpen}
+          timeSeconds={displayTime ?? undefined}
+          onSave={handleTimeSave}
+        />
+      )}
       <CollapsibleContent>
         <div className="pl-9 pr-3 pb-3 pt-1">
           {isToday ? (
