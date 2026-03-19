@@ -107,7 +107,7 @@ function EntryCard({
       <CardContent className="px-1 py-2">
         {sortedSections.map((section) => {
           const serverTime = section.time_override_seconds ?? getSectionTime(section, timeSummary);
-          const isActiveSection = isToday && isRunning && !section.time_override_seconds && sectionMatchesTarget(section, currentTarget);
+          const isActiveSection = isToday && isRunning && sectionMatchesTarget(section, currentTarget);
           return (
             <FeedSection
               key={section.id}
