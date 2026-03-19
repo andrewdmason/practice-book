@@ -132,15 +132,24 @@
 - Collection detail page reuses all object page components for consistent UX
 - Build verified clean: no TypeScript errors, all routes properly registered
 
-## PR 8: Reporting
+## PR 8: Reporting ✅ COMPLETED
 
 **Goal:** Practice analytics and streak tracking.
 
-- Weekly summary bar chart (total practice time per week, last 3 months)
-- Piece breakdown chart (horizontal bars, selectable time range)
-- Streak counter and days-practiced-this-week indicator
-- Streak/consistency shown subtly on the main practice view
-- Use a lightweight charting library (Recharts)
+- ✅ Weekly summary bar chart (total practice time per week, last 3 months)
+- ✅ Piece breakdown chart (horizontal bars, selectable time range)
+- ✅ Streak counter and days-practiced-this-week indicator
+- ✅ Streak/consistency shown subtly on the main practice view
+- ✅ Use a lightweight charting library (Recharts)
+
+**Implementation notes:**
+- Recharts for all charts with `"use client"` wrapper components
+- Server actions in `src/app/(app)/reports/actions.ts`: `getWeeklyPracticeData()` (13 weeks), `getPieceBreakdownData(range)` (7d/30d/90d/all), `getStreakData()` (streak + week dots)
+- Single efficient query per action: joins `timer_entries` to `practice_sessions` with date range filter, groups in JS
+- Streak calculated by walking backward from today through consecutive practiced dates
+- `StreakBadge` component shown in practice feed header (flame icon + count + 7 week dots)
+- Chart colors read from CSS custom properties (`--chart-1` through `--chart-5`) via `getComputedStyle`
+- Piece breakdown has interactive range selector using shadcn Select + `useTransition` for server action calls
 
 ## PR 9: Search
 
