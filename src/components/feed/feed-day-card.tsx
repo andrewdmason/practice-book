@@ -1,9 +1,11 @@
 "use client";
 
+import { useRef } from "react";
 import { BookOpenIcon, CalendarIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { FeedSection } from "./feed-section";
-import type { FeedDay, FeedPracticeEntry, PieceSuggestion, TimeSummaryEntry } from "@/lib/types";
+import { useTimer } from "@/components/timer/timer-context";
+import type { FeedDay, FeedPracticeEntry, PieceSuggestion, TimeSummaryEntry, TimerTarget } from "@/lib/types";
 
 function formatDateHeader(dateStr: string): string {
   const today = new Date().toISOString().slice(0, 10);
@@ -66,6 +68,17 @@ function filterAndSortSections(
   });
 }
 
+function sectionMatchesTarget(
+  section: { category: string; piece_id: string | null },
+  target: TimerTarget | null
+): boolean {
+  if (!target) return false;
+  if (target.category === "piece") {
+    return section.category === "piece" && section.piece_id === target.pieceId;
+  }
+  return section.category === target.category;
+}
+
 function EntryCard({
   entry,
   isToday,
@@ -79,23 +92,34 @@ function EntryCard({
   timeSummary: TimeSummaryEntry[];
   focusKey?: string | null;
 }) {
+  const { isRunning, currentTarget, entryElapsedSeconds } = useTimer();
+  const initialEntryElapsedRef = useRef(entryElapsedSeconds);
+
   const sortedSections = filterAndSortSections(entry, focusKey);
   if (sortedSections.length === 0) return null;
+
+  const liveDelta = isRunning
+    ? Math.max(0, entryElapsedSeconds - initialEntryElapsedRef.current)
+    : 0;
 
   return (
     <Card>
       <CardContent className="px-1 py-2">
-        {sortedSections.map((section) => (
-          <FeedSection
-            key={section.id}
-            section={section}
-            isToday={isToday}
-            pieces={pieces}
-            timeSeconds={section.time_override_seconds ?? getSectionTime(section, timeSummary)}
-            hasTimeOverride={section.time_override_seconds != null}
-            editorContext={entry.type === "lesson" ? "lesson" : "practice_entry"}
-          />
-        ))}
+        {sortedSections.map((section) => {
+          const serverTime = section.time_override_seconds ?? getSectionTime(section, timeSummary);
+          const isActiveSection = isToday && isRunning && !section.time_override_seconds && sectionMatchesTarget(section, currentTarget);
+          return (
+            <FeedSection
+              key={section.id}
+              section={section}
+              isToday={isToday}
+              pieces={pieces}
+              timeSeconds={isActiveSection ? serverTime + liveDelta : serverTime}
+              hasTimeOverride={section.time_override_seconds != null}
+              editorContext={entry.type === "lesson" ? "lesson" : "practice_entry"}
+            />
+          );
+        })}
       </CardContent>
     </Card>
   );
