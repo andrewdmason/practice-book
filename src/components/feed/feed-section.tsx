@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/collapsible";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { saveEditorContent } from "@/app/(app)/editor/actions";
+import { formatElapsed } from "@/lib/timer-utils";
 import type { PracticeEntrySection, PieceSuggestion } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -45,9 +46,10 @@ type FeedSectionProps = {
   section: PracticeEntrySection;
   isToday: boolean;
   pieces: PieceSuggestion[];
+  timeSeconds?: number;
 };
 
-export function FeedSection({ section, isToday, pieces }: FeedSectionProps) {
+export function FeedSection({ section, isToday, pieces, timeSeconds }: FeedSectionProps) {
   const sectionHasContent = hasContent(section.content);
   const [isOpen, setIsOpen] = useState(sectionHasContent);
 
@@ -89,11 +91,13 @@ export function FeedSection({ section, isToday, pieces }: FeedSectionProps) {
             {subtitle}
           </span>
         )}
-        {!sectionHasContent && (
-          <span className="ml-auto text-xs text-muted-foreground/50">
-            empty
-          </span>
-        )}
+        <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground/50">
+          {timeSeconds != null && timeSeconds > 0
+            ? formatElapsed(timeSeconds)
+            : !sectionHasContent
+              ? "empty"
+              : null}
+        </span>
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="pl-9 pr-3 pb-3 pt-1">

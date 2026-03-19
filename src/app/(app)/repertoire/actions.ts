@@ -6,7 +6,6 @@ import type {
   PieceStatus,
   MasteryLevel,
   Task,
-  Goal,
   Mention,
   MentionPage,
   MentionWithSource,
@@ -147,6 +146,33 @@ export async function updatePieceNotes(id: string, notes: string) {
   const { error } = await supabase
     .from("pieces")
     .update({ notes: notes || null })
+    .eq("id", id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidateRepertoire(id);
+  return { success: true };
+}
+
+export async function updatePieceDetails(
+  id: string,
+  data: { name: string; composer: string | null; notes: string | null }
+) {
+  const supabase = await createClient();
+
+  if (!data.name.trim()) {
+    return { error: "Name is required" };
+  }
+
+  const { error } = await supabase
+    .from("pieces")
+    .update({
+      name: data.name.trim(),
+      composer: data.composer?.trim() || null,
+      notes: data.notes?.trim() || null,
+    })
     .eq("id", id);
 
   if (error) {
@@ -298,7 +324,7 @@ export async function deleteBookmark(id: string, pieceId: string) {
 
 export async function getCollectionFocusData(
   collectionId: string
-): Promise<{ tasks: Task[]; goals: Goal[] }> {
+): Promise<{ tasks: Task[] }> {
   const supabase = await createClient();
 
   const { data: pieces } = await supabase
@@ -308,27 +334,18 @@ export async function getCollectionFocusData(
 
   const pieceIds = (pieces ?? []).map((p) => p.id);
   if (pieceIds.length === 0) {
-    return { tasks: [], goals: [] };
+    return { tasks: [] };
   }
 
-  const [{ data: tasks }, { data: goals }] = await Promise.all([
-    supabase
-      .from("tasks")
-      .select("*")
-      .in("piece_id", pieceIds)
-      .eq("completed", false)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("goals")
-      .select("*")
-      .in("piece_id", pieceIds)
-      .eq("completed", false)
-      .order("created_at", { ascending: false }),
-  ]);
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("*")
+    .in("piece_id", pieceIds)
+    .eq("completed", false)
+    .order("created_at", { ascending: false });
 
   return {
     tasks: (tasks ?? []) as Task[],
-    goals: (goals ?? []) as Goal[],
   };
 }
 

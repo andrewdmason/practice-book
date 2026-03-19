@@ -1,8 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { PencilIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "./status-badge";
 import { MasteryBadge } from "./mastery-badge";
+import { updatePieceDetails } from "@/app/(app)/repertoire/actions";
 import type { Piece, Collection } from "@/lib/types";
 
 export function PieceDetailHeader({
@@ -12,17 +18,90 @@ export function PieceDetailHeader({
   piece: Piece;
   collection: Collection | null;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(piece.name);
+  const [composer, setComposer] = useState(piece.composer ?? "");
+  const [notes, setNotes] = useState(piece.notes ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    const result = await updatePieceDetails(piece.id, {
+      name,
+      composer: composer || null,
+      notes: notes || null,
+    });
+    setSaving(false);
+    if (!("error" in result)) {
+      setEditing(false);
+    }
+  }
+
+  function handleCancel() {
+    setName(piece.name);
+    setComposer(piece.composer ?? "");
+    setNotes(piece.notes ?? "");
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 mb-1">
+          <StatusBadge status={piece.status} />
+          <MasteryBadge level={piece.mastery_level} />
+        </div>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Piece name"
+          className="text-lg font-semibold"
+          autoFocus
+        />
+        <Input
+          value={composer}
+          onChange={(e) => setComposer(e.target.value)}
+          placeholder="Composer (optional)"
+        />
+        <div>
+          <label className="text-sm font-medium mb-1.5 block">Notes</label>
+          <Textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Add notes about this piece..."
+            className="min-h-24"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={handleSave} disabled={saving || !name.trim()}>
+            {saving ? "Saving..." : "Save"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={handleCancel} disabled={saving}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2 mb-1">
         <StatusBadge status={piece.status} />
         <MasteryBadge level={piece.mastery_level} />
       </div>
-      <h2 className="text-2xl font-semibold tracking-tight mt-2">
-        {piece.name}
-      </h2>
+      <div className="flex items-start gap-2 mt-2">
+        <h2 className="text-2xl font-semibold tracking-tight">{name}</h2>
+        <button
+          onClick={() => setEditing(true)}
+          className="mt-1.5 text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Edit piece details"
+        >
+          <PencilIcon className="size-4" />
+        </button>
+      </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-muted-foreground">
-        {piece.composer && <span>{piece.composer}</span>}
+        {composer && <span>{composer}</span>}
         {collection && (
           <>
             <span>&middot;</span>
@@ -35,6 +114,11 @@ export function PieceDetailHeader({
           </>
         )}
       </div>
+      {notes && (
+        <p className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap">
+          {notes}
+        </p>
+      )}
     </div>
   );
 }

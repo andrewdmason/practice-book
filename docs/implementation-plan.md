@@ -151,13 +151,36 @@
 - Chart colors read from CSS custom properties (`--chart-1` through `--chart-5`) via `getComputedStyle`
 - Piece breakdown has interactive range selector using shadcn Select + `useTransition` for server action calls
 
-## PR 9: Search
+## PR 9: Search ✅ COMPLETED
 
 **Goal:** Global search with typeahead.
 
-- Cmd+K activated search modal
-- Typeahead: as you type, matching repertoire pieces appear as quick-jump options
-- Full-text search across practice entries, lesson entries, repertoire names, bookmarks
-- Results grouped by type with preview text and dates
-- Clicking a result navigates to the entry
-- Postgres full-text search indexes on all content fields
+- ✅ Cmd+K activated search modal
+- ✅ Typeahead: as you type, matching repertoire pieces appear as quick-jump options
+- ✅ Full-text search across practice entries, lesson entries, repertoire names, bookmarks
+- ✅ Results grouped by type with preview text and dates
+- ✅ Clicking a result navigates to the entry
+- ✅ Postgres full-text search indexes on all content fields
+
+## PR 10: Data Model Refinement & Historical Practice ✅ COMPLETED
+
+**Goal:** Unify goals and tasks data model, implement repertoire bar navigation filtering, and surface historical practice session data.
+
+- ✅ Merge `goals` table into `tasks` with `style` column ('default'/'goal') to eliminate data model redundancy
+- ✅ Update extraction logic to handle both task and goal block nodes with unified task storage
+- ✅ Repertoire bar pills act as navigation filters: clicking a piece/category filters practice feed to that selection
+- ✅ Footer bar URL state management: update query param (`?focus=<pieceId|category>`) and clear selection with Escape key
+- ✅ Practice feed filtering: show only practice sections matching the selected piece or category when focused
+- ✅ Sidebar synchronization: clickable practice summary items filter the feed; task toggles sync via `router.refresh()`
+- ✅ Auto-create practice entries for historical days with timer data, even without existing notes
+- ✅ Display time spent on each practice section, extracted from timer entry data
+- ✅ Retroactive note-taking: users can click into historical practice days and add notes after the fact
+- ✅ Seed data: 237 practice sessions and 425 timer entries from CSV, 3 additional repertoire pieces
+
+**Implementation notes:**
+- Goals merged into tasks via migration in `00003_merge_goals_into_tasks.sql`
+- `getPieceFocusData` server action simplified to return only tasks (no separate goals)
+- `ensureEntryForDate` in feed/actions.ts creates practice entries for historical dates based on TimeSummaryEntry data from timer entries
+- Footer bar manages focused target state and URL navigation; `RepertoireFocusPanel` reads focus param from router
+- Historical date detection: `getFeedPage` queries practice_sessions table alongside practice_entries and lessons
+- Time display: `FeedSection` shows time spent via `formatElapsed` helper, synced from timer data through `getSectionTime` lookup

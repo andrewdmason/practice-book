@@ -103,6 +103,74 @@ export async function ensureTodayEntry(): Promise<string> {
 }
 
 /**
+ * Ensure a practice entry and sections exist for a historical date,
+ * based on what was practiced that day (from timer data).
+ */
+async function ensureEntryForDate(
+  date: string,
+  timeSummary: TimeSummaryEntry[]
+): Promise<{ id: string; date: string }> {
+  const supabase = await createClient();
+
+  // Create entry
+  const { data: entry } = await supabase
+    .from("practice_entries")
+    .insert({ date })
+    .select("id, date")
+    .single();
+
+  if (!entry) throw new Error(`Failed to create practice entry for ${date}`);
+
+  // Create sections based on what was practiced
+  const sections: {
+    practice_entry_id: string;
+    piece_id: string | null;
+    category: EntrySectionCategory;
+    sort_order: number;
+  }[] = [];
+
+  let sortOrder = 0;
+
+  // Add technique section if practiced
+  if (timeSummary.some((t) => t.category === "technique")) {
+    sections.push({
+      practice_entry_id: entry.id,
+      piece_id: null,
+      category: "technique",
+      sort_order: sortOrder++,
+    });
+  }
+
+  // Add sight reading section if practiced
+  if (timeSummary.some((t) => t.category === "sight_reading")) {
+    sections.push({
+      practice_entry_id: entry.id,
+      piece_id: null,
+      category: "sight_reading",
+      sort_order: sortOrder++,
+    });
+  }
+
+  // Add piece sections for each piece practiced
+  for (const t of timeSummary) {
+    if (t.category === "piece" && t.piece_id) {
+      sections.push({
+        practice_entry_id: entry.id,
+        piece_id: t.piece_id,
+        category: "piece",
+        sort_order: sortOrder++,
+      });
+    }
+  }
+
+  if (sections.length > 0) {
+    await supabase.from("practice_entry_sections").insert(sections);
+  }
+
+  return entry;
+}
+
+/**
  * Get time summary for a specific date.
  */
 async function getTimeSummaryForDate(
@@ -214,10 +282,26 @@ export async function getFeedPage(
 
   const { data: lessons } = await lessonsQuery;
 
+  // Also fetch dates from practice sessions (timer data without notes)
+  let sessionsQuery = supabase
+    .from("practice_sessions")
+    .select("date")
+    .order("date", { ascending: false })
+    .limit(limit);
+
+  if (cursor) {
+    sessionsQuery = sessionsQuery.lt("date", beforeDate);
+  } else {
+    sessionsQuery = sessionsQuery.lte("date", beforeDate);
+  }
+
+  const { data: sessionDates } = await sessionsQuery;
+
   // Collect all unique dates
   const dateSet = new Set<string>();
   for (const pe of practiceEntries ?? []) dateSet.add(pe.date);
   for (const l of lessons ?? []) dateSet.add(l.date);
+  for (const s of sessionDates ?? []) dateSet.add(s.date);
 
   const allDates = Array.from(dateSet)
     .sort((a, b) => b.localeCompare(a))
@@ -231,7 +315,14 @@ export async function getFeedPage(
   const items: FeedDay[] = [];
 
   for (const date of allDates) {
-    const pe = (practiceEntries ?? []).find((p) => p.date === date);
+    const timeSummary = await getTimeSummaryForDate(date);
+
+    let pe = (practiceEntries ?? []).find((p) => p.date === date);
+
+    // For days with timer data but no practice entry, create one with sections
+    if (!pe && timeSummary.length > 0) {
+      pe = await ensureEntryForDate(date, timeSummary);
+    }
 
     let feedEntry: FeedPracticeEntry | null = null;
     if (pe) {
@@ -262,8 +353,6 @@ export async function getFeedPage(
       .filter((l) => l.date === date)
       .map((l) => ({ id: l.id, date: l.date, content: l.content }));
 
-    const timeSummary = await getTimeSummaryForDate(date);
-
     items.push({
       date,
       practiceEntry: feedEntry,
@@ -275,17 +364,24 @@ export async function getFeedPage(
   // Determine next cursor
   const lastDate = allDates[allDates.length - 1];
   // Check if there are more entries before the last date
-  const { count: moreCount } = await supabase
-    .from("practice_entries")
-    .select("id", { count: "exact", head: true })
-    .lt("date", lastDate);
+  const [{ count: moreCount }, { count: moreLessonCount }, { count: moreSessionCount }] =
+    await Promise.all([
+      supabase
+        .from("practice_entries")
+        .select("id", { count: "exact", head: true })
+        .lt("date", lastDate),
+      supabase
+        .from("lessons")
+        .select("id", { count: "exact", head: true })
+        .lt("date", lastDate),
+      supabase
+        .from("practice_sessions")
+        .select("id", { count: "exact", head: true })
+        .lt("date", lastDate),
+    ]);
 
-  const { count: moreLessonCount } = await supabase
-    .from("lessons")
-    .select("id", { count: "exact", head: true })
-    .lt("date", lastDate);
-
-  const hasMore = (moreCount ?? 0) > 0 || (moreLessonCount ?? 0) > 0;
+  const hasMore =
+    (moreCount ?? 0) > 0 || (moreLessonCount ?? 0) > 0 || (moreSessionCount ?? 0) > 0;
 
   return {
     items,

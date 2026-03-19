@@ -32,6 +32,8 @@ type PersistedState = {
 type TimerContextValue = {
   isRunning: boolean;
   currentTarget: TimerTarget | null;
+  focusedTarget: TimerTarget | null;
+  setFocusedTarget: (target: TimerTarget | null) => void;
   sessionElapsedSeconds: number;
   entryElapsedSeconds: number;
   activePieces: Piece[];
@@ -64,6 +66,7 @@ export function TimerProvider({
   const [entryStartedAt, setEntryStartedAt] = useState<Date | null>(null);
   const [sessionElapsedSeconds, setSessionElapsedSeconds] = useState(0);
   const [entryElapsedSeconds, setEntryElapsedSeconds] = useState(0);
+  const [focusedTarget, setFocusedTarget] = useState<TimerTarget | null>(null);
   const [restored, setRestored] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -200,6 +203,8 @@ export function TimerProvider({
       value={{
         isRunning,
         currentTarget,
+        focusedTarget,
+        setFocusedTarget,
         sessionElapsedSeconds,
         entryElapsedSeconds,
         activePieces,

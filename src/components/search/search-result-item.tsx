@@ -5,7 +5,6 @@ import {
   FolderOpen,
   BookOpen,
   PenLine,
-  Target,
   Bookmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,7 +18,6 @@ const typeConfig: Record<
   collection: { icon: FolderOpen, label: "Collection" },
   practice_entry: { icon: PenLine, label: "Practice" },
   lesson: { icon: BookOpen, label: "Lesson" },
-  goal: { icon: Target, label: "Goal" },
   bookmark: { icon: Bookmark, label: "Bookmark" },
 };
 

@@ -2,10 +2,9 @@
 
 import { CalendarIcon } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { TimeSummary } from "@/components/timer/time-summary";
 import { FeedSection } from "./feed-section";
 import { FeedLessonCard } from "./feed-lesson-card";
-import type { FeedDay, PieceSuggestion } from "@/lib/types";
+import type { FeedDay, PieceSuggestion, TimeSummaryEntry } from "@/lib/types";
 
 function formatDateHeader(dateStr: string): string {
   const today = new Date().toISOString().slice(0, 10);
@@ -24,14 +23,53 @@ function formatDateHeader(dateStr: string): string {
   });
 }
 
+function getSectionTime(
+  section: { category: string; piece_id: string | null },
+  timeSummary: TimeSummaryEntry[]
+): number {
+  if (section.category === "piece" && section.piece_id) {
+    const entry = timeSummary.find((t) => t.piece_id === section.piece_id);
+    return entry?.total_seconds ?? 0;
+  }
+  if (section.category === "technique") {
+    const entry = timeSummary.find((t) => t.category === "technique");
+    return entry?.total_seconds ?? 0;
+  }
+  if (section.category === "sight_reading") {
+    const entry = timeSummary.find((t) => t.category === "sight_reading");
+    return entry?.total_seconds ?? 0;
+  }
+  return 0;
+}
+
 type FeedDayCardProps = {
   day: FeedDay;
   pieces: PieceSuggestion[];
+  focusKey?: string | null;
 };
 
-export function FeedDayCard({ day, pieces }: FeedDayCardProps) {
+export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
   const today = new Date().toISOString().slice(0, 10);
   const isToday = day.date === today;
+
+  // Filter sections based on focusKey
+  const allSections = day.practiceEntry?.sections ?? [];
+  const filteredSections = focusKey
+    ? allSections.filter((section) => {
+        if (focusKey === "technique") return section.category === "technique";
+        if (focusKey === "sight_reading") return section.category === "sight_reading";
+        // focusKey is a piece ID
+        return section.piece_id === focusKey;
+      })
+    : allSections;
+
+  const sortedSections = [...filteredSections].sort((a, b) => {
+    const order = { technique: 0, sight_reading: 1, piece: 2, general: 3 };
+    return (order[a.category] ?? 2) - (order[b.category] ?? 2);
+  });
+
+  const hasNotes = sortedSections.length > 0;
+  const hasLessons = !focusKey && day.lessons.length > 0;
 
   return (
     <div className="space-y-3">
@@ -43,17 +81,8 @@ export function FeedDayCard({ day, pieces }: FeedDayCardProps) {
         </h3>
       </div>
 
-      {/* Time summary */}
-      {day.timeSummary.length > 0 && (
-        <Card>
-          <CardContent className="py-3 px-4">
-            <TimeSummary entries={day.timeSummary} label={isToday ? "Today" : "Practice Time"} />
-          </CardContent>
-        </Card>
-      )}
-
       {/* Practice entry sections */}
-      {day.practiceEntry && day.practiceEntry.sections.length > 0 && (
+      {hasNotes && (
         <Card>
           <CardHeader className="pb-0 pt-3 px-3">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -61,22 +90,24 @@ export function FeedDayCard({ day, pieces }: FeedDayCardProps) {
             </p>
           </CardHeader>
           <CardContent className="px-1 pb-2 pt-1">
-            {day.practiceEntry.sections.map((section) => (
+            {sortedSections.map((section) => (
               <FeedSection
                 key={section.id}
                 section={section}
                 isToday={isToday}
                 pieces={pieces}
+                timeSeconds={getSectionTime(section, day.timeSummary)}
               />
             ))}
           </CardContent>
         </Card>
       )}
 
-      {/* Lesson entries */}
-      {day.lessons.map((lesson) => (
-        <FeedLessonCard key={lesson.id} lesson={lesson} />
-      ))}
+      {/* Lesson entries (only show when not filtering) */}
+      {hasLessons &&
+        day.lessons.map((lesson) => (
+          <FeedLessonCard key={lesson.id} lesson={lesson} />
+        ))}
     </div>
   );
 }
