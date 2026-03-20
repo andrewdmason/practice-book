@@ -24,6 +24,7 @@ import {
   updateTaskNote,
 } from "@/app/(app)/focus-panel/actions";
 import type { TaskWithPiece } from "@/app/(app)/focus-panel/actions";
+import { getNextBounceProgress } from "@/lib/progress-bounce";
 import { createClient } from "@/lib/supabase/client";
 import { useMetronome } from "@/components/metronome/metronome-context";
 import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
@@ -358,6 +359,16 @@ function TaskRow({
     });
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const newProgress = getNextBounceProgress(task.id, task.progress);
+    onProgressChange(newProgress);
+    startTransition(async () => {
+      await updateTaskProgress(task.id, newProgress);
+      router.refresh();
+    });
+  };
+
   const handleNoteSave = () => {
     setEditingNote(false);
     const trimmed = noteValue.trim() || null;
@@ -387,6 +398,7 @@ function TaskRow({
         <button
           type="button"
           onClick={handleClick}
+          onContextMenu={handleContextMenu}
           disabled={isPending}
           className="mt-0.5 shrink-0 text-primary disabled:opacity-50"
         >
