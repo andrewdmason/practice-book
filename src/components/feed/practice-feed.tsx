@@ -8,7 +8,8 @@ import { FeedDayCard } from "./feed-day-card";
 import { getFeedPage, createLesson } from "@/app/(app)/feed/actions";
 import { useTimer } from "@/components/timer/timer-context";
 import { cn } from "@/lib/utils";
-import type { FeedDay, PieceSuggestion, PracticeEntryType, TimerTarget } from "@/lib/types";
+import { localDate } from "@/lib/date-utils";
+import type { FeedDay, FeedPracticeEntry, PieceSuggestion, PracticeEntryType, TimerTarget } from "@/lib/types";
 
 type PracticeFeedProps = {
   initialData: { items: FeedDay[]; nextCursor: string | null };
@@ -105,9 +106,36 @@ export function PracticeFeed({ initialData, pieces, typeFilter }: PracticeFeedPr
   }, [cursor, loadMore]);
 
   const handleNewLesson = () => {
+    const today = localDate();
+    const optimisticLesson: FeedPracticeEntry = {
+      id: `optimistic-${Date.now()}`,
+      date: today,
+      type: "lesson",
+      sections: [],
+    };
+
+    // Immediately insert the lesson into the feed
+    setFeedDays((prev) => {
+      const idx = prev.findIndex((d) => d.date === today);
+      if (idx !== -1) {
+        const updated = [...prev];
+        updated[idx] = {
+          ...updated[idx],
+          lessons: [optimisticLesson, ...updated[idx].lessons],
+        };
+        return updated;
+      }
+      // No day for today yet — prepend one
+      return [
+        { date: today, practiceEntry: null, lessons: [optimisticLesson], timeSummary: [] },
+        ...prev,
+      ];
+    });
+
+    // Create on server, then reconcile with real data
     startTransition(async () => {
-      const lessonId = await createLesson();
-      router.push(`/lessons/${lessonId}`);
+      await createLesson();
+      router.refresh();
     });
   };
 
