@@ -28,6 +28,28 @@ const MAX_BPM = 300;
 const SCHEDULE_INTERVAL_MS = 25;
 const LOOKAHEAD_S = 0.1;
 
+// Standard mechanical metronome markings (Maelzel)
+const STANDARD_TEMPOS = [
+  20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56,
+  58, 60, 63, 66, 69, 72, 76, 80, 84, 88, 92, 96, 100, 104, 108, 112, 116,
+  120, 126, 132, 138, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224,
+  232, 240, 252, 264, 276, 288, 300,
+];
+
+function nextStandardTempo(current: number): number {
+  for (const t of STANDARD_TEMPOS) {
+    if (t > current) return t;
+  }
+  return MAX_BPM;
+}
+
+function prevStandardTempo(current: number): number {
+  for (let i = STANDARD_TEMPOS.length - 1; i >= 0; i--) {
+    if (STANDARD_TEMPOS[i] < current) return STANDARD_TEMPOS[i];
+  }
+  return MIN_BPM;
+}
+
 function clampBpm(bpm: number): number {
   return Math.max(MIN_BPM, Math.min(MAX_BPM, Math.round(bpm)));
 }
@@ -242,12 +264,45 @@ export function MetronomeProvider({ children }: { children: React.ReactNode }) {
         if (!hasBeenStarted.current) return;
         e.preventDefault();
         toggle();
+        return;
+      }
+
+      // Arrow keys: adjust BPM by standard metronome increments (only when active)
+      if (e.key === "ArrowRight" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (inInput) return;
+        if (!isActive) return;
+        e.preventDefault();
+        setBpm(nextStandardTempo(bpmRef.current));
+        return;
+      }
+      if (e.key === "ArrowLeft" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (inInput) return;
+        if (!isActive) return;
+        e.preventDefault();
+        setBpm(prevStandardTempo(bpmRef.current));
+        return;
+      }
+
+      // Up/Down arrows: double or halve BPM
+      if (e.key === "ArrowUp" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (inInput) return;
+        if (!isActive) return;
+        e.preventDefault();
+        setBpm(bpmRef.current * 2);
+        return;
+      }
+      if (e.key === "ArrowDown" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (inInput) return;
+        if (!isActive) return;
+        e.preventDefault();
+        setBpm(Math.round(bpmRef.current / 2));
+        return;
       }
     }
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggle]);
+  }, [toggle, setBpm, isActive]);
 
   // Cleanup on unmount
   useEffect(() => {
