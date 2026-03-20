@@ -17,13 +17,16 @@ import { TimeSummary } from "@/components/timer/time-summary";
 import { getTodaySummary } from "@/app/(app)/timer/actions";
 import {
   getCategoryFocusData,
+  getAllOpenTasks,
   getPieceFocusData,
   updateTaskProgress,
   updateTaskNote,
 } from "@/app/(app)/focus-panel/actions";
+import type { TaskWithPiece } from "@/app/(app)/focus-panel/actions";
 import { createClient } from "@/lib/supabase/client";
 import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
 import type {
+  Piece,
   Task,
   TimerTarget,
   TimeSummaryEntry,
@@ -77,6 +80,7 @@ export function RepertoireFocusPanel() {
     <PracticeOverview
       isRunning={isRunning}
       onFocusItem={handleFocusItem}
+      activePieces={activePieces}
     />
   );
 }
@@ -470,19 +474,42 @@ function CategoryDetail({
 function PracticeOverview({
   isRunning,
   onFocusItem,
+  activePieces,
 }: {
   isRunning: boolean;
   onFocusItem: (focusKey: string) => void;
+  activePieces: Piece[];
 }) {
+  const router = useRouter();
   const [summary, setSummary] = useState<TimeSummaryEntry[]>([]);
+  const [allTasks, setAllTasks] = useState<TaskWithPiece[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    getTodaySummary().then((data) => {
-      setSummary(data);
-      setLoaded(true);
-    });
+    Promise.all([getTodaySummary(), getAllOpenTasks()]).then(
+      ([summaryData, tasksData]) => {
+        setSummary(summaryData);
+        setAllTasks(tasksData);
+        setLoaded(true);
+      }
+    );
   }, [isRunning]);
+
+  const handleProgressChange = (taskId: string, progress: number) => {
+    if (progress === 4) {
+      setAllTasks((prev) => prev.filter((t) => t.id !== taskId));
+    } else {
+      setAllTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, progress } : t))
+      );
+    }
+  };
+
+  const handleNoteChange = (taskId: string, note: string | null) => {
+    setAllTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, note } : t))
+    );
+  };
 
   if (!loaded) {
     return (
@@ -494,22 +521,119 @@ function PracticeOverview({
     );
   }
 
-  if (summary.length === 0) return null;
+  // Group tasks by piece
+  const tasksByPieceMap = new Map<string, { name: string; composer: string | null; tasks: TaskWithPiece[] }>();
+  const categoryTasks: TaskWithPiece[] = [];
+  for (const task of allTasks) {
+    if (task.piece_id && task.piece_name) {
+      const group = tasksByPieceMap.get(task.piece_id);
+      if (group) {
+        group.tasks.push(task);
+      } else {
+        tasksByPieceMap.set(task.piece_id, {
+          name: task.piece_name,
+          composer: task.piece_composer,
+          tasks: [task],
+        });
+      }
+    } else {
+      categoryTasks.push(task);
+    }
+  }
+
+  // Sort piece groups by activePieces order (sort_order, then name)
+  const pieceOrder = new Map(activePieces.map((p, i) => [p.id, i]));
+  const sortedPieceGroups = [...tasksByPieceMap.entries()].sort(
+    ([idA], [idB]) => (pieceOrder.get(idA) ?? Infinity) - (pieceOrder.get(idB) ?? Infinity)
+  );
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Repertoire</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div>
-          <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-            Today&apos;s Practice
-          </h4>
-          <TimeSummary entries={summary} onItemClick={onFocusItem} />
-        </div>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      {allTasks.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <CheckCircle2Icon className="size-4" />
+              Active Tasks
+              <span className="text-xs font-normal bg-muted text-muted-foreground rounded-full px-1.5 py-0.5">
+                {allTasks.length}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {sortedPieceGroups.map(([pieceId, group]) => (
+              <div key={pieceId}>
+                <button
+                  type="button"
+                  onClick={() => onFocusItem(pieceId)}
+                  className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-1.5 flex items-center gap-1"
+                >
+                  {group.name}
+                  {group.composer && (
+                    <span className="font-normal">— {group.composer}</span>
+                  )}
+                </button>
+                <div className="space-y-1.5">
+                  {group.tasks.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      onProgressChange={(progress) => {
+                        handleProgressChange(task.id, progress);
+                        updateTaskProgress(task.id, progress).then(() => router.refresh());
+                      }}
+                      onNoteChange={(note) => {
+                        handleNoteChange(task.id, note);
+                        updateTaskNote(task.id, note);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+            {categoryTasks.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-1.5">
+                  Other
+                </p>
+                <div className="space-y-1.5">
+                  {categoryTasks.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      onProgressChange={(progress) => {
+                        handleProgressChange(task.id, progress);
+                        updateTaskProgress(task.id, progress).then(() => router.refresh());
+                      }}
+                      onNoteChange={(note) => {
+                        handleNoteChange(task.id, note);
+                        updateTaskNote(task.id, note);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {summary.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Repertoire</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div>
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                Today&apos;s Practice
+              </h4>
+              <TimeSummary entries={summary} onItemClick={onFocusItem} />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 

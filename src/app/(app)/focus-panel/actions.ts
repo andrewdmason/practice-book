@@ -269,6 +269,41 @@ function updateTaskNoteInJson(
   return node;
 }
 
+export type TaskWithPiece = Task & {
+  piece_name: string | null;
+  piece_composer: string | null;
+};
+
+export async function getAllOpenTasks(): Promise<TaskWithPiece[]> {
+  const supabase = await createClient();
+
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("*, pieces(name, composer)")
+    .lt("progress", 4)
+    .order("created_at", { ascending: false });
+
+  if (!tasks) return [];
+
+  return tasks.map((t) => {
+    const piece = t.pieces as unknown as { name: string; composer: string | null } | null;
+    return {
+      id: t.id,
+      source_type: t.source_type,
+      source_id: t.source_id,
+      piece_id: t.piece_id,
+      text: t.text,
+      progress: t.progress,
+      completed_at: t.completed_at,
+      note: t.note,
+      created_at: t.created_at,
+      updated_at: t.updated_at,
+      piece_name: piece?.name ?? null,
+      piece_composer: piece?.composer ?? null,
+    } as TaskWithPiece;
+  });
+}
+
 export async function getRepertoireOverview(): Promise<RepertoireOverviewItem[]> {
   const supabase = await createClient();
 
