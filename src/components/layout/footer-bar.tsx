@@ -222,7 +222,7 @@ export function FooterBar() {
         </span>
 
         {/* Desktop: pill buttons */}
-        <div className="hidden md:flex flex-1 items-center gap-1.5 overflow-x-auto scrollbar-none">
+        <div className="hidden md:flex items-center gap-1.5 overflow-x-auto scrollbar-none">
           {allTargets.map((target) => {
             const key = targetKey(target);
             const isActive = targetsMatch(activeTarget, target);
@@ -237,6 +237,15 @@ export function FooterBar() {
               <button
                 key={key}
                 onClick={() => handlePillClick(target)}
+                onDoubleClick={() => {
+                  if (isRunning) {
+                    handleStopClick();
+                  } else {
+                    startTimer(target);
+                    setFocusedTarget(null);
+                    setFocusUrl(key);
+                  }
+                }}
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
                   isActive
@@ -255,23 +264,23 @@ export function FooterBar() {
               </button>
             );
           })}
+
+          {/* Clear focus button */}
+          {showClear && (
+            <button
+              onClick={clearFocus}
+              className="inline-flex items-center justify-center size-7 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+              aria-label="Clear selection"
+            >
+              <XIcon className="size-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Metronome control - right aligned */}
         <div className="hidden md:flex ml-auto shrink-0">
           <MetronomeControl />
         </div>
-
-        {/* Clear focus button */}
-        {showClear && (
-          <button
-            onClick={clearFocus}
-            className="hidden md:inline-flex items-center justify-center size-7 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            aria-label="Clear selection"
-          >
-            <XIcon className="size-3.5" />
-          </button>
-        )}
 
         {/* Mobile: select dropdown + metronome */}
         <div className="flex md:hidden flex-1 items-center justify-end gap-2">
