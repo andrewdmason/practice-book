@@ -5,6 +5,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ZenModeProvider } from "@/components/layout/zen-mode-context";
 import { FeedSection } from "./feed-section";
+import { AddSectionButton } from "./add-section-button";
 import type { PracticeEntrySection, PieceSuggestion } from "@/lib/types";
 
 type LessonEditorProps = {
@@ -50,7 +51,14 @@ export function LessonEditor({
             <ArrowLeftIcon className="size-4" />
             Back
           </Button>
-          <h1 className="font-serif text-2xl font-bold">Lesson</h1>
+          <div className="group/header flex items-center gap-2">
+            <h1 className="font-serif text-2xl font-bold">Lesson</h1>
+            <AddSectionButton
+              entryId={lessonId}
+              existingSections={sections}
+              pieces={pieces}
+            />
+          </div>
           <p className="text-sm text-muted-foreground mt-1">
             {formatLessonDate(lessonDate)}
           </p>
