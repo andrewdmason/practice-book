@@ -203,6 +203,7 @@ export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, h
             onSave={handleSave}
             onDismiss={() => setIsEditorVisible(false)}
             placeholder="Write your notes..."
+            autoFocus={!sectionHasContent}
           />
         </div>
       )}

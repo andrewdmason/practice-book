@@ -26,6 +26,7 @@ type RichTextEditorProps = {
   onDismiss?: () => void;
   placeholder?: string;
   readOnly?: boolean;
+  autoFocus?: boolean;
 };
 
 // Map # and ## to h3 (StarterKit only handles ### for level 3)
@@ -68,6 +69,7 @@ export function RichTextEditor({
   onDismiss,
   placeholder: placeholderText = "Start typing...",
   readOnly = false,
+  autoFocus = false,
 }: RichTextEditorProps) {
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef(false);
@@ -137,6 +139,13 @@ export function RichTextEditor({
     },
     [onSave]
   );
+
+  // Auto-focus when editor is first revealed
+  useEffect(() => {
+    if (autoFocus && editor && !readOnly) {
+      editor.commands.focus();
+    }
+  }, [autoFocus, editor, readOnly]);
 
   // Save on blur (skip in readOnly mode)
   useEffect(() => {

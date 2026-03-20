@@ -158,6 +158,7 @@ function DayNotes({
           onSave={handleSave}
           onDismiss={sectionHasContent ? undefined : () => setIsEditing(false)}
           placeholder="Notes for the day..."
+          autoFocus={!sectionHasContent}
         />
       </div>
     );
