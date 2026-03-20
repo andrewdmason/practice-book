@@ -71,7 +71,8 @@ export function RepertoireFocusPanel() {
   );
 
   if (activePieceId) {
-    return <PieceDetail pieceId={activePieceId} />;
+    const activePiece = activePieces.find((p) => p.id === activePieceId);
+    return <PieceDetail pieceId={activePieceId} knownPiece={activePiece ?? null} />;
   }
 
   const activeCategory = activeTarget?.category !== "piece" ? activeTarget?.category : null;
@@ -93,16 +94,23 @@ export function RepertoireFocusPanel() {
 // Piece Detail
 // ---------------------------------------------------------------------------
 
-function PieceDetail({ pieceId }: { pieceId: string }) {
+function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Piece | null }) {
   const [piece, setPiece] = useState<{
     name: string;
     composer: string | null;
     mastery_level: string;
-  } | null>(null);
+  } | null>(knownPiece ? { name: knownPiece.name, composer: knownPiece.composer, mastery_level: knownPiece.mastery_level } : null);
   const [openTasks, setOpenTasks] = useState<Task[]>([]);
   const [completedTasks, setCompletedTasks] = useState<Task[]>([]);
   const [showCompleted, setShowCompleted] = useState(false);
   const [loaded, setLoaded] = useState(false);
+
+  // Update piece immediately when knownPiece changes (no network needed)
+  useEffect(() => {
+    if (knownPiece) {
+      setPiece({ name: knownPiece.name, composer: knownPiece.composer, mastery_level: knownPiece.mastery_level });
+    }
+  }, [knownPiece]);
 
   const refreshTasks = useCallback(() => {
     getPieceFocusData(pieceId).then((data) => {
@@ -113,25 +121,28 @@ function PieceDetail({ pieceId }: { pieceId: string }) {
   }, [pieceId]);
 
   useEffect(() => {
-    setLoaded(false);
-    const supabase = createClient();
+    // Don't reset loaded if we already have tasks — keep stale data visible while refreshing
+    if (openTasks.length === 0 && completedTasks.length === 0) {
+      setLoaded(false);
+    }
 
-    supabase
-      .from("pieces")
-      .select("name, composer, mastery_level")
-      .eq("id", pieceId)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setPiece({
-            name: data.name,
-            composer: data.composer,
-            mastery_level: data.mastery_level,
-          });
-        }
-      });
+    // Only fetch piece metadata from DB if not provided via props (e.g. deep link)
+    if (!knownPiece) {
+      const supabase = createClient();
+      supabase
+        .from("pieces")
+        .select("name, composer, mastery_level")
+        .eq("id", pieceId)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setPiece({ name: data.name, composer: data.composer, mastery_level: data.mastery_level });
+          }
+        });
+    }
 
     refreshTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pieceId, refreshTasks]);
 
   useEffect(() => {
