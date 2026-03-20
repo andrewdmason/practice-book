@@ -144,12 +144,15 @@ export async function ensureTodayEntry(): Promise<string> {
   const today = localDate();
 
   // Get or create today's practice entry
-  let { data: entry } = await supabase
+  // Use .limit(1) instead of .single() to avoid errors when duplicate rows exist
+  const { data: entries } = await supabase
     .from("practice_entries")
     .select("id")
     .eq("date", today)
     .eq("type", "practice")
-    .single();
+    .limit(1);
+
+  let entry = entries?.[0] ?? null;
 
   if (!entry) {
     const { data: newEntry } = await supabase
