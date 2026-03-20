@@ -98,22 +98,58 @@ export function MetronomeProvider({ children }: { children: React.ReactNode }) {
     return audioCtxRef.current;
   }, []);
 
+  const noiseBufferRef = useRef<AudioBuffer | null>(null);
+
+  const getNoiseBuffer = useCallback((ctx: AudioContext) => {
+    if (noiseBufferRef.current) return noiseBufferRef.current;
+    const length = Math.ceil(ctx.sampleRate * 0.05);
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    noiseBufferRef.current = buffer;
+    return buffer;
+  }, []);
+
   const scheduleClick = useCallback(
     (ctx: AudioContext, time: number) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
+      // Layer 1: short noise burst for percussive attack
+      const noise = ctx.createBufferSource();
+      noise.buffer = getNoiseBuffer(ctx);
 
-      osc.frequency.value = 1000;
-      osc.type = "sine";
-      gain.gain.setValueAtTime(1, time);
-      gain.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = "bandpass";
+      noiseFilter.frequency.value = 4000;
+      noiseFilter.Q.value = 1.5;
+
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(1.5, time);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.03);
+
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+
+      noise.start(time);
+      noise.stop(time + 0.03);
+
+      // Layer 2: pitched click for tonal definition
+      const osc = ctx.createOscillator();
+      const oscGain = ctx.createGain();
+      osc.connect(oscGain);
+      oscGain.connect(ctx.destination);
+
+      osc.frequency.setValueAtTime(1800, time);
+      osc.frequency.exponentialRampToValueAtTime(800, time + 0.02);
+      osc.type = "square";
+      oscGain.gain.setValueAtTime(0.6, time);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, time + 0.025);
 
       osc.start(time);
-      osc.stop(time + 0.05);
+      osc.stop(time + 0.025);
     },
-    []
+    [getNoiseBuffer]
   );
 
   const startScheduler = useCallback(() => {
