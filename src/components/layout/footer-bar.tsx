@@ -102,6 +102,7 @@ export function FooterBar() {
     if (isRunning) {
       if (!targetsMatch(activeTarget, target)) {
         switchTarget(target);
+        setFocusUrl(key);
       }
       return;
     }
@@ -147,6 +148,14 @@ export function FooterBar() {
 
   const allTargets = [...specialTargets, ...pieceTargets];
 
+  const handleStopClick = async () => {
+    const target = currentTarget;
+    await stopTimer();
+    if (target) {
+      setFocusUrl(targetKey(target));
+    }
+  };
+
   const handlePlayClick = () => {
     const target = focusedTarget ?? allTargets[0];
     if (target) {
@@ -189,7 +198,7 @@ export function FooterBar() {
           variant={isRunning ? "destructive" : "default"}
           size="icon"
           className="size-9 shrink-0"
-          onClick={isRunning ? stopTimer : handlePlayClick}
+          onClick={isRunning ? handleStopClick : handlePlayClick}
           disabled={!isRunning && allTargets.length === 0}
           aria-label={isRunning ? "Stop timer" : "Start timer"}
         >

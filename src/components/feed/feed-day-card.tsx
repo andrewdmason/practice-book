@@ -201,11 +201,14 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
   const { isRunning, entryElapsedSeconds } = useTimer();
   const initialEntryElapsedRef = useRef(entryElapsedSeconds);
 
+  const filteredPracticeSections = day.practiceEntry
+    ? filterAndSortSections(day.practiceEntry, focusKey)
+    : [];
   const hasPracticeSections =
     day.practiceEntry != null &&
-    (filterAndSortSections(day.practiceEntry, focusKey).length > 0 ||
-      day.timeSummary.length > 0 ||
-      day.practiceEntry.sections.some((s) => s.category === "general" && hasContent(s.content)));
+    (filteredPracticeSections.length > 0 ||
+      (!focusKey && day.timeSummary.length > 0) ||
+      (!focusKey && day.practiceEntry.sections.some((s) => s.category === "general" && hasContent(s.content))));
   const visibleLessons = day.lessons.filter(
     (lesson) => filterAndSortSections(lesson, focusKey).length > 0
   );
@@ -240,7 +243,7 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
       )}
 
       {/* Day-level general notes */}
-      {generalSection && (
+      {!focusKey && generalSection && (
         <DayNotes section={generalSection} pieces={pieces} />
       )}
 
