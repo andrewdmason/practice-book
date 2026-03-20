@@ -17,12 +17,12 @@ export async function getPieceFocusData(pieceId: string): Promise<{
 }> {
   const supabase = await createClient();
 
-  // Fetch open tasks for this piece (includes both default and goal-style)
+  // Fetch open tasks for this piece
   const { data: tasks } = await supabase
     .from("tasks")
     .select("*")
     .eq("piece_id", pieceId)
-    .eq("completed", false)
+    .lt("progress", 4)
     .order("created_at", { ascending: false });
 
   // Fetch recent mentions for this piece
@@ -97,7 +97,7 @@ export async function getCategoryFocusData(
     .from("tasks")
     .select("*")
     .in("source_id", sectionIds)
-    .eq("completed", false)
+    .lt("progress", 4)
     .order("created_at", { ascending: false });
 
   return { tasks: (tasks ?? []) as Task[] };
@@ -133,13 +133,18 @@ export async function getPieceMentions(
   };
 }
 
-export async function toggleTaskCompleted(taskId: string, completed: boolean) {
+export async function updateTaskProgress(taskId: string, progress: number) {
   const supabase = await createClient();
+  const now = new Date().toISOString();
 
   // 1. Update the tasks table
   const { data: task, error } = await supabase
     .from("tasks")
-    .update({ completed, updated_at: new Date().toISOString() })
+    .update({
+      progress,
+      completed_at: progress === 4 ? now : null,
+      updated_at: now,
+    })
     .eq("id", taskId)
     .select("source_type, source_id")
     .single();
@@ -148,7 +153,7 @@ export async function toggleTaskCompleted(taskId: string, completed: boolean) {
     throw new Error(error.message);
   }
 
-  // 2. Sync the checked state back into the editor JSON content
+  // 2. Sync the progress back into the editor JSON content
   if (task) {
     const { data: section } = await supabase
       .from("practice_entry_sections")
@@ -157,7 +162,7 @@ export async function toggleTaskCompleted(taskId: string, completed: boolean) {
       .single();
 
     if (section?.content) {
-      const updated = updateTaskChecked(section.content, taskId, completed);
+      const updated = updateTaskProgressInJson(section.content, taskId, progress);
       if (updated) {
         await supabase
           .from("practice_entry_sections")
@@ -170,12 +175,12 @@ export async function toggleTaskCompleted(taskId: string, completed: boolean) {
   revalidatePath("/");
 }
 
-// Walk TipTap JSON and update the checked/completed attribute for a task or goal block
-function updateTaskChecked(
+// Walk TipTap JSON and update the progress attribute for a task
+function updateTaskProgressInJson(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   node: any,
   taskId: string,
-  checked: boolean
+  progress: number
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
   if (!node) return node;
@@ -183,14 +188,7 @@ function updateTaskChecked(
   if (node.type === "taskItem" && node.attrs?.taskId === taskId) {
     return {
       ...node,
-      attrs: { ...node.attrs, checked },
-    };
-  }
-
-  if (node.type === "goalBlock" && node.attrs?.goalId === taskId) {
-    return {
-      ...node,
-      attrs: { ...node.attrs, completed: checked },
+      attrs: { ...node.attrs, progress },
     };
   }
 
@@ -199,12 +197,27 @@ function updateTaskChecked(
       ...node,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       content: node.content.map((child: any) =>
-        updateTaskChecked(child, taskId, checked)
+        updateTaskProgressInJson(child, taskId, progress)
       ),
     };
   }
 
   return node;
+}
+
+export async function updateTaskNote(taskId: string, note: string | null) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("tasks")
+    .update({ note, updated_at: new Date().toISOString() })
+    .eq("id", taskId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/");
 }
 
 export async function getRepertoireOverview(): Promise<RepertoireOverviewItem[]> {
@@ -223,12 +236,12 @@ export async function getRepertoireOverview(): Promise<RepertoireOverviewItem[]>
 
   const pieceIds = pieces.map((p) => p.id);
 
-  // Get open task counts per piece (includes both default and goal-style)
+  // Get open task counts per piece
   const { data: taskRows } = await supabase
     .from("tasks")
     .select("piece_id")
     .in("piece_id", pieceIds)
-    .eq("completed", false);
+    .lt("progress", 4);
 
   const taskCounts = new Map<string, number>();
   if (taskRows) {

@@ -105,16 +105,15 @@ export type Mention = {
   created_at: string;
 };
 
-export type TaskStyle = "default" | "goal";
-
 export type Task = {
   id: string;
   source_type: SourceType;
   source_id: string;
   piece_id: string | null;
   text: string;
-  completed: boolean;
-  style: TaskStyle;
+  progress: number;
+  completed_at: string | null;
+  note: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -156,6 +155,13 @@ export type PieceOption = {
   id: string;
   name: string;
   composer: string | null;
+};
+
+export type CompletedTaskMarker = {
+  weekStart: string;
+  weekLabel: string;
+  cumulativeHours: number;
+  tasks: { id: string; text: string; completedAt: string }[];
 };
 
 // Search types

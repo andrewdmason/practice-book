@@ -2,16 +2,17 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { InputRule } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
+import { ReactNodeViewRenderer } from "@tiptap/react";
+import { TaskItemView } from "../task-item-view";
 
 /**
- * Extended TaskItem that adds a taskId attribute for stable identity across saves.
- * Built-in TaskItem already handles [ ] and [x] input rules to create task items.
- * We add a custom [] input rule (without the space inside) plus auto-assign taskId on creation.
+ * Extended TaskItem that uses a numeric progress attribute (0-4) instead of
+ * the built-in boolean checked. Renders via a custom React NodeView that
+ * shows a ProgressCircle and handles click / option-click.
  */
 export const CustomTaskItem = TaskItem.extend({
   addAttributes() {
     return {
-      ...this.parent?.(),
       taskId: {
         default: null,
         parseHTML: (element: HTMLElement) => element.getAttribute("data-task-id"),
@@ -19,6 +20,21 @@ export const CustomTaskItem = TaskItem.extend({
           if (!attributes.taskId) return {};
           return { "data-task-id": attributes.taskId };
         },
+      },
+      progress: {
+        default: 0,
+        parseHTML: (element: HTMLElement) => {
+          // Backward compat: legacy checked attribute
+          const checked = element.getAttribute("data-checked");
+          if (checked === "true") return 4;
+          const progress = element.getAttribute("data-progress");
+          return progress ? parseInt(progress, 10) : 0;
+        },
+        renderHTML: (attributes: { progress: number }) => ({
+          "data-progress": String(attributes.progress),
+          // Keep data-checked for Tiptap internal CSS compat
+          "data-checked": attributes.progress === 4 ? "true" : "false",
+        }),
       },
     };
   },
@@ -32,22 +48,19 @@ export const CustomTaskItem = TaskItem.extend({
         find: /^\[\]\s$/,
         handler: ({ state, range }) => {
           const { tr } = state;
-          // Delete the "[] " text
           tr.delete(range.from, range.to);
 
-          // Use the built-in wrapInList approach: create an empty paragraph wrapped in task list
           const taskItemType = state.schema.nodes.taskItem;
           const taskListType = state.schema.nodes.taskList;
 
           if (taskItemType && taskListType) {
             const paragraph = state.schema.nodes.paragraph.create();
             const taskItem = taskItemType.create(
-              { checked: false, taskId: crypto.randomUUID() },
+              { progress: 0, taskId: crypto.randomUUID() },
               paragraph
             );
             const taskList = taskListType.create(null, taskItem);
             tr.replaceWith(range.from, range.from, taskList);
-            // Set cursor inside the task item's paragraph
             tr.setSelection(
               TextSelection.near(tr.doc.resolve(range.from + 3))
             );
@@ -60,15 +73,12 @@ export const CustomTaskItem = TaskItem.extend({
   addKeyboardShortcuts() {
     return {
       Enter: () => {
-        // Instead of creating a new task item, exit the task list and create a paragraph
         const { state } = this.editor;
         const { $from } = state.selection;
 
-        // Check if we're inside a taskItem
         const taskItem = $from.node(-1)?.type.name === "taskItem" ? $from.node(-1) : null;
         if (!taskItem) return false;
 
-        // Split out of the task list into a new paragraph
         return this.editor.chain().splitBlock().liftListItem("taskItem").run();
       },
     };
@@ -90,6 +100,10 @@ export const CustomTaskItem = TaskItem.extend({
     if (modified) {
       this.editor.view.dispatch(tr);
     }
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(TaskItemView);
   },
 });
 

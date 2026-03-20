@@ -9,6 +9,7 @@ import type {
   TimerCategory,
   PieceWeeklyCumulativeData,
   PieceOption,
+  CompletedTaskMarker,
 } from "@/lib/types";
 
 /**
@@ -293,4 +294,57 @@ export async function getPieceCumulativeData(
       cumulativeSeconds: cumulative,
     };
   });
+}
+
+/**
+ * Get completed tasks for a piece, grouped by week for chart markers.
+ */
+export async function getCompletedTasksForPiece(
+  pieceId: string,
+  cumulativeData: PieceWeeklyCumulativeData[]
+): Promise<CompletedTaskMarker[]> {
+  const supabase = await createClient();
+
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("id, text, completed_at")
+    .eq("piece_id", pieceId)
+    .not("completed_at", "is", null);
+
+  if (!tasks || tasks.length === 0) return [];
+
+  // Build a map from weekStart to cumulative hours
+  const cumulativeMap = new Map(
+    cumulativeData.map((d) => [
+      d.weekStart,
+      Math.round((d.cumulativeSeconds / 3600) * 10) / 10,
+    ])
+  );
+
+  // Group tasks by week
+  const weekGroups = new Map<
+    string,
+    { id: string; text: string; completedAt: string }[]
+  >();
+
+  for (const task of tasks) {
+    const completedDate = task.completed_at!.slice(0, 10);
+    const monday = getMonday(completedDate);
+    const group = weekGroups.get(monday) ?? [];
+    group.push({
+      id: task.id,
+      text: task.text,
+      completedAt: task.completed_at!,
+    });
+    weekGroups.set(monday, group);
+  }
+
+  return [...weekGroups.entries()]
+    .map(([ws, groupTasks]) => ({
+      weekStart: ws,
+      weekLabel: weekLabel(ws),
+      cumulativeHours: cumulativeMap.get(ws) ?? 0,
+      tasks: groupTasks,
+    }))
+    .filter((m) => cumulativeMap.has(m.weekStart));
 }
