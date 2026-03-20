@@ -43,6 +43,7 @@ export function TaskItemView({ node, updateAttributes }: NodeViewProps) {
     <NodeViewWrapper
       as="li"
       className="task-item-node"
+      data-task-id={taskId}
       data-progress={String(progress)}
       data-checked={progress === 4 ? "true" : "false"}
     >

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
+  ArrowRightIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
   ExternalLinkIcon,
@@ -24,6 +25,7 @@ import {
 } from "@/app/(app)/focus-panel/actions";
 import type { TaskWithPiece } from "@/app/(app)/focus-panel/actions";
 import { createClient } from "@/lib/supabase/client";
+import { useMetronome } from "@/components/metronome/metronome-context";
 import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
 import type {
   Piece,
@@ -286,6 +288,35 @@ function FocusSection({
 // Row components
 // ---------------------------------------------------------------------------
 
+function TaskTextWithMetronome({ text }: { text: string }) {
+  const { start } = useMetronome();
+  const parts = text.split(/(♩=\d+)/);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const match = part.match(/^♩=(\d+)$/);
+        if (match) {
+          const bpm = parseInt(match[1], 10);
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                start(bpm);
+              }}
+              className="inline-flex items-center rounded-md bg-secondary px-1 py-0.5 font-mono text-xs text-secondary-foreground cursor-pointer hover:bg-secondary/80 transition-colors"
+            >
+              ♩={bpm}
+            </button>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </>
+  );
+}
+
 function TaskRow({
   task,
   onProgressChange,
@@ -352,8 +383,25 @@ function TaskRow({
           <ProgressCircle progress={task.progress} size={16} />
         </button>
         <span className={`flex-1 ${task.progress === 4 ? "line-through text-muted-foreground" : ""} ${isPending ? "opacity-50" : ""}`}>
-          {task.text}
+          <TaskTextWithMetronome text={task.text} />
         </span>
+        <button
+          type="button"
+          onClick={() => {
+            const el = document.querySelector(`[data-task-id="${task.id}"]`);
+            if (el) {
+              document.querySelectorAll(".task-highlight").forEach((prev) => prev.classList.remove("task-highlight"));
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+              void (el as HTMLElement).offsetWidth;
+              el.classList.add("task-highlight");
+              el.addEventListener("animationend", () => el.classList.remove("task-highlight"), { once: true });
+            }
+          }}
+          className="shrink-0 mt-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+          title="Jump to task in feed"
+        >
+          <ArrowRightIcon className="size-3" />
+        </button>
         {!editingNote && !task.note && (
           <button
             type="button"

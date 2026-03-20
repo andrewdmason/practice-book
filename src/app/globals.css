@@ -237,3 +237,14 @@
   text-decoration: line-through;
   color: var(--muted-foreground);
 }
+
+/* Highlight animation when scrolling to a task from the sidebar */
+@keyframes task-highlight {
+  0% { background-color: oklch(0.85 0.08 80); }
+  100% { background-color: transparent; }
+}
+
+.prose-editor .task-item-node.task-highlight {
+  animation: task-highlight 1.5s ease-out;
+  border-radius: 0.25rem;
+}
