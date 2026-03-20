@@ -51,16 +51,6 @@ export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, h
 
   const displayTime = optimisticTime !== undefined ? optimisticTime : timeSeconds;
 
-  // Hide piece sections with no time, no content, and not actively being timed
-  if (
-    section.category === "piece" &&
-    !sectionHasContent &&
-    (displayTime == null || displayTime <= 0) &&
-    !isActive
-  ) {
-    return null;
-  }
-
   const label =
     section.category === "piece"
       ? section.piece_name ?? "Unknown Piece"
@@ -68,7 +58,6 @@ export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, h
 
   const subtitle =
     section.category === "piece" ? section.composer : null;
-
 
   const handleSave = useCallback(
     async (content: JSONContent) => {
@@ -91,6 +80,19 @@ export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, h
     },
     [section.id]
   );
+
+  // Hide piece sections with no time, no content, and not actively being timed —
+  // but only on today's entry where sections are auto-created for all active pieces.
+  // Past entries only have sections for pieces that were practiced or manually added.
+  if (
+    isToday &&
+    section.category === "piece" &&
+    !sectionHasContent &&
+    (displayTime == null || displayTime <= 0) &&
+    !isActive
+  ) {
+    return null;
+  }
 
   const hideHeader = section.category === "general" && editorContext === "lesson";
 

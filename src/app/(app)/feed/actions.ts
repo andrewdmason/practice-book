@@ -82,6 +82,60 @@ async function ensureSections(entryId: string): Promise<void> {
 }
 
 /**
+ * Add a single section to an existing practice entry.
+ * For fixed categories (technique, sight_reading, general), only one per entry is allowed.
+ * For pieces, checks that the piece doesn't already have a section.
+ */
+export async function addSection(
+  entryId: string,
+  category: EntrySectionCategory,
+  pieceId?: string
+): Promise<{ error?: string }> {
+  const supabase = await createClient();
+
+  // Check for duplicates
+  let query = supabase
+    .from("practice_entry_sections")
+    .select("id")
+    .eq("practice_entry_id", entryId)
+    .eq("category", category);
+
+  if (category === "piece" && pieceId) {
+    query = query.eq("piece_id", pieceId);
+  }
+
+  const { data: existing } = await query;
+  if (existing && existing.length > 0) {
+    return { error: "Section already exists" };
+  }
+
+  // Get next sort_order
+  const { data: maxRow } = await supabase
+    .from("practice_entry_sections")
+    .select("sort_order")
+    .eq("practice_entry_id", entryId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .single();
+
+  const nextOrder = (maxRow?.sort_order ?? 0) + 1;
+
+  const { error } = await supabase.from("practice_entry_sections").insert({
+    practice_entry_id: entryId,
+    category,
+    piece_id: pieceId ?? null,
+    sort_order: nextOrder,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidatePath("/");
+  return {};
+}
+
+/**
  * Ensure today's practice entry and sections exist.
  * Creates the entry row and sections for each active piece + technique + sight_reading + general.
  */

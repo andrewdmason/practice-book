@@ -46,7 +46,7 @@ export async function createPiece(formData: FormData) {
     .single();
   const nextOrder = (maxRow?.sort_order ?? 0) + 1;
 
-  const { error } = await supabase.from("pieces").insert({
+  const { data: newPiece, error } = await supabase.from("pieces").insert({
     name,
     composer,
     collection_id: collectionId,
@@ -54,14 +54,14 @@ export async function createPiece(formData: FormData) {
     mastery_level: masteryLevel,
     notes,
     sort_order: nextOrder,
-  });
+  }).select("id").single();
 
   if (error) {
     return { error: error.message };
   }
 
   revalidateRepertoire();
-  return { success: true };
+  return { success: true, pieceId: newPiece.id };
 }
 
 export async function updatePiece(id: string, formData: FormData) {
