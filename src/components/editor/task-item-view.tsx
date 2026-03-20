@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
 import { ProgressCircle } from "@/components/ui/progress-circle";
+import { getNextBounceProgress } from "@/lib/progress-bounce";
 
 export function TaskItemView({ node, updateAttributes }: NodeViewProps) {
   const progress: number = node.attrs.progress ?? 0;
@@ -39,6 +40,12 @@ export function TaskItemView({ node, updateAttributes }: NodeViewProps) {
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!taskId) return;
+    updateAttributes({ progress: getNextBounceProgress(taskId, progress) });
+  };
+
   return (
     <NodeViewWrapper
       as="li"
@@ -51,6 +58,7 @@ export function TaskItemView({ node, updateAttributes }: NodeViewProps) {
         <button
           type="button"
           onClick={handleClick}
+          onContextMenu={handleContextMenu}
           className="task-progress-btn"
         >
           <ProgressCircle progress={progress} size={16} />

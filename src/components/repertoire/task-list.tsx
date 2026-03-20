@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { CheckCircle2Icon, PencilIcon } from "lucide-react";
 import { ProgressCircle } from "@/components/ui/progress-circle";
 import { updateTaskProgress, updateTaskNote } from "@/app/(app)/focus-panel/actions";
+import { getNextBounceProgress } from "@/lib/progress-bounce";
 import type { Task } from "@/lib/types";
 
 export function TaskList({ initialTasks }: { initialTasks: Task[] }) {
@@ -73,6 +74,15 @@ function TaskRow({
     });
   };
 
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const newProgress = getNextBounceProgress(task.id, task.progress);
+    onProgressChange(newProgress);
+    startTransition(() => {
+      updateTaskProgress(task.id, newProgress);
+    });
+  };
+
   const handleNoteSave = () => {
     setEditingNote(false);
     const trimmed = noteValue.trim() || null;
@@ -101,6 +111,7 @@ function TaskRow({
         <button
           type="button"
           onClick={handleClick}
+          onContextMenu={handleContextMenu}
           disabled={isPending}
           className="mt-0.5 shrink-0 text-primary disabled:opacity-50"
         >
