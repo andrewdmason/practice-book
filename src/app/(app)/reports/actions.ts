@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { localDate } from "@/lib/date-utils";
 import type {
   WeeklyPracticeData,
   PieceBreakdownData,
@@ -12,11 +13,11 @@ import type {
  * Get the Monday of the week for a given date string (YYYY-MM-DD).
  */
 function getMonday(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
+  const d = new Date(dateStr + "T12:00:00"); // noon to avoid DST edge cases
   const day = d.getDay(); // 0=Sun, 1=Mon, ...
   const diff = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + diff);
-  return d.toISOString().slice(0, 10);
+  return localDate(d);
 }
 
 /**
@@ -36,7 +37,7 @@ export async function getWeeklyPracticeData(): Promise<WeeklyPracticeData[]> {
   const now = new Date();
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - 13 * 7);
-  const cutoffStr = cutoff.toISOString().slice(0, 10);
+  const cutoffStr = localDate(cutoff);
 
   const { data: entries } = await supabase
     .from("timer_entries")
@@ -58,12 +59,12 @@ export async function getWeeklyPracticeData(): Promise<WeeklyPracticeData[]> {
 
   // Fill in all 13 weeks
   const result: WeeklyPracticeData[] = [];
-  const todayMonday = getMonday(now.toISOString().slice(0, 10));
+  const todayMonday = getMonday(localDate(now));
 
   for (let i = 12; i >= 0; i--) {
     const d = new Date(todayMonday + "T00:00:00");
     d.setDate(d.getDate() - i * 7);
-    const ws = d.toISOString().slice(0, 10);
+    const ws = localDate(d);
     result.push({
       weekStart: ws,
       weekLabel: weekLabel(ws),
@@ -93,7 +94,7 @@ export async function getPieceBreakdownData(
     const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
-    query = query.gte("practice_sessions.date", cutoff.toISOString().slice(0, 10));
+    query = query.gte("practice_sessions.date", localDate(cutoff));
   }
 
   const { data: entries } = await query;
@@ -171,7 +172,7 @@ export async function getStreakData(): Promise<StreakData> {
 
   // Current streak: walk backward from today
   const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = localDate(today);
 
   let currentStreak = 0;
   const d = new Date(today);
@@ -182,7 +183,7 @@ export async function getStreakData(): Promise<StreakData> {
   }
 
   while (true) {
-    const ds = d.toISOString().slice(0, 10);
+    const ds = localDate(d);
     if (practicedDates.has(ds)) {
       currentStreak++;
       d.setDate(d.getDate() - 1);
@@ -199,7 +200,7 @@ export async function getStreakData(): Promise<StreakData> {
   for (let i = 0; i < 7; i++) {
     const wd = new Date(monday + "T00:00:00");
     wd.setDate(wd.getDate() + i);
-    const practiced = practicedDates.has(wd.toISOString().slice(0, 10));
+    const practiced = practicedDates.has(localDate(wd));
     thisWeekDays.push(practiced);
     if (practiced) daysPracticedThisWeek++;
   }

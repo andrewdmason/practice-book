@@ -1,7 +1,7 @@
 "use client";
 
 import { ClockIcon, MusicIcon, BookOpenIcon } from "lucide-react";
-import { formatElapsed } from "@/lib/timer-utils";
+import { formatMinutes } from "@/lib/timer-utils";
 import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
 import type { TimeSummaryEntry } from "@/lib/types";
 
@@ -26,7 +26,7 @@ export function TimeSummary({
           {label}
         </div>
         <span className="text-sm font-semibold tabular-nums">
-          {formatElapsed(totalSeconds)}
+          {formatMinutes(totalSeconds)}
         </span>
       </div>
 
@@ -54,7 +54,7 @@ export function TimeSummary({
                 <span className="truncate">{entryLabel}</span>
               </div>
               <span className="tabular-nums text-muted-foreground">
-                {formatElapsed(entry.total_seconds)}
+                {formatMinutes(entry.total_seconds)}
               </span>
             </button>
           );

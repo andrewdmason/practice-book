@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { localDate } from "@/lib/date-utils";
 import type {
   TimerCategory,
   TimeSummaryEntry,
@@ -86,7 +87,7 @@ async function ensureSections(entryId: string): Promise<void> {
  */
 export async function ensureTodayEntry(): Promise<string> {
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();
 
   // Get or create today's practice entry
   let { data: entry } = await supabase
@@ -260,7 +261,7 @@ export async function getFeedPage(
   const supabase = await createClient();
 
   // Get distinct dates that have practice entries, lessons, or timer sessions
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();
   const beforeDate = cursor ?? today;
 
   // Fetch all entries (practice + lesson) for the date range
@@ -315,15 +316,29 @@ export async function getFeedPage(
     return { items: [], nextCursor: null };
   }
 
+  // Fetch all entries for the resolved dates (the initial query may have missed some
+  // due to its limit, especially when dates have many duplicate entries)
+  let entriesQuery = supabase
+    .from("practice_entries")
+    .select("id, date, type")
+    .in("date", allDates)
+    .order("date", { ascending: false });
+
+  if (typeFilter) {
+    entriesQuery = entriesQuery.eq("type", typeFilter);
+  }
+
+  const { data: dateEntries } = await entriesQuery;
+
   // Build feed days
   const items: FeedDay[] = [];
 
   for (const date of allDates) {
     const timeSummary = await getTimeSummaryForDate(date);
 
-    const dateEntries = (allEntries ?? []).filter((e) => e.date === date);
-    let practiceEntry = dateEntries.find((e) => e.type === "practice");
-    const lessonEntries = dateEntries.filter((e) => e.type === "lesson");
+    const entriesForDate = (dateEntries ?? []).filter((e) => e.date === date);
+    let practiceEntry = entriesForDate.find((e) => e.type === "practice");
+    const lessonEntries = entriesForDate.filter((e) => e.type === "lesson");
 
     // For days with timer data but no practice entry, create one with sections
     if (!practiceEntry && timeSummary.length > 0 && typeFilter !== "lesson") {
@@ -420,7 +435,7 @@ export async function updateSectionTime(
  */
 export async function createLesson(date?: string): Promise<string> {
   const supabase = await createClient();
-  const lessonDate = date ?? new Date().toISOString().slice(0, 10);
+  const lessonDate = date ?? localDate();
 
   const { data, error } = await supabase
     .from("practice_entries")

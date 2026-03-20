@@ -1,19 +1,23 @@
 "use client";
 
-import { useRef } from "react";
+import { useCallback, useRef, useState } from "react";
+import type { JSONContent } from "@tiptap/core";
 import { BookOpenIcon, CalendarIcon } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { FeedSection } from "./feed-section";
+import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { useTimer } from "@/components/timer/timer-context";
-import type { FeedDay, FeedPracticeEntry, PieceSuggestion, TimeSummaryEntry, TimerTarget } from "@/lib/types";
+import { localDate } from "@/lib/date-utils";
+import { formatMinutes } from "@/lib/timer-utils";
+import { saveEditorContent } from "@/app/(app)/editor/actions";
+import type { FeedDay, FeedPracticeEntry, PieceSuggestion, PracticeEntrySection, TimeSummaryEntry, TimerTarget } from "@/lib/types";
 
 function formatDateHeader(dateStr: string): string {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();
   if (dateStr === today) return "Today";
 
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  if (dateStr === yesterday.toISOString().slice(0, 10)) return "Yesterday";
+  if (dateStr === localDate(yesterday)) return "Yesterday";
 
   const date = new Date(dateStr + "T12:00:00"); // noon to avoid timezone issues
   return date.toLocaleDateString("en-US", {
@@ -62,8 +66,14 @@ function filterAndSortSections(
       })
     : allSections;
 
-  return [...filtered].sort((a, b) => {
-    const order = { technique: 0, sight_reading: 1, piece: 2, general: 3 };
+  // For practice entries, strip general (it's rendered separately as DayNotes).
+  // For lessons, keep general sections inline.
+  const sections = entry.type === "practice"
+    ? filtered.filter((s) => s.category !== "general")
+    : filtered;
+
+  return [...sections].sort((a, b) => {
+    const order: Record<string, number> = { technique: 0, sight_reading: 1, piece: 2, general: 3 };
     return (order[a.category] ?? 2) - (order[b.category] ?? 2);
   });
 }
@@ -77,6 +87,67 @@ function sectionMatchesTarget(
     return section.category === "piece" && section.piece_id === target.pieceId;
   }
   return section.category === target.category;
+}
+
+function hasContent(content: unknown): boolean {
+  if (!content) return false;
+  const doc = content as { content?: { type: string }[] };
+  if (!doc.content || doc.content.length === 0) return false;
+  if (
+    doc.content.length === 1 &&
+    doc.content[0].type === "paragraph" &&
+    !("content" in doc.content[0])
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function DayNotes({
+  section,
+  pieces,
+}: {
+  section: PracticeEntrySection;
+  pieces: PieceSuggestion[];
+}) {
+  const sectionHasContent = hasContent(section.content);
+  const [isEditing, setIsEditing] = useState(sectionHasContent);
+
+  const handleSave = useCallback(
+    async (content: JSONContent) => {
+      await saveEditorContent("practice_entry", section.id, content);
+    },
+    [section.id]
+  );
+
+  if (isEditing) {
+    return (
+      <div className="px-4 prose-editor-compact text-sm">
+        <RichTextEditor
+          context="practice_entry"
+          sourceType="practice_entry"
+          sourceId={section.id}
+          initialContent={section.content as JSONContent | null}
+          pieces={pieces}
+          onSave={handleSave}
+          onDismiss={sectionHasContent ? undefined : () => setIsEditing(false)}
+          placeholder="Notes for the day..."
+        />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setIsEditing(true)}
+      className="group/daynotes w-full px-4 py-1 text-left"
+    >
+      <span className="text-sm text-transparent group-hover/daynotes:text-muted-foreground/50 transition-colors">
+        Notes for the day...
+      </span>
+    </button>
+  );
 }
 
 function EntryCard({
@@ -103,40 +174,53 @@ function EntryCard({
     : 0;
 
   return (
-    <Card>
-      <CardContent className="px-1 py-2">
-        {sortedSections.map((section) => {
-          const serverTime = section.time_override_seconds ?? getSectionTime(section, timeSummary);
-          const isActiveSection = isToday && isRunning && sectionMatchesTarget(section, currentTarget);
-          return (
-            <FeedSection
-              key={section.id}
-              section={section}
-              isToday={isToday}
-              pieces={pieces}
-              timeSeconds={isActiveSection ? serverTime + liveDelta : serverTime}
-              hasTimeOverride={section.time_override_seconds != null}
-              editorContext={entry.type === "lesson" ? "lesson" : "practice_entry"}
-            />
-          );
-        })}
-      </CardContent>
-    </Card>
+    <div className="px-1 py-2 text-sm">
+      {sortedSections.map((section) => {
+        const serverTime = section.time_override_seconds ?? getSectionTime(section, timeSummary);
+        const isActiveSection = isToday && isRunning && sectionMatchesTarget(section, currentTarget);
+        return (
+          <FeedSection
+            key={section.id}
+            section={section}
+            isToday={isToday}
+            isActive={isActiveSection}
+            pieces={pieces}
+            timeSeconds={isActiveSection ? serverTime + liveDelta : serverTime}
+            hasTimeOverride={section.time_override_seconds != null}
+            editorContext={entry.type === "lesson" ? "lesson" : "practice_entry"}
+          />
+        );
+      })}
+    </div>
   );
 }
 
 export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();
   const isToday = day.date === today;
+  const { isRunning, entryElapsedSeconds } = useTimer();
+  const initialEntryElapsedRef = useRef(entryElapsedSeconds);
 
   const hasPracticeSections =
     day.practiceEntry != null &&
-    filterAndSortSections(day.practiceEntry, focusKey).length > 0;
+    (filterAndSortSections(day.practiceEntry, focusKey).length > 0 ||
+      day.timeSummary.length > 0 ||
+      day.practiceEntry.sections.some((s) => s.category === "general" && hasContent(s.content)));
   const visibleLessons = day.lessons.filter(
     (lesson) => filterAndSortSections(lesson, focusKey).length > 0
   );
 
+  const generalSection = day.practiceEntry?.sections.find(
+    (s) => s.category === "general"
+  ) ?? null;
+
   if (!hasPracticeSections && visibleLessons.length === 0) return null;
+
+  const serverDayTotal = day.timeSummary.reduce((sum, e) => sum + e.total_seconds, 0);
+  const liveDelta = isToday && isRunning
+    ? Math.max(0, entryElapsedSeconds - initialEntryElapsedRef.current)
+    : 0;
+  const dayTotal = serverDayTotal + liveDelta;
 
   return (
     <div className="space-y-3">
@@ -147,7 +231,17 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
           <h3 className="font-serif text-lg font-semibold">
             {formatDateHeader(day.date)}
           </h3>
+          {dayTotal > 0 && (
+            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums font-medium text-muted-foreground">
+              {formatMinutes(dayTotal)}
+            </span>
+          )}
         </div>
+      )}
+
+      {/* Day-level general notes */}
+      {generalSection && (
+        <DayNotes section={generalSection} pieces={pieces} />
       )}
 
       {/* Practice entry sections */}
@@ -162,7 +256,8 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
       )}
 
       {/* Lesson entries */}
-      {visibleLessons.map((lesson) => (
+      {visibleLessons.map((lesson) => {
+        return (
         <div key={lesson.id} className="space-y-3">
           <div className="flex items-center gap-2">
             <BookOpenIcon className="size-4 text-muted-foreground" />
@@ -176,7 +271,10 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
             focusKey={focusKey}
           />
         </div>
-      ))}
+        );
+      })}
+
+      <hr className="border-border/60" />
     </div>
   );
 }
