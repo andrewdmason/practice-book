@@ -191,12 +191,13 @@ export function TimerProvider({
       console.error("Failed to stop session:", result.error);
       return;
     }
+    setFocusedTarget(currentTarget);
     setSessionId(null);
     setCurrentEntryId(null);
     setCurrentTarget(null);
     setSessionStartedAt(null);
     setEntryStartedAt(null);
-  }, [sessionId, currentEntryId]);
+  }, [sessionId, currentEntryId, currentTarget]);
 
   return (
     <TimerContext.Provider
