@@ -9,6 +9,7 @@ import { useTimer } from "@/components/timer/timer-context";
 import { localDate } from "@/lib/date-utils";
 import { formatMinutes } from "@/lib/timer-utils";
 import { saveEditorContent } from "@/app/(app)/editor/actions";
+import { AddSectionButton } from "./add-section-button";
 import type { FeedDay, FeedPracticeEntry, PieceSuggestion, PracticeEntrySection, TimeSummaryEntry, TimerTarget } from "@/lib/types";
 
 function formatDateHeader(dateStr: string): string {
@@ -229,7 +230,7 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
     <div className="space-y-3">
       {/* Date header — only shown when there are practice sections */}
       {hasPracticeSections && (
-        <div className="flex items-center gap-2">
+        <div className="group/header flex items-center gap-2">
           <CalendarIcon className="size-4 text-muted-foreground" />
           <h3 className="font-serif text-lg font-semibold">
             {formatDateHeader(day.date)}
@@ -238,6 +239,13 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
             <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums font-medium text-muted-foreground">
               {formatMinutes(dayTotal)}
             </span>
+          )}
+          {day.practiceEntry && (
+            <AddSectionButton
+              entryId={day.practiceEntry.id}
+              existingSections={day.practiceEntry.sections}
+              pieces={pieces}
+            />
           )}
         </div>
       )}
@@ -262,9 +270,14 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
       {visibleLessons.map((lesson) => {
         return (
         <div key={lesson.id} className="space-y-3">
-          <div className="flex items-center gap-2">
+          <div className="group/header flex items-center gap-2">
             <BookOpenIcon className="size-4 text-muted-foreground" />
             <h3 className="font-serif text-lg font-semibold">Lesson &middot; {formatDateHeader(day.date)}</h3>
+            <AddSectionButton
+              entryId={lesson.id}
+              existingSections={lesson.sections}
+              pieces={pieces}
+            />
           </div>
           <EntryCard
             entry={lesson}

@@ -27,6 +27,12 @@ export function PracticeFeed({ initialData, pieces, typeFilter }: PracticeFeedPr
   const focusKey = searchParams.get("focus");
   const [feedDays, setFeedDays] = useState(initialData.items);
   const [cursor, setCursor] = useState(initialData.nextCursor);
+
+  // Sync with server when initialData changes (e.g. after router.refresh())
+  useEffect(() => {
+    setFeedDays(initialData.items);
+    setCursor(initialData.nextCursor);
+  }, [initialData]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [isPending, startTransition] = useTransition();
   const sentinelRef = useRef<HTMLDivElement>(null);
