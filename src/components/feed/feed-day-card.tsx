@@ -324,49 +324,10 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
 
   return (
     <div className="space-y-3">
-      {/* Date header — only shown when there are practice sections */}
-      {hasPracticeSections && (
-        <div className="group/header flex items-center gap-2">
-          <CalendarIcon className="size-4 text-muted-foreground" />
-          <h3 className="font-serif text-lg font-semibold">
-            {formatDateHeader(day.date)}
-          </h3>
-          {dayTotal > 0 && (
-            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums font-medium text-muted-foreground">
-              {formatMinutes(dayTotal)}
-            </span>
-          )}
-          {mergedPracticeEntry && (
-            <AddSectionButton
-              entryId={mergedPracticeEntry.id}
-              existingSections={mergedPracticeEntry.sections}
-              pieces={pieces}
-              onOptimisticAdd={(section) => addOptimisticSection(mergedPracticeEntry.id, section)}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Day-level general notes */}
-      {!focusKey && generalSection && (
-        <DayNotes section={generalSection} pieces={pieces} />
-      )}
-
-      {/* Practice entry sections */}
-      {hasPracticeSections && mergedPracticeEntry && (
-        <EntryCard
-          entry={mergedPracticeEntry}
-          isToday={isToday}
-          pieces={pieces}
-          timeSummary={day.timeSummary}
-          focusKey={focusKey}
-        />
-      )}
-
-      {/* Lesson entries */}
+      {/* Lesson entries — rendered above the date header */}
       {visibleLessons.map((lesson) => {
         return (
-        <div key={lesson.id} className="space-y-3">
+        <div key={lesson.id} className="space-y-3 rounded-lg border bg-accent/40 p-3 -mx-1">
           <div className="group/header flex items-center gap-2">
             <BookOpenIcon className="size-4 text-muted-foreground" />
             <h3 className="font-serif text-lg font-semibold">Lesson &middot; {formatDateHeader(day.date)}</h3>
@@ -409,6 +370,45 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
         </div>
         );
       })}
+
+      {/* Date header — only shown when there are practice sections */}
+      {hasPracticeSections && (
+        <div className="group/header flex items-center gap-2">
+          <CalendarIcon className="size-4 text-muted-foreground" />
+          <h3 className="font-serif text-lg font-semibold">
+            {formatDateHeader(day.date)}
+          </h3>
+          {dayTotal > 0 && (
+            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums font-medium text-muted-foreground">
+              {formatMinutes(dayTotal)}
+            </span>
+          )}
+          {mergedPracticeEntry && (
+            <AddSectionButton
+              entryId={mergedPracticeEntry.id}
+              existingSections={mergedPracticeEntry.sections}
+              pieces={pieces}
+              onOptimisticAdd={(section) => addOptimisticSection(mergedPracticeEntry.id, section)}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Day-level general notes */}
+      {!focusKey && generalSection && (
+        <DayNotes section={generalSection} pieces={pieces} />
+      )}
+
+      {/* Practice entry sections */}
+      {hasPracticeSections && mergedPracticeEntry && (
+        <EntryCard
+          entry={mergedPracticeEntry}
+          isToday={isToday}
+          pieces={pieces}
+          timeSummary={day.timeSummary}
+          focusKey={focusKey}
+        />
+      )}
 
       <hr className="border-border/60" />
     </div>
