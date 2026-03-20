@@ -105,12 +105,12 @@ export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, h
 
   if (isDeleted) return null;
 
-  // Hide piece sections with no time, no content, and not actively being timed —
-  // but only on today's entry where sections are auto-created for all active pieces.
+  // Hide sections with no time, no content, and not actively being timed —
+  // but only on today's entry where sections are auto-created.
   // Past entries only have sections for pieces that were practiced or manually added.
   if (
     isToday &&
-    section.category === "piece" &&
+    section.category !== "general" &&
     !sectionHasContent &&
     (displayTime == null || displayTime <= 0) &&
     !isActive
