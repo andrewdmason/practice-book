@@ -5,7 +5,6 @@ import type { Editor } from "@tiptap/react";
 import {
   Bold,
   Italic,
-  Heading2,
   Heading3,
   List,
   ListOrdered,
@@ -63,14 +62,7 @@ export function BubbleToolbar({ editor }: { editor: Editor }) {
         </ToolbarButton>
         <Separator />
         <ToolbarButton
-          title="Heading 2"
-          active={editor.isActive("heading", { level: 2 })}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        >
-          <Heading2 className="size-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          title="Heading 3"
+          title="Heading"
           active={editor.isActive("heading", { level: 3 })}
           onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
         >

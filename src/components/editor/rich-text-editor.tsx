@@ -5,7 +5,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Suggestion from "@tiptap/suggestion";
-import { Extension, type JSONContent } from "@tiptap/core";
+import { Extension, textblockTypeInputRule, type JSONContent } from "@tiptap/core";
 import { PluginKey } from "@tiptap/pm/state";
 import { BubbleToolbar } from "./bubble-toolbar";
 import { PieceMention } from "./extensions/piece-mention";
@@ -27,6 +27,18 @@ type RichTextEditorProps = {
   placeholder?: string;
   readOnly?: boolean;
 };
+
+// Map # and ## to h3 (StarterKit only handles ### for level 3)
+const HeadingShortcuts = Extension.create({
+  name: "headingShortcuts",
+  addInputRules() {
+    const type = this.editor.schema.nodes.heading;
+    return [
+      textblockTypeInputRule({ find: /^#\s$/, type, getAttributes: () => ({ level: 3 }) }),
+      textblockTypeInputRule({ find: /^##\s$/, type, getAttributes: () => ({ level: 3 }) }),
+    ];
+  },
+});
 
 // Create the mention suggestion as a standalone extension wrapping the Suggestion plugin
 function createMentionExtension(pieces: PieceSuggestion[]) {
@@ -62,7 +74,7 @@ export function RichTextEditor({
 
   const extensions = [
     StarterKit.configure({
-      heading: { levels: [2, 3] },
+      heading: { levels: [3] },
     }),
     Placeholder.configure({
       placeholder: placeholderText,
@@ -72,6 +84,7 @@ export function RichTextEditor({
     TaskListExtension,
     TaskItemExtension.configure({ nested: false }),
     createMentionExtension(pieces),
+    HeadingShortcuts,
   ];
 
   const editor = useEditor({
