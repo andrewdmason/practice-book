@@ -92,7 +92,9 @@ export function FooterBar() {
         router.push(buildUrl(key));
         return;
       }
-      router.replace(buildUrl(key), { scroll: false });
+      // Use history.replaceState to update URL without triggering server re-render
+      // Focus filtering is entirely client-side via timer context
+      window.history.replaceState(null, "", buildUrl(key));
     },
     [pathname, router, searchParams]
   );

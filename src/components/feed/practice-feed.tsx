@@ -6,8 +6,9 @@ import { PlusIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FeedDayCard } from "./feed-day-card";
 import { getFeedPage, createLesson } from "@/app/(app)/feed/actions";
+import { useTimer } from "@/components/timer/timer-context";
 import { cn } from "@/lib/utils";
-import type { FeedDay, PieceSuggestion, PracticeEntryType } from "@/lib/types";
+import type { FeedDay, PieceSuggestion, PracticeEntryType, TimerTarget } from "@/lib/types";
 
 type PracticeFeedProps = {
   initialData: { items: FeedDay[]; nextCursor: string | null };
@@ -21,23 +22,37 @@ const typeFilterOptions = [
   { value: "lesson" as const, label: "Lessons" },
 ];
 
+function focusKeyFromTarget(target: TimerTarget | null): string | null {
+  if (!target) return null;
+  return target.category === "piece" ? target.pieceId : target.category;
+}
+
 export function PracticeFeed({ initialData, pieces, typeFilter }: PracticeFeedProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const focusKey = searchParams.get("focus");
+  const { isRunning, currentTarget, focusedTarget } = useTimer();
+
+  // Derive focusKey from timer context (instant) instead of URL params (slow)
+  const focusKey = focusKeyFromTarget(isRunning ? currentTarget : focusedTarget);
+
   const [feedDays, setFeedDays] = useState(initialData.items);
   const [cursor, setCursor] = useState(initialData.nextCursor);
+  // Optimistic type filter for instant pill highlighting
+  const [optimisticTypeFilter, setOptimisticTypeFilter] = useState(typeFilter);
 
   // Sync with server when initialData changes (e.g. after router.refresh())
   useEffect(() => {
     setFeedDays(initialData.items);
     setCursor(initialData.nextCursor);
-  }, [initialData]);
+    setOptimisticTypeFilter(typeFilter);
+  }, [initialData, typeFilter]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [isPending, startTransition] = useTransition();
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const setTypeFilter = (value: PracticeEntryType | undefined) => {
+    // Optimistic: update pill immediately
+    setOptimisticTypeFilter(value);
     const params = new URLSearchParams(searchParams.toString());
     if (value) {
       params.set("type", value);
@@ -45,7 +60,10 @@ export function PracticeFeed({ initialData, pieces, typeFilter }: PracticeFeedPr
       params.delete("type");
     }
     const qs = params.toString();
-    router.replace(qs ? `/?${qs}` : "/", { scroll: false });
+    // Wrap in startTransition so old data stays visible while new data loads
+    startTransition(() => {
+      router.replace(qs ? `/?${qs}` : "/", { scroll: false });
+    });
   };
 
   const loadMore = useCallback(async () => {
@@ -94,7 +112,7 @@ export function PracticeFeed({ initialData, pieces, typeFilter }: PracticeFeedPr
             onClick={() => setTypeFilter(opt.value)}
             className={cn(
               "rounded-full px-3 py-1 text-xs font-medium transition-colors",
-              typeFilter === opt.value
+              optimisticTypeFilter === opt.value
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
             )}
