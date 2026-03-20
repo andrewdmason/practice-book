@@ -250,11 +250,21 @@ export function MetronomeProvider({ children }: { children: React.ReactNode }) {
       const inInput =
         tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || isEditable;
 
-      // Shift+Z: always toggle (unless in input)
+      // Shift+Z or m: always toggle (unless in input)
       if (e.key === "Z" && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
         if (inInput) return;
         e.preventDefault();
         toggle();
+        return;
+      }
+      if (e.key === "m" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (inInput) return;
+        e.preventDefault();
+        toggle();
+        // Blur any focused element so arrow/space shortcuts work immediately
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
         return;
       }
 
