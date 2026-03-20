@@ -1,12 +1,10 @@
 import type { JSONContent } from "@tiptap/core";
-import type { TaskStyle } from "@/lib/types";
 
 export type ExtractedTask = {
   taskId: string;
   text: string;
-  completed: boolean;
+  progress: number;
   pieceId: string | null;
-  style: TaskStyle;
 };
 
 function getTextContent(node: JSONContent): string {
@@ -32,8 +30,7 @@ function findPieceMentionId(node: JSONContent): string | null {
 }
 
 /**
- * Walk a Tiptap JSON document and extract all task items and goal blocks.
- * Both are stored as tasks; goal blocks get style: 'goal'.
+ * Walk a Tiptap JSON document and extract all task items.
  */
 export function extractTasks(doc: JSONContent): ExtractedTask[] {
   const tasks: ExtractedTask[] = [];
@@ -42,20 +39,17 @@ export function extractTasks(doc: JSONContent): ExtractedTask[] {
     if (node.type === "taskItem") {
       const taskId = (node.attrs?.taskId as string) || crypto.randomUUID();
       const text = getTextContent(node).trim();
-      const completed = (node.attrs?.checked as boolean) ?? false;
+      // Support both new progress attr and legacy checked boolean
+      const progress =
+        typeof node.attrs?.progress === "number"
+          ? node.attrs.progress
+          : (node.attrs?.checked as boolean)
+            ? 4
+            : 0;
       const pieceId = findPieceMentionId(node);
 
       if (text) {
-        tasks.push({ taskId, text, completed, pieceId, style: "default" });
-      }
-    } else if (node.type === "goalBlock") {
-      const taskId = (node.attrs?.goalId as string) || crypto.randomUUID();
-      const text = getTextContent(node).trim();
-      const completed = (node.attrs?.completed as boolean) ?? false;
-      const pieceId = findPieceMentionId(node);
-
-      if (text) {
-        tasks.push({ taskId, text, completed, pieceId, style: "goal" });
+        tasks.push({ taskId, text, progress, pieceId });
       }
     }
 

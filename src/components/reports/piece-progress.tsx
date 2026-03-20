@@ -10,6 +10,7 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  ReferenceDot,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -21,8 +22,15 @@ import {
 } from "@/components/ui/select";
 import { Loader2Icon } from "lucide-react";
 import { formatMinutes } from "@/lib/timer-utils";
-import { getPieceCumulativeData } from "@/app/(app)/reports/actions";
-import type { PieceWeeklyCumulativeData, PieceOption } from "@/lib/types";
+import {
+  getPieceCumulativeData,
+  getCompletedTasksForPiece,
+} from "@/app/(app)/reports/actions";
+import type {
+  PieceWeeklyCumulativeData,
+  PieceOption,
+  CompletedTaskMarker,
+} from "@/lib/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomTooltip({ active, payload, label }: any) {
@@ -37,6 +45,56 @@ function CustomTooltip({ active, payload, label }: any) {
       <p className="text-muted-foreground">
         Total: {formatMinutes(item.cumulativeSeconds)}
       </p>
+    </div>
+  );
+}
+
+function MarkerDot({ cx, cy, marker }: { cx: number; cy: number; marker: CompletedTaskMarker }) {
+  const count = marker.tasks.length;
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={6} fill="var(--color-primary)" opacity={0.9} />
+      {count > 1 && (
+        <text
+          x={cx}
+          y={cy + 0.5}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fill="var(--background, white)"
+          fontSize={8}
+          fontWeight="bold"
+        >
+          {count}
+        </text>
+      )}
+      {count === 1 && (
+        <polyline
+          points={`${cx - 2.5},${cy} ${cx - 0.5},${cy + 2} ${cx + 3},${cy - 2}`}
+          fill="none"
+          stroke="var(--background, white)"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </g>
+  );
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function MarkerTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  // Check if payload has marker data
+  const marker = payload[0]?.payload?._marker as CompletedTaskMarker | undefined;
+  if (!marker) return null;
+  return (
+    <div className="rounded-md border bg-background px-3 py-2 text-sm shadow-sm max-w-[200px]">
+      <p className="font-medium mb-1">Completed Tasks</p>
+      {marker.tasks.map((t) => (
+        <p key={t.id} className="text-muted-foreground text-xs truncate">
+          {t.text}
+        </p>
+      ))}
     </div>
   );
 }
@@ -59,6 +117,7 @@ export function PieceProgress({
     initialPieceId
   );
   const [data, setData] = useState(initialData);
+  const [markers, setMarkers] = useState<CompletedTaskMarker[]>([]);
   const [isPending, startTransition] = useTransition();
   const [chartColor, setChartColor] = useState("oklch(0.45 0.08 35)");
 
@@ -70,15 +129,24 @@ export function PieceProgress({
     }
   }, []);
 
+  const loadPieceData = useCallback(
+    (pieceId: string) => {
+      startTransition(async () => {
+        const result = await getPieceCumulativeData(pieceId);
+        setData(result);
+        const taskMarkers = await getCompletedTasksForPiece(pieceId, result);
+        setMarkers(taskMarkers);
+      });
+    },
+    []
+  );
+
   // Sync from URL changes (e.g. browser back/forward)
   useEffect(() => {
     const urlPiece = searchParams.get("piece");
     if (urlPiece && urlPiece !== selectedPieceId && pieces.some((p) => p.id === urlPiece)) {
       setSelectedPieceId(urlPiece);
-      startTransition(async () => {
-        const result = await getPieceCumulativeData(urlPiece);
-        setData(result);
-      });
+      loadPieceData(urlPiece);
     }
   }, [searchParams, pieces]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -92,12 +160,9 @@ export function PieceProgress({
       params.set("piece", pieceId);
       router.replace(`/reports?${params.toString()}`, { scroll: false });
 
-      startTransition(async () => {
-        const result = await getPieceCumulativeData(pieceId);
-        setData(result);
-      });
+      loadPieceData(pieceId);
     },
-    [router, searchParams]
+    [router, searchParams, loadPieceData]
   );
 
   const hasData = data.length > 0;
@@ -185,6 +250,18 @@ export function PieceProgress({
                 strokeWidth={2}
                 fill="url(#pieceProgressFill)"
               />
+              {markers.map((marker) => (
+                <ReferenceDot
+                  key={marker.weekStart}
+                  x={marker.weekLabel}
+                  y={marker.cumulativeHours}
+                  r={0}
+                  shape={
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    (props: any) => <MarkerDot cx={props.cx} cy={props.cy} marker={marker} />
+                  }
+                />
+              ))}
             </AreaChart>
           </ResponsiveContainer>
         ) : (

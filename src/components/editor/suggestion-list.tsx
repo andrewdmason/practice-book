@@ -6,11 +6,11 @@ import {
   useImperativeHandle,
   useState,
 } from "react";
-import { Music, Gauge, Target } from "lucide-react";
+import { Music, Gauge } from "lucide-react";
 
 export type SuggestionItem = {
   id: string;
-  type: "piece" | "metronome" | "command";
+  type: "piece" | "metronome";
   title: string;
   subtitle?: string | null;
   data?: Record<string, unknown>;
@@ -79,7 +79,6 @@ export const SuggestionList = forwardRef<SuggestionListRef, SuggestionListProps>
           >
             {item.type === "piece" && <Music className="size-3.5 shrink-0 text-primary" />}
             {item.type === "metronome" && <Gauge className="size-3.5 shrink-0 text-muted-foreground" />}
-            {item.type === "command" && <Target className="size-3.5 shrink-0 text-primary" />}
             <div className="min-w-0 flex-1">
               <div className="truncate font-medium">{item.title}</div>
               {item.subtitle && (

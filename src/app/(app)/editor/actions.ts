@@ -43,7 +43,7 @@ export async function saveEditorContent(
     if (error) console.error("Failed to insert mentions:", error.message);
   }
 
-  // 3. Extract and sync tasks + goal blocks (preserve completed state from DB)
+  // 3. Extract and sync tasks (preserve progress/completion state from DB)
   const tasks = extractTasks(content);
 
   // Look up the section's piece_id as fallback for task piece association
@@ -59,12 +59,12 @@ export async function saveEditorContent(
 
   const { data: existingTasks } = await supabase
     .from("tasks")
-    .select("id, completed")
+    .select("id, progress, completed_at, note")
     .eq("source_type", sourceType)
     .eq("source_id", sourceId);
 
-  const existingCompletedMap = new Map(
-    existingTasks?.map((t) => [t.id, t.completed]) ?? []
+  const existingTaskMap = new Map(
+    existingTasks?.map((t) => [t.id, t]) ?? []
   );
 
   await supabase
@@ -74,16 +74,26 @@ export async function saveEditorContent(
     .eq("source_id", sourceId);
 
   if (tasks.length > 0) {
+    const now = new Date().toISOString();
     const { error } = await supabase.from("tasks").insert(
-      tasks.map((t) => ({
-        id: t.taskId,
-        source_type: sourceType,
-        source_id: sourceId,
-        piece_id: t.pieceId ?? sectionPieceId,
-        text: t.text,
-        completed: existingCompletedMap.get(t.taskId) ?? t.completed,
-        style: t.style,
-      }))
+      tasks.map((t) => {
+        const existing = existingTaskMap.get(t.taskId);
+        const progress = existing?.progress ?? t.progress;
+        const completedAt =
+          progress === 4
+            ? (existing?.completed_at ?? now)
+            : null;
+        return {
+          id: t.taskId,
+          source_type: sourceType,
+          source_id: sourceId,
+          piece_id: t.pieceId ?? sectionPieceId,
+          text: t.text,
+          progress,
+          completed_at: completedAt,
+          note: existing?.note ?? null,
+        };
+      })
     );
     if (error) console.error("Failed to insert tasks:", error.message);
   }

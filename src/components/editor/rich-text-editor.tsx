@@ -10,10 +10,8 @@ import { PluginKey } from "@tiptap/pm/state";
 import { BubbleToolbar } from "./bubble-toolbar";
 import { PieceMention } from "./extensions/piece-mention";
 import { MetronomeMarking } from "./extensions/metronome-marking";
-import { GoalBlock } from "./extensions/goal-block";
 import { TaskListExtension, TaskItemExtension } from "./extensions/inline-task";
 import { createMentionSuggestion } from "./extensions/mention-suggestion";
-import { createSlashCommandSuggestion } from "./extensions/slash-command";
 import type { PieceSuggestion, SourceType } from "@/lib/types";
 
 type EditorContext = "practice_entry" | "lesson";
@@ -48,23 +46,6 @@ function createMentionExtension(pieces: PieceSuggestion[]) {
   });
 }
 
-function createSlashCommandExtension(context: EditorContext) {
-  const suggestion = createSlashCommandSuggestion(context);
-
-  return Extension.create({
-    name: "slashCommand",
-    addProseMirrorPlugins() {
-      return [
-        Suggestion({
-          editor: this.editor,
-          pluginKey: new PluginKey("slashCommand"),
-          ...suggestion,
-        }),
-      ];
-    },
-  });
-}
-
 export function RichTextEditor({
   context,
   sourceType,
@@ -91,7 +72,6 @@ export function RichTextEditor({
     TaskListExtension,
     TaskItemExtension.configure({ nested: false }),
     createMentionExtension(pieces),
-    ...(context === "lesson" ? [GoalBlock, createSlashCommandExtension(context)] : []),
   ];
 
   const editor = useEditor({

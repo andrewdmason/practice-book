@@ -1,31 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeftIcon,
   CheckCircle2Icon,
+  ChevronDownIcon,
   ExternalLinkIcon,
-  MessageSquareTextIcon,
   MusicIcon,
+  PencilIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { MasteryBadge } from "@/components/repertoire/mastery-badge";
+import { ProgressCircle } from "@/components/ui/progress-circle";
 import { useTimer } from "@/components/timer/timer-context";
 import { TimeSummary } from "@/components/timer/time-summary";
 import { getTodaySummary } from "@/app/(app)/timer/actions";
 import {
   getCategoryFocusData,
   getPieceFocusData,
-  toggleTaskCompleted,
+  updateTaskProgress,
+  updateTaskNote,
 } from "@/app/(app)/focus-panel/actions";
 import { createClient } from "@/lib/supabase/client";
 import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
 import type {
-  MasteryLevel,
-  MentionWithSource,
   Task,
   TimerTarget,
   TimeSummaryEntry,
@@ -93,8 +91,9 @@ function PieceDetail({ pieceId }: { pieceId: string }) {
     composer: string | null;
     mastery_level: string;
   } | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [mentions, setMentions] = useState<MentionWithSource[]>([]);
+  const [openTasks, setOpenTasks] = useState<Task[]>([]);
+  const [completedTasks, setCompletedTasks] = useState<Task[]>([]);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -116,13 +115,45 @@ function PieceDetail({ pieceId }: { pieceId: string }) {
         }
       });
 
-    // Fetch focus data (tasks, mentions)
     getPieceFocusData(pieceId).then((data) => {
-      setTasks(data.tasks);
-      setMentions(data.mentions);
+      setOpenTasks(data.openTasks);
+      setCompletedTasks(data.completedTasks);
       setLoaded(true);
     });
   }, [pieceId]);
+
+  const handleProgressChange = (taskId: string, progress: number) => {
+    if (progress === 4) {
+      // Move from open to completed
+      const task = openTasks.find((t) => t.id === taskId);
+      if (task) {
+        const updated = { ...task, progress, completed_at: new Date().toISOString() };
+        setOpenTasks((prev) => prev.filter((t) => t.id !== taskId));
+        setCompletedTasks((prev) => [updated, ...prev]);
+      }
+    } else {
+      // Could be un-completing from completed list or updating open task progress
+      const completedTask = completedTasks.find((t) => t.id === taskId);
+      if (completedTask) {
+        const updated = { ...completedTask, progress, completed_at: null };
+        setCompletedTasks((prev) => prev.filter((t) => t.id !== taskId));
+        setOpenTasks((prev) => [updated, ...prev]);
+      } else {
+        setOpenTasks((prev) =>
+          prev.map((t) => t.id === taskId ? { ...t, progress } : t)
+        );
+      }
+    }
+  };
+
+  const handleNoteChange = (taskId: string, note: string | null) => {
+    setOpenTasks((prev) =>
+      prev.map((t) => t.id === taskId ? { ...t, note } : t)
+    );
+    setCompletedTasks((prev) =>
+      prev.map((t) => t.id === taskId ? { ...t, note } : t)
+    );
+  };
 
   if (!piece) {
     return (
@@ -137,64 +168,79 @@ function PieceDetail({ pieceId }: { pieceId: string }) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle className="text-base">{piece.name}</CardTitle>
-            {piece.composer && (
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {piece.composer}
-              </p>
-            )}
-          </div>
-          <MasteryBadge
-            level={piece.mastery_level as MasteryLevel}
-          />
+        <div>
+          <CardTitle className="text-base">
+            <Link
+              href={`/repertoire/${pieceId}`}
+              className="inline-flex items-center gap-1.5 hover:text-primary transition-colors"
+            >
+              {piece.name}
+              <ExternalLinkIcon className="size-3 text-muted-foreground" />
+            </Link>
+          </CardTitle>
+          {piece.composer && (
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {piece.composer}
+            </p>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Tasks */}
-        {loaded && tasks.length > 0 && (
+        {/* Open Tasks */}
+        {loaded && openTasks.length > 0 && (
           <FocusSection
             icon={<CheckCircle2Icon className="size-3.5" />}
             title="Tasks"
-            count={tasks.filter((t) => !t.completed).length}
+            count={openTasks.length}
           >
-            {tasks.map((task) => (
-              <TaskRow key={task.id} task={task} onToggle={(completed) => {
-                setTasks((prev) =>
-                  prev.map((t) => t.id === task.id ? { ...t, completed } : t)
-                );
-              }} />
+            {openTasks.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                onProgressChange={(progress) => handleProgressChange(task.id, progress)}
+                onNoteChange={(note) => handleNoteChange(task.id, note)}
+              />
             ))}
           </FocusSection>
         )}
 
-        {/* Recent Mentions */}
-        {loaded && mentions.length > 0 && (
-          <FocusSection
-            icon={<MessageSquareTextIcon className="size-3.5" />}
-            title="Recent Mentions"
-          >
-            {mentions.map((mention) => (
-              <MentionRow key={mention.id} mention={mention} />
-            ))}
-          </FocusSection>
+        {/* Completed Tasks (collapsible) */}
+        {loaded && completedTasks.length > 0 && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowCompleted(!showCompleted)}
+              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors"
+            >
+              <ChevronDownIcon className={`size-3.5 transition-transform ${showCompleted ? "" : "-rotate-90"}`} />
+              Completed
+              <span className="text-[10px] font-normal bg-muted text-muted-foreground rounded-full px-1.5 py-0.5">
+                {completedTasks.length}
+              </span>
+            </button>
+            {showCompleted && (
+              <div className="space-y-1.5">
+                {completedTasks.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    onProgressChange={(progress) => handleProgressChange(task.id, progress)}
+                    onNoteChange={(note) => handleNoteChange(task.id, note)}
+                    showCompletedDate
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Empty state */}
-        {loaded && tasks.length === 0 && mentions.length === 0 && (
+        {loaded && openTasks.length === 0 && completedTasks.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            No tasks or mentions yet.
+            No tasks yet.
           </p>
         )}
 
-        <Link
-          href={`/repertoire/${pieceId}`}
-          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ExternalLinkIcon className="size-3" />
-          View full page
-        </Link>
       </CardContent>
     </Card>
   );
@@ -237,56 +283,123 @@ function FocusSection({
 
 function TaskRow({
   task,
-  onToggle,
+  onProgressChange,
+  onNoteChange,
+  showCompletedDate,
 }: {
   task: Task;
-  onToggle: (completed: boolean) => void;
+  onProgressChange: (progress: number) => void;
+  onNoteChange: (note: string | null) => void;
+  showCompletedDate?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteValue, setNoteValue] = useState(task.note ?? "");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const handleClick = (e: React.MouseEvent) => {
+    let newProgress: number;
+    if (e.altKey) {
+      newProgress = (task.progress + 1) % 5;
+    } else {
+      newProgress = task.progress === 4 ? 0 : 4;
+    }
+    onProgressChange(newProgress);
+    startTransition(async () => {
+      await updateTaskProgress(task.id, newProgress);
+      router.refresh();
+    });
+  };
+
+  const handleNoteSave = () => {
+    setEditingNote(false);
+    const trimmed = noteValue.trim() || null;
+    if (trimmed !== task.note) {
+      onNoteChange(trimmed);
+      // Notify editor TaskItemViews of the note change
+      window.dispatchEvent(
+        new CustomEvent("task-note-updated", {
+          detail: { taskId: task.id, note: trimmed },
+        })
+      );
+      startTransition(async () => {
+        await updateTaskNote(task.id, trimmed);
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (editingNote && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [editingNote]);
 
   return (
-    <label className="flex items-start gap-2 text-sm cursor-pointer group">
-      <Checkbox
-        className="mt-0.5"
-        checked={task.completed}
-        disabled={isPending}
-        onCheckedChange={(checked) => {
-          const completed = !!checked;
-          onToggle(completed);
-          startTransition(async () => {
-            await toggleTaskCompleted(task.id, completed);
-            router.refresh();
-          });
-        }}
-      />
-      <span className={`flex-1 ${task.completed ? "line-through text-muted-foreground" : ""} ${isPending ? "opacity-50" : ""}`}>
-        {task.text}
-      </span>
-    </label>
-  );
-}
-
-function MentionRow({ mention }: { mention: MentionWithSource }) {
-  const isLesson = mention.source_label === "Lesson";
-  const href = isLesson
-    ? `/?date=${mention.source_date}`
-    : `/`; // navigate to home feed
-
-  return (
-    <Link
-      href={href}
-      className="block text-sm hover:bg-muted/50 rounded px-1 -mx-1 py-0.5 transition-colors"
-    >
-      {mention.context_snippet && (
-        <p className="text-foreground line-clamp-2">
-          &ldquo;{mention.context_snippet}&rdquo;
+    <div className="group">
+      <div className="flex items-start gap-2 text-sm">
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={isPending}
+          className="mt-0.5 shrink-0 text-primary disabled:opacity-50"
+        >
+          <ProgressCircle progress={task.progress} size={16} />
+        </button>
+        <span className={`flex-1 ${task.progress === 4 ? "line-through text-muted-foreground" : ""} ${isPending ? "opacity-50" : ""}`}>
+          {task.text}
+        </span>
+        {!editingNote && !task.note && (
+          <button
+            type="button"
+            onClick={() => setEditingNote(true)}
+            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity shrink-0 mt-0.5"
+          >
+            <PencilIcon className="size-3" />
+          </button>
+        )}
+      </div>
+      {/* Existing note display */}
+      {task.note && !editingNote && (
+        <p
+          className="ml-6 mt-0.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+          onClick={() => {
+            setNoteValue(task.note ?? "");
+            setEditingNote(true);
+          }}
+        >
+          {task.note}
         </p>
       )}
-      <p className="text-xs text-muted-foreground mt-0.5">
-        {mention.source_label} &middot; {formatDate(mention.source_date)}
-      </p>
-    </Link>
+      {/* Note editing */}
+      {editingNote && (
+        <textarea
+          ref={textareaRef}
+          value={noteValue}
+          onChange={(e) => setNoteValue(e.target.value)}
+          onBlur={handleNoteSave}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleNoteSave();
+            }
+            if (e.key === "Escape") {
+              setEditingNote(false);
+              setNoteValue(task.note ?? "");
+            }
+          }}
+          className="ml-6 mt-1 w-[calc(100%-1.5rem)] rounded border bg-background px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+          rows={2}
+          placeholder="Add a note..."
+        />
+      )}
+      {/* Completed date */}
+      {showCompletedDate && task.completed_at && (
+        <p className="ml-6 mt-0.5 text-[10px] text-muted-foreground/70">
+          Completed {formatDate(task.completed_at.slice(0, 10))}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -325,12 +438,16 @@ function CategoryDetail({
           <FocusSection
             icon={<CheckCircle2Icon className="size-3.5" />}
             title="Tasks"
-            count={tasks.filter((t) => !t.completed).length}
+            count={tasks.filter((t) => t.progress < 4).length}
           >
             {tasks.map((task) => (
-              <TaskRow key={task.id} task={task} onToggle={(completed) => {
+              <TaskRow key={task.id} task={task} onProgressChange={(progress) => {
                 setTasks((prev) =>
-                  prev.map((t) => t.id === task.id ? { ...t, completed } : t)
+                  prev.map((t) => t.id === task.id ? { ...t, progress } : t)
+                );
+              }} onNoteChange={(note) => {
+                setTasks((prev) =>
+                  prev.map((t) => t.id === task.id ? { ...t, note } : t)
                 );
               }} />
             ))}
