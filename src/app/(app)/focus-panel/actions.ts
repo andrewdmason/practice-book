@@ -269,6 +269,61 @@ function updateTaskNoteInJson(
   return node;
 }
 
+export type TaskWithPiece = Task & {
+  piece_name: string | null;
+  piece_composer: string | null;
+  section_category: string | null;
+};
+
+export async function getAllOpenTasks(): Promise<TaskWithPiece[]> {
+  const supabase = await createClient();
+
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("*, pieces(name, composer)")
+    .lt("progress", 4)
+    .order("created_at", { ascending: false });
+
+  if (!tasks) return [];
+
+  // For non-piece tasks, resolve section categories
+  const nonPieceSectionIds = tasks
+    .filter((t) => !t.piece_id)
+    .map((t) => t.source_id);
+
+  const categoryMap = new Map<string, string>();
+  if (nonPieceSectionIds.length > 0) {
+    const { data: sections } = await supabase
+      .from("practice_entry_sections")
+      .select("id, category")
+      .in("id", nonPieceSectionIds);
+    if (sections) {
+      for (const s of sections) {
+        categoryMap.set(s.id, s.category);
+      }
+    }
+  }
+
+  return tasks.map((t) => {
+    const piece = t.pieces as unknown as { name: string; composer: string | null } | null;
+    return {
+      id: t.id,
+      source_type: t.source_type,
+      source_id: t.source_id,
+      piece_id: t.piece_id,
+      text: t.text,
+      progress: t.progress,
+      completed_at: t.completed_at,
+      note: t.note,
+      created_at: t.created_at,
+      updated_at: t.updated_at,
+      piece_name: piece?.name ?? null,
+      piece_composer: piece?.composer ?? null,
+      section_category: t.piece_id ? "piece" : (categoryMap.get(t.source_id) ?? null),
+    } as TaskWithPiece;
+  });
+}
+
 export async function getRepertoireOverview(): Promise<RepertoireOverviewItem[]> {
   const supabase = await createClient();
 
