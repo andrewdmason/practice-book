@@ -21,12 +21,14 @@ type AddSectionButtonProps = {
   entryId: string;
   existingSections: PracticeEntrySection[];
   pieces: PieceSuggestion[];
+  onOptimisticAdd?: (section: PracticeEntrySection) => void;
 };
 
 export function AddSectionButton({
   entryId,
   existingSections,
   pieces,
+  onOptimisticAdd,
 }: AddSectionButtonProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -77,12 +79,30 @@ export function AddSectionButton({
   const handleAdd = useCallback(
     (category: "technique" | "sight_reading" | "general" | "piece", pieceId?: string) => {
       setOpen(false);
+
+      // Optimistic: add section to UI immediately
+      if (onOptimisticAdd) {
+        const piece = pieceId ? pieces.find((p) => p.id === pieceId) : undefined;
+        const maxOrder = existingSections.reduce((max, s) => Math.max(max, s.sort_order), 0);
+        onOptimisticAdd({
+          id: crypto.randomUUID(),
+          practice_entry_id: entryId,
+          piece_id: pieceId ?? null,
+          category,
+          content: null,
+          sort_order: maxOrder + 1,
+          piece_name: piece?.name ?? null,
+          composer: piece?.composer ?? null,
+          time_override_seconds: null,
+        });
+      }
+
       startTransition(async () => {
         await addSection(entryId, category, pieceId);
         router.refresh();
       });
     },
-    [entryId, router]
+    [entryId, router, onOptimisticAdd, pieces, existingSections]
   );
 
   async function handleCreatePiece(e: React.FormEvent<HTMLFormElement>) {
@@ -102,7 +122,32 @@ export function AddSectionButton({
     }
 
     if ("pieceId" in result && result.pieceId) {
-      await addSection(entryId, "piece", result.pieceId as string);
+      const pieceId = result.pieceId as string;
+
+      // Optimistic: add section to UI immediately
+      if (onOptimisticAdd) {
+        const maxOrder = existingSections.reduce((max, s) => Math.max(max, s.sort_order), 0);
+        onOptimisticAdd({
+          id: crypto.randomUUID(),
+          practice_entry_id: entryId,
+          piece_id: pieceId,
+          category: "piece",
+          content: null,
+          sort_order: maxOrder + 1,
+          piece_name: formData.get("name") as string,
+          composer: (formData.get("composer") as string) || null,
+          time_override_seconds: null,
+        });
+      }
+
+      setPending(false);
+      setShowNewPieceDialog(false);
+
+      startTransition(async () => {
+        await addSection(entryId, "piece", pieceId);
+        router.refresh();
+      });
+      return;
     }
 
     setPending(false);

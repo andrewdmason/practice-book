@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { JSONContent } from "@tiptap/core";
 import { BookOpenIcon, CalendarIcon } from "lucide-react";
 import { FeedSection } from "./feed-section";
@@ -202,19 +202,66 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
   const { isRunning, entryElapsedSeconds } = useTimer();
   const initialEntryElapsedRef = useRef(entryElapsedSeconds);
 
-  const filteredPracticeSections = day.practiceEntry
-    ? filterAndSortSections(day.practiceEntry, focusKey)
+  // Track optimistic sections per entry (keyed by entry ID)
+  const [optimisticSections, setOptimisticSections] = useState<
+    Record<string, PracticeEntrySection[]>
+  >({});
+
+  const addOptimisticSection = useCallback(
+    (entryId: string, section: PracticeEntrySection) => {
+      setOptimisticSections((prev) => ({
+        ...prev,
+        [entryId]: [...(prev[entryId] ?? []), section],
+      }));
+    },
+    []
+  );
+
+  // Merge server sections with optimistic ones
+  const mergedPracticeEntry = useMemo(() => {
+    if (!day.practiceEntry) return null;
+    const extra = optimisticSections[day.practiceEntry.id] ?? [];
+    if (extra.length === 0) return day.practiceEntry;
+    // Filter out optimistic sections that now exist on the server (by category+piece_id)
+    const serverKeys = new Set(
+      day.practiceEntry.sections.map((s) => `${s.category}:${s.piece_id ?? ""}`)
+    );
+    const newSections = extra.filter(
+      (s) => !serverKeys.has(`${s.category}:${s.piece_id ?? ""}`)
+    );
+    return {
+      ...day.practiceEntry,
+      sections: [...day.practiceEntry.sections, ...newSections],
+    };
+  }, [day.practiceEntry, optimisticSections]);
+
+  const mergedLessons = useMemo(() => {
+    return day.lessons.map((lesson) => {
+      const extra = optimisticSections[lesson.id] ?? [];
+      if (extra.length === 0) return lesson;
+      const serverKeys = new Set(
+        lesson.sections.map((s) => `${s.category}:${s.piece_id ?? ""}`)
+      );
+      const newSections = extra.filter(
+        (s) => !serverKeys.has(`${s.category}:${s.piece_id ?? ""}`)
+      );
+      return { ...lesson, sections: [...lesson.sections, ...newSections] };
+    });
+  }, [day.lessons, optimisticSections]);
+
+  const filteredPracticeSections = mergedPracticeEntry
+    ? filterAndSortSections(mergedPracticeEntry, focusKey)
     : [];
   const hasPracticeSections =
-    day.practiceEntry != null &&
+    mergedPracticeEntry != null &&
     (filteredPracticeSections.length > 0 ||
       (!focusKey && day.timeSummary.length > 0) ||
-      (!focusKey && day.practiceEntry.sections.some((s) => s.category === "general" && hasContent(s.content))));
-  const visibleLessons = day.lessons.filter(
+      (!focusKey && mergedPracticeEntry.sections.some((s) => s.category === "general" && hasContent(s.content))));
+  const visibleLessons = mergedLessons.filter(
     (lesson) => filterAndSortSections(lesson, focusKey).length > 0
   );
 
-  const generalSection = day.practiceEntry?.sections.find(
+  const generalSection = mergedPracticeEntry?.sections.find(
     (s) => s.category === "general"
   ) ?? null;
 
@@ -240,11 +287,12 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
               {formatMinutes(dayTotal)}
             </span>
           )}
-          {day.practiceEntry && (
+          {mergedPracticeEntry && (
             <AddSectionButton
-              entryId={day.practiceEntry.id}
-              existingSections={day.practiceEntry.sections}
+              entryId={mergedPracticeEntry.id}
+              existingSections={mergedPracticeEntry.sections}
               pieces={pieces}
+              onOptimisticAdd={(section) => addOptimisticSection(mergedPracticeEntry.id, section)}
             />
           )}
         </div>
@@ -256,9 +304,9 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
       )}
 
       {/* Practice entry sections */}
-      {hasPracticeSections && day.practiceEntry && (
+      {hasPracticeSections && mergedPracticeEntry && (
         <EntryCard
-          entry={day.practiceEntry}
+          entry={mergedPracticeEntry}
           isToday={isToday}
           pieces={pieces}
           timeSummary={day.timeSummary}
@@ -277,6 +325,7 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
               entryId={lesson.id}
               existingSections={lesson.sections}
               pieces={pieces}
+              onOptimisticAdd={(section) => addOptimisticSection(lesson.id, section)}
             />
           </div>
           <EntryCard
