@@ -521,31 +521,55 @@ function PracticeOverview({
     );
   }
 
-  // Group tasks by piece
-  const tasksByPieceMap = new Map<string, { name: string; composer: string | null; tasks: TaskWithPiece[] }>();
-  const categoryTasks: TaskWithPiece[] = [];
+  // Group tasks by piece or category
+  type TaskGroup = { key: string; label: string; subtitle: string | null; focusKey: string; tasks: TaskWithPiece[] };
+  const pieceGroups = new Map<string, TaskGroup>();
+  const categoryGroups = new Map<string, TaskGroup>();
   for (const task of allTasks) {
     if (task.piece_id && task.piece_name) {
-      const group = tasksByPieceMap.get(task.piece_id);
+      const group = pieceGroups.get(task.piece_id);
       if (group) {
         group.tasks.push(task);
       } else {
-        tasksByPieceMap.set(task.piece_id, {
-          name: task.piece_name,
-          composer: task.piece_composer,
+        pieceGroups.set(task.piece_id, {
+          key: task.piece_id,
+          label: task.piece_name,
+          subtitle: task.piece_composer,
+          focusKey: task.piece_id,
           tasks: [task],
         });
       }
     } else {
-      categoryTasks.push(task);
+      const cat = task.section_category ?? "other";
+      const group = categoryGroups.get(cat);
+      if (group) {
+        group.tasks.push(task);
+      } else {
+        const label = TIMER_CATEGORY_LABELS[cat as keyof typeof TIMER_CATEGORY_LABELS] ?? cat;
+        categoryGroups.set(cat, {
+          key: cat,
+          label,
+          subtitle: null,
+          focusKey: cat,
+          tasks: [task],
+        });
+      }
     }
   }
 
   // Sort piece groups by activePieces order (sort_order, then name)
   const pieceOrder = new Map(activePieces.map((p, i) => [p.id, i]));
-  const sortedPieceGroups = [...tasksByPieceMap.entries()].sort(
-    ([idA], [idB]) => (pieceOrder.get(idA) ?? Infinity) - (pieceOrder.get(idB) ?? Infinity)
+  const sortedPieceGroups = [...pieceGroups.values()].sort(
+    (a, b) => (pieceOrder.get(a.key) ?? Infinity) - (pieceOrder.get(b.key) ?? Infinity)
   );
+
+  // Categories after pieces: technique, then sight_reading, then any others
+  const categoryOrder: Record<string, number> = { technique: 0, sight_reading: 1 };
+  const sortedCategoryGroups = [...categoryGroups.values()].sort(
+    (a, b) => (categoryOrder[a.key] ?? 99) - (categoryOrder[b.key] ?? 99)
+  );
+
+  const allGroups = [...sortedPieceGroups, ...sortedCategoryGroups];
 
   return (
     <div className="space-y-4">
@@ -561,16 +585,16 @@ function PracticeOverview({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {sortedPieceGroups.map(([pieceId, group]) => (
-              <div key={pieceId}>
+            {allGroups.map((group) => (
+              <div key={group.key}>
                 <button
                   type="button"
-                  onClick={() => onFocusItem(pieceId)}
+                  onClick={() => onFocusItem(group.focusKey)}
                   className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-1.5 flex items-center gap-1"
                 >
-                  {group.name}
-                  {group.composer && (
-                    <span className="font-normal">— {group.composer}</span>
+                  {group.label}
+                  {group.subtitle && (
+                    <span className="font-normal">— {group.subtitle}</span>
                   )}
                 </button>
                 <div className="space-y-1.5">
@@ -591,29 +615,6 @@ function PracticeOverview({
                 </div>
               </div>
             ))}
-            {categoryTasks.length > 0 && (
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-1.5">
-                  Other
-                </p>
-                <div className="space-y-1.5">
-                  {categoryTasks.map((task) => (
-                    <TaskRow
-                      key={task.id}
-                      task={task}
-                      onProgressChange={(progress) => {
-                        handleProgressChange(task.id, progress);
-                        updateTaskProgress(task.id, progress).then(() => router.refresh());
-                      }}
-                      onNoteChange={(note) => {
-                        handleNoteChange(task.id, note);
-                        updateTaskNote(task.id, note);
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
           </CardContent>
         </Card>
       )}
