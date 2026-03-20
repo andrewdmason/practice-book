@@ -541,6 +541,28 @@ export async function updateSectionTime(
 }
 
 /**
+ * Delete a lesson and all its sections.
+ */
+export async function deleteLesson(lessonId: string): Promise<void> {
+  const supabase = await createClient();
+
+  // Delete all sections first
+  await supabase
+    .from("practice_entry_sections")
+    .delete()
+    .eq("practice_entry_id", lessonId);
+
+  // Delete the lesson entry
+  await supabase
+    .from("practice_entries")
+    .delete()
+    .eq("id", lessonId)
+    .eq("type", "lesson");
+
+  revalidatePath("/");
+}
+
+/**
  * Create a new lesson for a given date (defaults to today).
  * Creates a practice_entry with type='lesson' and auto-creates sections.
  */
