@@ -107,7 +107,7 @@ export function MetronomeProvider({ children }: { children: React.ReactNode }) {
 
       osc.frequency.value = 1000;
       osc.type = "sine";
-      gain.gain.setValueAtTime(0.5, time);
+      gain.gain.setValueAtTime(1, time);
       gain.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
 
       osc.start(time);
