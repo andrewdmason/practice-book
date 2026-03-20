@@ -81,7 +81,16 @@ function filterAndSortSections(
     ? filtered.filter((s) => s.category !== "general")
     : filtered;
 
-  return [...sections].sort((a, b) => {
+  // Deduplicate by category+piece_id (concurrent ensureSections calls can create duplicates)
+  const seen = new Set<string>();
+  const unique = sections.filter((s) => {
+    const key = `${s.category}:${s.piece_id ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return [...unique].sort((a, b) => {
     const order: Record<string, number> = { technique: 0, sight_reading: 1, piece: 2, general: 3 };
     return (order[a.category] ?? 2) - (order[b.category] ?? 2);
   });
