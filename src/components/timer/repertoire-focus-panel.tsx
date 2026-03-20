@@ -564,13 +564,13 @@ function PracticeOverview({
     (a, b) => (pieceOrder.get(a.key) ?? Infinity) - (pieceOrder.get(b.key) ?? Infinity)
   );
 
-  // Categories after pieces: technique, then sight_reading, then any others
+  // Categories before pieces: technique, then sight_reading, then any others
   const categoryOrder: Record<string, number> = { technique: 0, sight_reading: 1 };
   const sortedCategoryGroups = [...categoryGroups.values()].sort(
     (a, b) => (categoryOrder[a.key] ?? 99) - (categoryOrder[b.key] ?? 99)
   );
 
-  const allGroups = [...sortedPieceGroups, ...sortedCategoryGroups];
+  const allGroups = [...sortedCategoryGroups, ...sortedPieceGroups];
 
   return (
     <div className="space-y-4">
