@@ -17,9 +17,9 @@ export default async function FeedPage({
   // Ensure today's entry and sections exist
   await ensureTodayEntry();
 
-  // Fetch initial feed data in parallel
+  // Always fetch all types — client filters instantly
   const [initialData, supabase] = await Promise.all([
-    getFeedPage(undefined, 7, typeFilter),
+    getFeedPage(undefined, 7),
     createClient(),
   ]);
 
@@ -34,7 +34,6 @@ export default async function FeedPage({
     <TwoColumnLayout
       left={
         <PracticeFeed
-          key={typeFilter ?? "all"}
           initialData={initialData}
           pieces={(pieces as PieceSuggestion[]) ?? []}
           typeFilter={typeFilter}
