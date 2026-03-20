@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useTransition } from "react";
+import { useState, useRef, useEffect, useCallback, useTransition, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PlusIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -51,7 +51,7 @@ export function PracticeFeed({ initialData, pieces, typeFilter }: PracticeFeedPr
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const setTypeFilter = (value: PracticeEntryType | undefined) => {
-    // Optimistic: update pill immediately
+    // Instant: update state and URL without server round-trip
     setOptimisticTypeFilter(value);
     const params = new URLSearchParams(searchParams.toString());
     if (value) {
@@ -60,23 +60,32 @@ export function PracticeFeed({ initialData, pieces, typeFilter }: PracticeFeedPr
       params.delete("type");
     }
     const qs = params.toString();
-    // Wrap in startTransition so old data stays visible while new data loads
-    startTransition(() => {
-      router.replace(qs ? `/?${qs}` : "/", { scroll: false });
-    });
+    window.history.replaceState(null, "", qs ? `/?${qs}` : "/");
   };
+
+  // Client-side filtering — instant, no server round-trip
+  const filteredDays = useMemo(() => {
+    if (!optimisticTypeFilter) return feedDays;
+    return feedDays
+      .map((day) => ({
+        ...day,
+        practiceEntry: optimisticTypeFilter === "practice" ? day.practiceEntry : null,
+        lessons: optimisticTypeFilter === "lesson" ? day.lessons : [],
+      }))
+      .filter((day) => day.practiceEntry || day.lessons.length > 0);
+  }, [feedDays, optimisticTypeFilter]);
 
   const loadMore = useCallback(async () => {
     if (!cursor || loadingMore) return;
     setLoadingMore(true);
     try {
-      const result = await getFeedPage(cursor, 7, typeFilter);
+      const result = await getFeedPage(cursor, 7);
       setFeedDays((prev) => [...prev, ...result.items]);
       setCursor(result.nextCursor);
     } finally {
       setLoadingMore(false);
     }
-  }, [cursor, loadingMore, typeFilter]);
+  }, [cursor, loadingMore]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -137,16 +146,16 @@ export function PracticeFeed({ initialData, pieces, typeFilter }: PracticeFeedPr
       </div>
 
       {/* Feed days */}
-      {feedDays.length === 0 ? (
+      {filteredDays.length === 0 ? (
         <p className="text-sm text-muted-foreground text-center py-8">
-          {typeFilter === "lesson"
+          {optimisticTypeFilter === "lesson"
             ? "No lessons yet. Click New Lesson to get started!"
-            : typeFilter === "practice"
+            : optimisticTypeFilter === "practice"
               ? "No practice entries yet. Start the timer to begin!"
               : "No entries yet. Start the timer or add a lesson!"}
         </p>
       ) : (
-        feedDays.map((day) => (
+        filteredDays.map((day) => (
           <FeedDayCard key={day.date} day={day} pieces={pieces} focusKey={focusKey} />
         ))
       )}
