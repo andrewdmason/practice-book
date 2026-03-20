@@ -145,6 +145,19 @@ export type StreakData = {
   thisWeekDays: boolean[]; // Mon-Sun
 };
 
+export type PieceWeeklyCumulativeData = {
+  weekStart: string; // YYYY-MM-DD (Monday)
+  weekLabel: string; // "Mar 10"
+  weekSeconds: number;
+  cumulativeSeconds: number;
+};
+
+export type PieceOption = {
+  id: string;
+  name: string;
+  composer: string | null;
+};
+
 // Search types
 export type SearchResultType =
   | "piece"

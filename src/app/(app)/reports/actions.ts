@@ -7,6 +7,8 @@ import type {
   PieceBreakdownData,
   StreakData,
   TimerCategory,
+  PieceWeeklyCumulativeData,
+  PieceOption,
 } from "@/lib/types";
 
 /**
@@ -206,4 +208,89 @@ export async function getStreakData(): Promise<StreakData> {
   }
 
   return { currentStreak, daysPracticedThisWeek, thisWeekDays };
+}
+
+/**
+ * Get all pieces that have timer entries (for the piece selector).
+ */
+export async function getPiecesWithTimerData(): Promise<PieceOption[]> {
+  const supabase = await createClient();
+
+  const { data: entries } = await supabase
+    .from("timer_entries")
+    .select("piece_id")
+    .not("piece_id", "is", null)
+    .not("ended_at", "is", null);
+
+  if (!entries || entries.length === 0) return [];
+
+  const pieceIds = [...new Set(entries.map((e) => e.piece_id!))];
+
+  const { data: pieces } = await supabase
+    .from("pieces")
+    .select("id, name, composer")
+    .in("id", pieceIds)
+    .order("name");
+
+  return (pieces ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    composer: p.composer,
+  }));
+}
+
+/**
+ * Cumulative weekly practice time for a single piece.
+ */
+export async function getPieceCumulativeData(
+  pieceId: string
+): Promise<PieceWeeklyCumulativeData[]> {
+  const supabase = await createClient();
+
+  const { data: entries } = await supabase
+    .from("timer_entries")
+    .select("started_at, ended_at, practice_sessions!inner(date)")
+    .eq("piece_id", pieceId)
+    .not("ended_at", "is", null);
+
+  if (!entries || entries.length === 0) return [];
+
+  // Group by week
+  const weekMap = new Map<string, number>();
+
+  for (const entry of entries) {
+    const session = entry.practice_sessions as unknown as { date: string };
+    const monday = getMonday(session.date);
+    const start = new Date(entry.started_at).getTime();
+    const end = new Date(entry.ended_at!).getTime();
+    const seconds = Math.floor((end - start) / 1000);
+    weekMap.set(monday, (weekMap.get(monday) ?? 0) + seconds);
+  }
+
+  // Sort weeks chronologically and build cumulative
+  const sortedWeeks = [...weekMap.keys()].sort();
+
+  // Fill in gaps between first and last week
+  const firstMonday = sortedWeeks[0];
+  const now = new Date();
+  const lastMonday = getMonday(localDate(now));
+
+  const allWeeks: string[] = [];
+  const d = new Date(firstMonday + "T00:00:00");
+  while (localDate(d) <= lastMonday) {
+    allWeeks.push(localDate(d));
+    d.setDate(d.getDate() + 7);
+  }
+
+  let cumulative = 0;
+  return allWeeks.map((ws) => {
+    const weekSec = weekMap.get(ws) ?? 0;
+    cumulative += weekSec;
+    return {
+      weekStart: ws,
+      weekLabel: weekLabel(ws),
+      weekSeconds: weekSec,
+      cumulativeSeconds: cumulative,
+    };
+  });
 }
