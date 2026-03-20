@@ -78,6 +78,7 @@ export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, h
   const handleSave = useCallback(
     async (content: JSONContent) => {
       await saveEditorContent("practice_entry", section.id, content);
+      window.dispatchEvent(new CustomEvent("tasks-changed"));
     },
     [section.id]
   );

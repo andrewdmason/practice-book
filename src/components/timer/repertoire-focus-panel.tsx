@@ -103,6 +103,14 @@ function PieceDetail({ pieceId }: { pieceId: string }) {
   const [showCompleted, setShowCompleted] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
+  const refreshTasks = useCallback(() => {
+    getPieceFocusData(pieceId).then((data) => {
+      setOpenTasks(data.openTasks);
+      setCompletedTasks(data.completedTasks);
+      setLoaded(true);
+    });
+  }, [pieceId]);
+
   useEffect(() => {
     setLoaded(false);
     const supabase = createClient();
@@ -122,12 +130,14 @@ function PieceDetail({ pieceId }: { pieceId: string }) {
         }
       });
 
-    getPieceFocusData(pieceId).then((data) => {
-      setOpenTasks(data.openTasks);
-      setCompletedTasks(data.completedTasks);
-      setLoaded(true);
-    });
-  }, [pieceId]);
+    refreshTasks();
+  }, [pieceId, refreshTasks]);
+
+  useEffect(() => {
+    const handler = () => refreshTasks();
+    window.addEventListener("tasks-changed", handler);
+    return () => window.removeEventListener("tasks-changed", handler);
+  }, [refreshTasks]);
 
   const handleProgressChange = (taskId: string, progress: number) => {
     if (progress === 4) {
@@ -470,13 +480,23 @@ function CategoryDetail({
 
   const label = TIMER_CATEGORY_LABELS[category] ?? category;
 
-  useEffect(() => {
-    setLoaded(false);
+  const refreshTasks = useCallback(() => {
     getCategoryFocusData(category).then((data) => {
       setTasks(data.tasks);
       setLoaded(true);
     });
   }, [category]);
+
+  useEffect(() => {
+    setLoaded(false);
+    refreshTasks();
+  }, [refreshTasks]);
+
+  useEffect(() => {
+    const handler = () => refreshTasks();
+    window.addEventListener("tasks-changed", handler);
+    return () => window.removeEventListener("tasks-changed", handler);
+  }, [refreshTasks]);
 
   return (
     <Card>
@@ -534,7 +554,7 @@ function PracticeOverview({
   const [allTasks, setAllTasks] = useState<TaskWithPiece[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
+  const refreshData = useCallback(() => {
     Promise.all([getTodaySummary(), getAllOpenTasks()]).then(
       ([summaryData, tasksData]) => {
         setSummary(summaryData);
@@ -542,7 +562,17 @@ function PracticeOverview({
         setLoaded(true);
       }
     );
-  }, [isRunning]);
+  }, []);
+
+  useEffect(() => {
+    refreshData();
+  }, [isRunning, refreshData]);
+
+  useEffect(() => {
+    const handler = () => refreshData();
+    window.addEventListener("tasks-changed", handler);
+    return () => window.removeEventListener("tasks-changed", handler);
+  }, [refreshData]);
 
   const handleProgressChange = (taskId: string, progress: number) => {
     if (progress === 4) {
