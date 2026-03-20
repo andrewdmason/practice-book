@@ -20,6 +20,7 @@ import {
 
 const STORAGE_KEY = "practice-timer-state";
 const ABANDONED_THRESHOLD_MS = 12 * 60 * 60 * 1000; // 12 hours
+const OPTIMISTIC_ID = "__optimistic__";
 
 type PersistedState = {
   sessionId: string;
@@ -37,9 +38,9 @@ type TimerContextValue = {
   sessionElapsedSeconds: number;
   entryElapsedSeconds: number;
   activePieces: Piece[];
-  startTimer: (target: TimerTarget) => Promise<void>;
-  switchTarget: (target: TimerTarget) => Promise<void>;
-  stopTimer: () => Promise<void>;
+  startTimer: (target: TimerTarget) => void;
+  switchTarget: (target: TimerTarget) => void;
+  stopTimer: () => void;
 };
 
 const TimerContext = createContext<TimerContextValue | null>(null);
@@ -70,13 +71,22 @@ export function TimerProvider({
   const [restored, setRestored] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Chain of server operations to ensure ordering
+  const operationChain = useRef<Promise<void>>(Promise.resolve());
+  // Latest confirmed server IDs (updated after each server response)
+  const confirmedIds = useRef<{ sessionId: string; entryId: string } | null>(null);
+
   const isRunning = sessionId !== null;
 
-  // Persist state to localStorage
+  // Persist state to localStorage (skip optimistic placeholder IDs)
   useEffect(() => {
     if (!restored) return;
 
-    if (sessionId && currentEntryId && currentTarget && sessionStartedAt && entryStartedAt) {
+    if (
+      sessionId && sessionId !== OPTIMISTIC_ID &&
+      currentEntryId && currentEntryId !== OPTIMISTIC_ID &&
+      currentTarget && sessionStartedAt && entryStartedAt
+    ) {
       const state: PersistedState = {
         sessionId,
         currentEntryId,
@@ -85,7 +95,7 @@ export function TimerProvider({
         entryStartedAt: entryStartedAt.toISOString(),
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } else {
+    } else if (!sessionId) {
       localStorage.removeItem(STORAGE_KEY);
     }
   }, [sessionId, currentEntryId, currentTarget, sessionStartedAt, entryStartedAt, restored]);
@@ -120,6 +130,7 @@ export function TimerProvider({
         }
 
         // Restore state
+        confirmedIds.current = { sessionId: state.sessionId, entryId: state.currentEntryId };
         setSessionId(state.sessionId);
         setCurrentEntryId(state.currentEntryId);
         setCurrentTarget(state.currentTarget);
@@ -153,51 +164,85 @@ export function TimerProvider({
     }
   }, [isRunning, sessionStartedAt, entryStartedAt]);
 
-  const startTimer = useCallback(async (target: TimerTarget) => {
-    const result = await startSession(target);
-    if ("error" in result) {
-      console.error("Failed to start session:", result.error);
-      return;
-    }
-    const now = new Date(result.startedAt);
-    setSessionId(result.sessionId);
-    setCurrentEntryId(result.entryId);
+  const startTimer = useCallback((target: TimerTarget) => {
+    const now = new Date();
+
+    // Optimistic: update UI immediately
+    setSessionId(OPTIMISTIC_ID);
+    setCurrentEntryId(OPTIMISTIC_ID);
     setCurrentTarget(target);
     setSessionStartedAt(now);
     setEntryStartedAt(now);
+
+    // Chain the server call
+    operationChain.current = operationChain.current.then(async () => {
+      const result = await startSession(target);
+      if ("error" in result) {
+        console.error("Failed to start session:", result.error);
+        confirmedIds.current = null;
+        setSessionId(null);
+        setCurrentEntryId(null);
+        setCurrentTarget(null);
+        setSessionStartedAt(null);
+        setEntryStartedAt(null);
+        return;
+      }
+      confirmedIds.current = { sessionId: result.sessionId, entryId: result.entryId };
+      setSessionId(result.sessionId);
+      setCurrentEntryId(result.entryId);
+    });
   }, []);
 
   const switchTargetFn = useCallback(
-    async (target: TimerTarget) => {
-      if (!sessionId || !currentEntryId) return;
+    (target: TimerTarget) => {
+      const now = new Date();
 
-      const result = await switchEntry(sessionId, currentEntryId, target);
-      if ("error" in result) {
-        console.error("Failed to switch entry:", result.error);
-        return;
-      }
-      setCurrentEntryId(result.entryId);
+      // Optimistic: update UI immediately
       setCurrentTarget(target);
-      setEntryStartedAt(new Date(result.switchedAt));
+      setEntryStartedAt(now);
+      setCurrentEntryId(OPTIMISTIC_ID);
+
+      // Chain the server call (waits for any pending start/switch)
+      operationChain.current = operationChain.current.then(async () => {
+        const ids = confirmedIds.current;
+        if (!ids) return;
+
+        const result = await switchEntry(ids.sessionId, ids.entryId, target);
+        if ("error" in result) {
+          console.error("Failed to switch entry:", result.error);
+          return;
+        }
+        confirmedIds.current = { sessionId: ids.sessionId, entryId: result.entryId };
+        setCurrentEntryId(result.entryId);
+      });
     },
-    [sessionId, currentEntryId]
+    []
   );
 
-  const stopTimerFn = useCallback(async () => {
-    if (!sessionId || !currentEntryId) return;
+  const stopTimerFn = useCallback(() => {
+    // Capture target before clearing for focusedTarget
+    const targetToFocus = currentTarget;
 
-    const result = await stopSession(sessionId, currentEntryId);
-    if ("error" in result) {
-      console.error("Failed to stop session:", result.error);
-      return;
-    }
-    setFocusedTarget(currentTarget);
+    // Optimistic: clear UI immediately
+    setFocusedTarget(targetToFocus);
     setSessionId(null);
     setCurrentEntryId(null);
     setCurrentTarget(null);
     setSessionStartedAt(null);
     setEntryStartedAt(null);
-  }, [sessionId, currentEntryId, currentTarget]);
+
+    // Chain the server call (waits for any pending start/switch)
+    operationChain.current = operationChain.current.then(async () => {
+      const ids = confirmedIds.current;
+      confirmedIds.current = null;
+      if (!ids) return;
+
+      const result = await stopSession(ids.sessionId, ids.entryId);
+      if ("error" in result) {
+        console.error("Failed to stop session:", result.error);
+      }
+    });
+  }, [currentTarget]);
 
   return (
     <TimerContext.Provider
