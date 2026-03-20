@@ -292,7 +292,30 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
 
   if (!hasPracticeSections && visibleLessons.length === 0) return null;
 
-  const serverDayTotal = day.timeSummary.reduce((sum, e) => sum + e.total_seconds, 0);
+  // Compute day total from sections so manual time overrides are included.
+  // For each section with an override, use it; otherwise fall back to timer data.
+  const allSections = [
+    ...(mergedPracticeEntry?.sections ?? []),
+    ...mergedLessons.flatMap((l) => l.sections),
+  ].filter((s) => s.category !== "general");
+  const overriddenKeys = new Set<string>();
+  let serverDayTotal = 0;
+  for (const s of allSections) {
+    if (s.time_override_seconds != null) {
+      const key = `${s.category}:${s.piece_id ?? ""}`;
+      if (!overriddenKeys.has(key)) {
+        overriddenKeys.add(key);
+        serverDayTotal += s.time_override_seconds;
+      }
+    }
+  }
+  // Add timer data for entries that weren't overridden
+  for (const e of day.timeSummary) {
+    const key = `${e.category}:${e.piece_id ?? ""}`;
+    if (!overriddenKeys.has(key)) {
+      serverDayTotal += e.total_seconds;
+    }
+  }
   const liveDelta = isToday && isRunning
     ? Math.max(0, entryElapsedSeconds - initialEntryElapsedRef.current)
     : 0;
