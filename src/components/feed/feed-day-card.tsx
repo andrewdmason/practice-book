@@ -2,7 +2,15 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { JSONContent } from "@tiptap/core";
-import { BookOpenIcon, CalendarIcon } from "lucide-react";
+import { BookOpenIcon, CalendarIcon, MoreHorizontalIcon, Trash2Icon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { deleteLesson } from "@/app/(app)/feed/actions";
 import { FeedSection } from "./feed-section";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { useTimer } from "@/components/timer/timer-context";
@@ -327,6 +335,28 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
               pieces={pieces}
               onOptimisticAdd={(section) => addOptimisticSection(lesson.id, section)}
             />
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="shrink-0 opacity-0 group-hover/header:opacity-100 transition-opacity"
+                  />
+                }
+              >
+                <MoreHorizontalIcon />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => deleteLesson(lesson.id)}
+                >
+                  <Trash2Icon />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <EntryCard
             entry={lesson}

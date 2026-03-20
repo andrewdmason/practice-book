@@ -1,11 +1,18 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, MoreHorizontalIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { ZenModeProvider } from "@/components/layout/zen-mode-context";
 import { FeedSection } from "./feed-section";
 import { AddSectionButton } from "./add-section-button";
+import { deleteLesson } from "@/app/(app)/feed/actions";
 import type { PracticeEntrySection, PieceSuggestion } from "@/lib/types";
 
 type LessonEditorProps = {
@@ -58,6 +65,31 @@ export function LessonEditor({
               existingSections={sections}
               pieces={pieces}
             />
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="shrink-0 opacity-0 group-hover/header:opacity-100 transition-opacity"
+                  />
+                }
+              >
+                <MoreHorizontalIcon />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={async () => {
+                    await deleteLesson(lessonId);
+                    router.back();
+                  }}
+                >
+                  <Trash2Icon />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
             {formatLessonDate(lessonDate)}
