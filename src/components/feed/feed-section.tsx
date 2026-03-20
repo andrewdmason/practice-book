@@ -1,14 +1,21 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { NotebookPenIcon, ClockIcon } from "lucide-react";
+import { NotebookPenIcon, ClockIcon, MoreHorizontalIcon, Trash2Icon } from "lucide-react";
 import type { JSONContent } from "@tiptap/core";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { saveEditorContent } from "@/app/(app)/editor/actions";
-import { updateSectionTime } from "@/app/(app)/feed/actions";
+import { updateSectionTime, deleteSection } from "@/app/(app)/feed/actions";
 import { formatMinutes } from "@/lib/timer-utils";
 import { TimeEditDialog } from "@/components/feed/time-edit-dialog";
 import type { PracticeEntrySection, PieceSuggestion } from "@/lib/types";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -48,6 +55,7 @@ export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, h
   const [isEditorVisible, setIsEditorVisible] = useState(sectionHasContent);
   const [isTimeDialogOpen, setIsTimeDialogOpen] = useState(false);
   const [optimisticTime, setOptimisticTime] = useState<number | null | undefined>(undefined);
+  const [isDeleted, setIsDeleted] = useState(false);
 
   const displayTime = optimisticTime !== undefined ? optimisticTime : timeSeconds;
 
@@ -66,6 +74,11 @@ export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, h
     [section.id]
   );
 
+  const handleDelete = useCallback(() => {
+    setIsDeleted(true);
+    deleteSection(section.id);
+  }, [section.id]);
+
   const handleTimeClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (section.category === "general") return;
@@ -80,6 +93,8 @@ export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, h
     },
     [section.id]
   );
+
+  if (isDeleted) return null;
 
   // Hide piece sections with no time, no content, and not actively being timed —
   // but only on today's entry where sections are auto-created for all active pieces.
@@ -136,6 +151,28 @@ export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, h
               <NotebookPenIcon className="size-3.5" />
             </button>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="shrink-0 opacity-0 group-hover/section:opacity-100 transition-opacity"
+                />
+              }
+            >
+              <MoreHorizontalIcon />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={handleDelete}
+              >
+                <Trash2Icon />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
       {section.category !== "general" && (
