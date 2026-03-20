@@ -65,21 +65,21 @@ export function PieceRow({
               piece={piece}
               collections={collections}
               trigger={
-                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                <DropdownMenuItem onClick={(e) => e.preventDefault()}>
                   <PencilIcon />
                   Edit
                 </DropdownMenuItem>
               }
             />
             {piece.status !== "archived" && (
-              <DropdownMenuItem onSelect={() => setArchiveOpen(true)}>
+              <DropdownMenuItem onClick={() => setArchiveOpen(true)}>
                 <ArchiveIcon />
                 Archive
               </DropdownMenuItem>
             )}
             {piece.status === "archived" && (
               <DropdownMenuItem
-                onSelect={() => updatePieceStatus(piece.id, "active")}
+                onClick={() => updatePieceStatus(piece.id, "active")}
               >
                 <RotateCcwIcon />
                 Reactivate
@@ -87,7 +87,7 @@ export function PieceRow({
             )}
             {piece.status === "upcoming" && (
               <DropdownMenuItem
-                onSelect={() => updatePieceStatus(piece.id, "active")}
+                onClick={() => updatePieceStatus(piece.id, "active")}
               >
                 <ArrowUpIcon />
                 Make Active
@@ -96,7 +96,7 @@ export function PieceRow({
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
-              onSelect={() => deletePiece(piece.id)}
+              onClick={() => deletePiece(piece.id)}
             >
               <Trash2Icon />
               Delete

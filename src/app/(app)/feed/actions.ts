@@ -468,6 +468,63 @@ export async function getFeedPage(
 }
 
 /**
+ * Delete a practice entry section and its associated timer data.
+ */
+export async function deleteSection(sectionId: string): Promise<void> {
+  const supabase = await createClient();
+
+  // Look up section to find its piece_id/category and parent entry
+  const { data: section } = await supabase
+    .from("practice_entry_sections")
+    .select("id, practice_entry_id, piece_id, category")
+    .eq("id", sectionId)
+    .single();
+
+  if (!section) return;
+
+  // Find timer entries for this section's date and category/piece
+  const { data: entry } = await supabase
+    .from("practice_entries")
+    .select("date")
+    .eq("id", section.practice_entry_id)
+    .single();
+
+  if (entry) {
+    // Get sessions for this date
+    const { data: sessions } = await supabase
+      .from("practice_sessions")
+      .select("id")
+      .eq("date", entry.date);
+
+    if (sessions && sessions.length > 0) {
+      const sessionIds = sessions.map((s) => s.id);
+
+      // Delete matching timer entries
+      let timerQuery = supabase
+        .from("timer_entries")
+        .delete()
+        .in("session_id", sessionIds);
+
+      if (section.category === "piece" && section.piece_id) {
+        timerQuery = timerQuery.eq("piece_id", section.piece_id);
+      } else if (section.category !== "piece") {
+        timerQuery = timerQuery.eq("category", section.category).is("piece_id", null);
+      }
+
+      await timerQuery;
+    }
+  }
+
+  // Delete the section itself
+  await supabase
+    .from("practice_entry_sections")
+    .delete()
+    .eq("id", sectionId);
+
+  revalidatePath("/");
+}
+
+/**
  * Update the time override for a practice entry section.
  * Pass null to clear the override and revert to timer-derived time.
  */

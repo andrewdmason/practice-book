@@ -62,7 +62,7 @@ export function CollectionRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              onSelect={() => router.push(`/repertoire/collections/${collection.id}`)}
+              onClick={() => router.push(`/repertoire/collections/${collection.id}`)}
             >
               <ExternalLinkIcon />
               View details
@@ -71,7 +71,7 @@ export function CollectionRow({
             <CollectionFormDialog
               collection={collection}
               trigger={
-                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                <DropdownMenuItem onClick={(e) => e.preventDefault()}>
                   <PencilIcon />
                   Edit
                 </DropdownMenuItem>
@@ -80,7 +80,7 @@ export function CollectionRow({
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
-              onSelect={() => deleteCollection(collection.id)}
+              onClick={() => deleteCollection(collection.id)}
             >
               <Trash2Icon />
               Delete
