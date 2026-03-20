@@ -69,9 +69,9 @@ export default async function PieceDetailPage({
           initialLevel={typedPiece.mastery_level}
         />
 
-        {focusData.tasks.length > 0 && <Separator />}
+        {(focusData.openTasks.length > 0 || focusData.completedTasks.length > 0) && <Separator />}
 
-        <TaskList initialTasks={focusData.tasks} />
+        <TaskList initialTasks={[...focusData.openTasks, ...focusData.completedTasks]} />
 
         <Separator />
 

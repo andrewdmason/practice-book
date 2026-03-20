@@ -36,6 +36,14 @@ export const CustomTaskItem = TaskItem.extend({
           "data-checked": attributes.progress === 4 ? "true" : "false",
         }),
       },
+      note: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute("data-note") || null,
+        renderHTML: (attributes: { note: string | null }) => {
+          if (!attributes.note) return {};
+          return { "data-note": attributes.note };
+        },
+      },
     };
   },
 

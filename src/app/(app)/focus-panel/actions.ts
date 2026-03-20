@@ -12,32 +12,30 @@ import type {
 } from "@/lib/types";
 
 export async function getPieceFocusData(pieceId: string): Promise<{
-  tasks: Task[];
-  mentions: MentionWithSource[];
+  openTasks: Task[];
+  completedTasks: Task[];
 }> {
   const supabase = await createClient();
 
   // Fetch open tasks for this piece
-  const { data: tasks } = await supabase
+  const { data: openTasks } = await supabase
     .from("tasks")
     .select("*")
     .eq("piece_id", pieceId)
     .lt("progress", 4)
     .order("created_at", { ascending: false });
 
-  // Fetch recent mentions for this piece
-  const { data: rawMentions } = await supabase
-    .from("mentions")
+  // Fetch completed tasks for this piece
+  const { data: completedTasks } = await supabase
+    .from("tasks")
     .select("*")
     .eq("piece_id", pieceId)
-    .order("created_at", { ascending: false })
-    .limit(5);
-
-  const mentions = await resolveMentionSources(rawMentions ?? []);
+    .eq("progress", 4)
+    .order("completed_at", { ascending: false });
 
   return {
-    tasks: (tasks ?? []) as Task[],
-    mentions,
+    openTasks: (openTasks ?? []) as Task[],
+    completedTasks: (completedTasks ?? []) as Task[],
   };
 }
 
@@ -208,16 +206,67 @@ function updateTaskProgressInJson(
 export async function updateTaskNote(taskId: string, note: string | null) {
   const supabase = await createClient();
 
-  const { error } = await supabase
+  const { data: task, error } = await supabase
     .from("tasks")
     .update({ note, updated_at: new Date().toISOString() })
-    .eq("id", taskId);
+    .eq("id", taskId)
+    .select("source_type, source_id")
+    .single();
 
   if (error) {
     throw new Error(error.message);
   }
 
+  // Sync the note back into the editor JSON content
+  if (task) {
+    const { data: section } = await supabase
+      .from("practice_entry_sections")
+      .select("content")
+      .eq("id", task.source_id)
+      .single();
+
+    if (section?.content) {
+      const updated = updateTaskNoteInJson(section.content, taskId, note);
+      if (updated) {
+        await supabase
+          .from("practice_entry_sections")
+          .update({ content: updated })
+          .eq("id", task.source_id);
+      }
+    }
+  }
+
   revalidatePath("/");
+}
+
+// Walk TipTap JSON and update the note attribute for a task
+function updateTaskNoteInJson(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  node: any,
+  taskId: string,
+  note: string | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): any {
+  if (!node) return node;
+
+  if (node.type === "taskItem" && node.attrs?.taskId === taskId) {
+    return {
+      ...node,
+      attrs: { ...node.attrs, note },
+    };
+  }
+
+  if (node.content) {
+    return {
+      ...node,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      content: node.content.map((child: any) =>
+        updateTaskNoteInJson(child, taskId, note)
+      ),
+    };
+  }
+
+  return node;
 }
 
 export async function getRepertoireOverview(): Promise<RepertoireOverviewItem[]> {

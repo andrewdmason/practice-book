@@ -78,6 +78,11 @@ function TaskRow({
     const trimmed = noteValue.trim() || null;
     if (trimmed !== task.note) {
       onNoteChange(trimmed);
+      window.dispatchEvent(
+        new CustomEvent("task-note-updated", {
+          detail: { taskId: task.id, note: trimmed },
+        })
+      );
       startTransition(async () => {
         await updateTaskNote(task.id, trimmed);
       });

@@ -223,6 +223,14 @@
 
 .prose-editor .task-item-content {
   flex: 1;
+  min-width: 0;
+}
+
+.prose-editor .task-note-display {
+  margin: 0.125rem 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--muted-foreground);
 }
 
 .prose-editor .task-item-node[data-progress="4"] .task-item-content {
