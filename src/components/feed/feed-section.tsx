@@ -2,8 +2,16 @@
 
 import { useCallback, useState } from "react";
 import { NotebookPenIcon, ClockIcon, MoreHorizontalIcon, Trash2Icon } from "lucide-react";
+import dynamic from "next/dynamic";
 import type { JSONContent } from "@tiptap/core";
-import { RichTextEditor } from "@/components/editor/rich-text-editor";
+
+const RichTextEditor = dynamic(
+  () =>
+    import("@/components/editor/rich-text-editor").then(
+      (m) => m.RichTextEditor
+    ),
+  { ssr: false }
+);
 import { saveEditorContent } from "@/app/(app)/editor/actions";
 import { updateSectionTime, deleteSection } from "@/app/(app)/feed/actions";
 import { formatMinutes } from "@/lib/timer-utils";

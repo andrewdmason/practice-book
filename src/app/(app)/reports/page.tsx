@@ -1,11 +1,18 @@
-import { WeeklyChart } from "@/components/reports/weekly-chart";
-import { PieceBreakdown } from "@/components/reports/piece-breakdown";
+import dynamic from "next/dynamic";
 import { StreakCard } from "@/components/reports/streak-card";
 import {
   getWeeklyPracticeData,
   getPieceBreakdownData,
   getStreakData,
 } from "./actions";
+
+const WeeklyChart = dynamic(() =>
+  import("@/components/reports/weekly-chart").then((m) => m.WeeklyChart)
+);
+
+const PieceBreakdown = dynamic(() =>
+  import("@/components/reports/piece-breakdown").then((m) => m.PieceBreakdown)
+);
 
 export default async function ReportsPage() {
   const [weeklyData, breakdownData, streakData] = await Promise.all([

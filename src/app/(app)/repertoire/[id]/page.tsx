@@ -5,7 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 import { PieceDetailHeader } from "@/components/repertoire/piece-detail-header";
 import { PieceMasteryControl } from "@/components/repertoire/piece-mastery-control";
 import { TaskList } from "@/components/repertoire/task-list";
-import { PieceCumulativeChart } from "@/components/repertoire/piece-cumulative-chart";
+import dynamic from "next/dynamic";
+
+const PieceCumulativeChart = dynamic(() =>
+  import("@/components/repertoire/piece-cumulative-chart").then(
+    (m) => m.PieceCumulativeChart
+  )
+);
 import { MentionFeed } from "@/components/repertoire/mention-feed";
 import { Separator } from "@/components/ui/separator";
 import {

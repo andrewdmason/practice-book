@@ -239,30 +239,52 @@ async function ensureEntryForDate(
 }
 
 /**
- * Get time summary for a specific date.
+ * Get time summary for a specific date (used by other callers).
  */
 async function getTimeSummaryForDate(
   date: string
 ): Promise<TimeSummaryEntry[]> {
-  const supabase = await createClient();
+  const result = await getTimeSummariesForDates([date]);
+  return result.get(date) ?? [];
+}
 
+/**
+ * Batch-fetch time summaries for multiple dates in 3 queries instead of 3N.
+ */
+async function getTimeSummariesForDates(
+  dates: string[]
+): Promise<Map<string, TimeSummaryEntry[]>> {
+  const supabase = await createClient();
+  const result = new Map<string, TimeSummaryEntry[]>();
+  if (dates.length === 0) return result;
+
+  // 1. Fetch all sessions for all dates at once
   const { data: sessions } = await supabase
     .from("practice_sessions")
-    .select("id")
-    .eq("date", date);
+    .select("id, date")
+    .in("date", dates);
 
-  if (!sessions || sessions.length === 0) return [];
+  if (!sessions || sessions.length === 0) {
+    for (const d of dates) result.set(d, []);
+    return result;
+  }
 
   const sessionIds = sessions.map((s) => s.id);
+  const sessionDateMap = new Map<string, string>();
+  for (const s of sessions) sessionDateMap.set(s.id, s.date);
 
+  // 2. Fetch all timer entries for those sessions at once
   const { data: entries } = await supabase
     .from("timer_entries")
-    .select("piece_id, category, started_at, ended_at")
+    .select("session_id, piece_id, category, started_at, ended_at")
     .in("session_id", sessionIds);
 
-  if (!entries || entries.length === 0) return [];
+  if (!entries || entries.length === 0) {
+    for (const d of dates) result.set(d, []);
+    return result;
+  }
 
-  // Get piece names
+  // 3. Fetch all piece names at once
   const pieceIds = [
     ...new Set(entries.filter((e) => e.piece_id).map((e) => e.piece_id!)),
   ];
@@ -277,11 +299,17 @@ async function getTimeSummaryForDate(
     }
   }
 
-  // Group and sum durations
-  const groups = new Map<string, TimeSummaryEntry>();
+  // Group by date, then by piece/category
   const now = Date.now();
+  const dateGroups = new Map<string, Map<string, TimeSummaryEntry>>();
 
   for (const entry of entries) {
+    const date = sessionDateMap.get(entry.session_id);
+    if (!date) continue;
+
+    if (!dateGroups.has(date)) dateGroups.set(date, new Map());
+    const groups = dateGroups.get(date)!;
+
     const key = entry.piece_id ?? entry.category;
     const start = new Date(entry.started_at).getTime();
     const end = entry.ended_at ? new Date(entry.ended_at).getTime() : now;
@@ -302,9 +330,21 @@ async function getTimeSummaryForDate(
     }
   }
 
-  return Array.from(groups.values()).sort(
-    (a, b) => b.total_seconds - a.total_seconds
-  );
+  for (const date of dates) {
+    const groups = dateGroups.get(date);
+    if (!groups) {
+      result.set(date, []);
+    } else {
+      result.set(
+        date,
+        Array.from(groups.values()).sort(
+          (a, b) => b.total_seconds - a.total_seconds
+        )
+      );
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -387,55 +427,89 @@ export async function getFeedPage(
 
   const { data: dateEntries } = await entriesQuery;
 
+  // Batch-fetch all time summaries in one go (3 queries instead of 3*N)
+  const timeSummaryMap = await getTimeSummariesForDates(allDates);
+
+  // Create missing practice entries for dates with timer data but no entry
+  const entriesByDate = new Map<string, typeof dateEntries>();
+  for (const date of allDates) {
+    entriesByDate.set(
+      date,
+      (dateEntries ?? []).filter((e) => e.date === date)
+    );
+  }
+
+  for (const date of allDates) {
+    const timeSummary = timeSummaryMap.get(date) ?? [];
+    const forDate = entriesByDate.get(date) ?? [];
+    const hasPractice = forDate.some((e) => e.type === "practice");
+    if (!hasPractice && timeSummary.length > 0 && typeFilter !== "lesson") {
+      const created = await ensureEntryForDate(date, timeSummary);
+      forDate.push({ ...created, type: "practice" });
+      entriesByDate.set(date, forDate);
+    }
+  }
+
+  // Collect all entry IDs and batch-fetch sections in a single query
+  const allFeedEntries: { id: string; date: string; type: string }[] = [];
+  for (const date of allDates) {
+    for (const e of entriesByDate.get(date) ?? []) {
+      allFeedEntries.push(e);
+    }
+  }
+
+  const allEntryIds = allFeedEntries.map((e) => e.id);
+  const { data: allSections } = allEntryIds.length > 0
+    ? await supabase
+        .from("practice_entry_sections")
+        .select("id, practice_entry_id, piece_id, category, content, sort_order, time_override_seconds, pieces(name, composer)")
+        .in("practice_entry_id", allEntryIds)
+        .order("sort_order")
+    : { data: null };
+
+  // Index sections by entry ID
+  const sectionsByEntryId = new Map<string, typeof allSections>();
+  for (const s of allSections ?? []) {
+    const list = sectionsByEntryId.get(s.practice_entry_id) ?? [];
+    list.push(s);
+    sectionsByEntryId.set(s.practice_entry_id, list);
+  }
+
+  function buildFeedEntry(
+    entry: { id: string; date: string; type: string }
+  ): FeedPracticeEntry {
+    const sections = sectionsByEntryId.get(entry.id) ?? [];
+    return {
+      id: entry.id,
+      date: entry.date,
+      type: entry.type as PracticeEntryType,
+      sections: sections.map((s) => ({
+        id: s.id,
+        practice_entry_id: s.practice_entry_id,
+        piece_id: s.piece_id,
+        category: s.category as EntrySectionCategory,
+        content: s.content,
+        sort_order: s.sort_order,
+        piece_name: (s.pieces as unknown as { name: string; composer: string | null } | null)?.name ?? null,
+        composer: (s.pieces as unknown as { name: string; composer: string | null } | null)?.composer ?? null,
+        time_override_seconds: s.time_override_seconds,
+      })),
+    };
+  }
+
   // Build feed days
   const items: FeedDay[] = [];
 
   for (const date of allDates) {
-    const timeSummary = await getTimeSummaryForDate(date);
-
-    const entriesForDate = (dateEntries ?? []).filter((e) => e.date === date);
-    let practiceEntry = entriesForDate.find((e) => e.type === "practice");
-    const lessonEntries = entriesForDate.filter((e) => e.type === "lesson");
-
-    // For days with timer data but no practice entry, create one with sections
-    if (!practiceEntry && timeSummary.length > 0 && typeFilter !== "lesson") {
-      practiceEntry = { ...(await ensureEntryForDate(date, timeSummary)), type: "practice" };
-    }
-
-    async function buildFeedEntry(
-      entry: { id: string; date: string; type: string }
-    ): Promise<FeedPracticeEntry> {
-      const { data: sections } = await supabase
-        .from("practice_entry_sections")
-        .select("id, practice_entry_id, piece_id, category, content, sort_order, time_override_seconds, pieces(name, composer)")
-        .eq("practice_entry_id", entry.id)
-        .order("sort_order");
-
-      return {
-        id: entry.id,
-        date: entry.date,
-        type: entry.type as PracticeEntryType,
-        sections: (sections ?? []).map((s) => ({
-          id: s.id,
-          practice_entry_id: s.practice_entry_id,
-          piece_id: s.piece_id,
-          category: s.category as EntrySectionCategory,
-          content: s.content,
-          sort_order: s.sort_order,
-          piece_name: (s.pieces as unknown as { name: string; composer: string | null } | null)?.name ?? null,
-          composer: (s.pieces as unknown as { name: string; composer: string | null } | null)?.composer ?? null,
-          time_override_seconds: s.time_override_seconds,
-        })),
-      };
-    }
-
-    const feedPractice = practiceEntry ? await buildFeedEntry(practiceEntry) : null;
-    const feedLessons = await Promise.all(lessonEntries.map(buildFeedEntry));
+    const timeSummary = timeSummaryMap.get(date) ?? [];
+    const forDate = entriesByDate.get(date) ?? [];
+    const practiceEntry = forDate.find((e) => e.type === "practice");
+    const lessonEntries = forDate.filter((e) => e.type === "lesson");
 
     items.push({
       date,
-      practiceEntry: feedPractice,
-      lessons: feedLessons,
+      practiceEntry: practiceEntry ? buildFeedEntry(practiceEntry) : null,
+      lessons: lessonEntries.map(buildFeedEntry),
       timeSummary,
     });
   }

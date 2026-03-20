@@ -11,8 +11,16 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { deleteLesson } from "@/app/(app)/feed/actions";
+import dynamic from "next/dynamic";
 import { FeedSection } from "./feed-section";
-import { RichTextEditor } from "@/components/editor/rich-text-editor";
+
+const RichTextEditor = dynamic(
+  () =>
+    import("@/components/editor/rich-text-editor").then(
+      (m) => m.RichTextEditor
+    ),
+  { ssr: false }
+);
 import { useTimer } from "@/components/timer/timer-context";
 import { localDate } from "@/lib/date-utils";
 import { formatMinutes } from "@/lib/timer-utils";
