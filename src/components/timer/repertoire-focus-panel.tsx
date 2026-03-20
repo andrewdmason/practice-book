@@ -58,9 +58,10 @@ export function RepertoireFocusPanel() {
         };
       }
       setFocusedTarget(target);
-      router.replace(`/?focus=${focusKey}`, { scroll: false });
+      // Use history.replaceState to update URL without triggering server re-render
+      window.history.replaceState(null, "", `/?focus=${focusKey}`);
     },
-    [isRunning, activePieces, setFocusedTarget, router]
+    [isRunning, activePieces, setFocusedTarget]
   );
 
   if (activePieceId) {
