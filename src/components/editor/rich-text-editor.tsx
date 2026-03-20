@@ -25,6 +25,7 @@ type RichTextEditorProps = {
   initialContent?: JSONContent | null;
   pieces: PieceSuggestion[];
   onSave?: (content: JSONContent) => Promise<void>;
+  onDismiss?: () => void;
   placeholder?: string;
   readOnly?: boolean;
 };
@@ -71,6 +72,7 @@ export function RichTextEditor({
   initialContent,
   pieces,
   onSave,
+  onDismiss,
   placeholder: placeholderText = "Start typing...",
   readOnly = false,
 }: RichTextEditorProps) {
@@ -103,6 +105,18 @@ export function RichTextEditor({
           ? "prose-editor cursor-default"
           : "prose-editor focus:outline-none",
       },
+      handleKeyDown: onDismiss
+        ? (_view, event) => {
+            if (event.key === "Backspace" || event.key === "Delete") {
+              const e = _view.state.doc;
+              if (e.textContent.length === 0) {
+                onDismiss();
+                return true;
+              }
+            }
+            return false;
+          }
+        : undefined,
     },
     onUpdate: readOnly
       ? undefined

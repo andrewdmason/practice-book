@@ -229,7 +229,9 @@ export function FooterBar() {
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
                   isActive
-                    ? "bg-primary text-primary-foreground"
+                    ? isRunning
+                      ? "bg-destructive text-destructive-foreground"
+                      : "bg-primary text-primary-foreground"
                     : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                 )}
               >

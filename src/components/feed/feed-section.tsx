@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { MusicIcon, BookOpenIcon, PenLineIcon, MessageSquareIcon, PlusIcon } from "lucide-react";
+import { NotebookPenIcon, ClockIcon } from "lucide-react";
 import type { JSONContent } from "@tiptap/core";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { saveEditorContent } from "@/app/(app)/editor/actions";
 import { updateSectionTime } from "@/app/(app)/feed/actions";
-import { formatElapsed } from "@/lib/timer-utils";
+import { formatMinutes } from "@/lib/timer-utils";
 import { TimeEditDialog } from "@/components/feed/time-edit-dialog";
 import type { PracticeEntrySection, PieceSuggestion } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -17,12 +17,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   general: "General Notes",
 };
 
-const CATEGORY_ICONS: Record<string, typeof MusicIcon> = {
-  piece: MusicIcon,
-  technique: BookOpenIcon,
-  sight_reading: BookOpenIcon,
-  general: PenLineIcon,
-};
 
 function hasContent(content: unknown): boolean {
   if (!content) return false;
@@ -42,19 +36,30 @@ function hasContent(content: unknown): boolean {
 type FeedSectionProps = {
   section: PracticeEntrySection;
   isToday: boolean;
+  isActive?: boolean;
   pieces: PieceSuggestion[];
   timeSeconds?: number;
   hasTimeOverride?: boolean;
   editorContext?: "practice_entry" | "lesson";
 };
 
-export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOverride, editorContext = "practice_entry" }: FeedSectionProps) {
+export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, hasTimeOverride, editorContext = "practice_entry" }: FeedSectionProps) {
   const sectionHasContent = hasContent(section.content);
   const [isEditorVisible, setIsEditorVisible] = useState(sectionHasContent);
   const [isTimeDialogOpen, setIsTimeDialogOpen] = useState(false);
   const [optimisticTime, setOptimisticTime] = useState<number | null | undefined>(undefined);
 
   const displayTime = optimisticTime !== undefined ? optimisticTime : timeSeconds;
+
+  // Hide piece sections with no time, no content, and not actively being timed
+  if (
+    section.category === "piece" &&
+    !sectionHasContent &&
+    (displayTime == null || displayTime <= 0) &&
+    !isActive
+  ) {
+    return null;
+  }
 
   const label =
     section.category === "piece"
@@ -64,7 +69,6 @@ export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOver
   const subtitle =
     section.category === "piece" ? section.composer : null;
 
-  const Icon = CATEGORY_ICONS[section.category] ?? MessageSquareIcon;
 
   const handleSave = useCallback(
     async (content: JSONContent) => {
@@ -88,49 +92,50 @@ export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOver
     [section.id]
   );
 
+  const hideHeader = section.category === "general" && editorContext === "lesson";
+
   return (
     <div className="group/section">
-      <div
-        className={cn(
-          "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors",
-          isEditorVisible && "bg-muted/30"
-        )}
-      >
-        <Icon className="size-4 shrink-0 text-muted-foreground" />
-        <span className="font-medium truncate">{label}</span>
-        {subtitle && (
-          <span className="text-muted-foreground truncate text-xs">
-            {subtitle}
-          </span>
-        )}
-        {!isEditorVisible && (
-          <button
-            type="button"
-            onClick={() => setIsEditorVisible(true)}
-            className="ml-1 shrink-0 opacity-0 group-hover/section:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
-            title="Add notes"
-          >
-            <PlusIcon className="size-3.5" />
-          </button>
-        )}
-        <span
-          className={cn(
-            "ml-auto shrink-0 text-xs tabular-nums",
-            section.category !== "general" && "cursor-pointer hover:text-foreground",
-            hasTimeOverride || optimisticTime !== undefined
-              ? "text-foreground/70"
-              : "text-muted-foreground/50"
-          )}
-          onClick={section.category !== "general" ? handleTimeClick : undefined}
-          title={section.category !== "general" ? "Click to edit time" : undefined}
+      {!hideHeader && (
+        <div
+          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm"
         >
-          {displayTime != null && displayTime > 0
-            ? formatElapsed(displayTime)
-            : !sectionHasContent
-              ? "empty"
-              : null}
-        </span>
-      </div>
+          <span className="font-medium truncate">{label}</span>
+          {subtitle && (
+            <span className="text-muted-foreground truncate text-xs">
+              {subtitle}
+            </span>
+          )}
+          {displayTime != null && displayTime > 0 ? (
+            <span
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs tabular-nums font-medium whitespace-nowrap",
+                isActive
+                  ? "bg-destructive text-destructive-foreground"
+                  : "bg-muted text-muted-foreground",
+                section.category !== "general" && "cursor-pointer"
+              )}
+              onClick={section.category !== "general" ? handleTimeClick : undefined}
+              title={section.category !== "general" ? "Click to edit time" : undefined}
+            >
+              <ClockIcon className="size-3 shrink-0" />
+              {formatMinutes(displayTime)}
+            </span>
+          ) : !sectionHasContent ? (
+            <span className="shrink-0 text-xs text-muted-foreground/50">empty</span>
+          ) : null}
+          {!isEditorVisible && (
+            <button
+              type="button"
+              onClick={() => setIsEditorVisible(true)}
+              className="ml-1 shrink-0 opacity-0 group-hover/section:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+              title="Add notes"
+            >
+              <NotebookPenIcon className="size-3.5" />
+            </button>
+          )}
+        </div>
+      )}
       {section.category !== "general" && (
         <TimeEditDialog
           open={isTimeDialogOpen}
@@ -140,7 +145,7 @@ export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOver
         />
       )}
       {isEditorVisible && (
-        <div className="pl-9 pr-3 pb-1 pt-0.5 prose-editor-compact">
+        <div className="pl-3 pr-3 pb-1 pt-0.5 prose-editor-compact">
           <RichTextEditor
             context={editorContext}
             sourceType="practice_entry"
@@ -148,6 +153,7 @@ export function FeedSection({ section, isToday, pieces, timeSeconds, hasTimeOver
             initialContent={section.content as JSONContent | null}
             pieces={pieces}
             onSave={handleSave}
+            onDismiss={() => setIsEditorVisible(false)}
             placeholder="Write your notes..."
           />
         </div>
