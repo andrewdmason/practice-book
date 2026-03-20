@@ -5,12 +5,14 @@ import { createClient } from "@/lib/supabase/server";
 import { PieceDetailHeader } from "@/components/repertoire/piece-detail-header";
 import { PieceMasteryControl } from "@/components/repertoire/piece-mastery-control";
 import { TaskList } from "@/components/repertoire/task-list";
+import { PieceCumulativeChart } from "@/components/repertoire/piece-cumulative-chart";
 import { MentionFeed } from "@/components/repertoire/mention-feed";
 import { Separator } from "@/components/ui/separator";
 import {
   getPieceFocusData,
   getPieceMentions,
 } from "@/app/(app)/focus-panel/actions";
+import { getPieceCumulativeData } from "@/app/(app)/reports/actions";
 import type { Piece, Collection } from "@/lib/types";
 
 export default async function PieceDetailPage({
@@ -33,7 +35,7 @@ export default async function PieceDetailPage({
 
   const typedPiece = piece as Piece;
 
-  const [collection, focusData, mentionPage] = await Promise.all([
+  const [collection, focusData, mentionPage, cumulativeData] = await Promise.all([
     typedPiece.collection_id
       ? supabase
           .from("collections")
@@ -44,6 +46,7 @@ export default async function PieceDetailPage({
       : Promise.resolve(null),
     getPieceFocusData(id),
     getPieceMentions(id),
+    getPieceCumulativeData(id),
   ]);
 
   async function loadMoreMentions(cursor: string) {
@@ -72,6 +75,10 @@ export default async function PieceDetailPage({
         {focusData.tasks.length > 0 && <Separator />}
 
         <TaskList initialTasks={focusData.tasks} />
+
+        <Separator />
+
+        <PieceCumulativeChart data={cumulativeData} />
 
         <Separator />
 

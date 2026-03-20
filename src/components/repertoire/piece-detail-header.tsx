@@ -98,9 +98,31 @@ export function PieceDetailHeader({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2 mb-1">
-        <StatusBadge status={piece.status} />
-        <MasteryBadge level={piece.mastery_level} />
+      <div className="flex items-center justify-between mb-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={piece.status} />
+          <MasteryBadge level={piece.mastery_level} />
+        </div>
+        {piece.status === "archived" ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleReactivate}
+            disabled={reactivating}
+          >
+            <RotateCcwIcon data-icon="inline-start" />
+            {reactivating ? "Reactivating..." : "Reactivate"}
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setArchiveOpen(true)}
+          >
+            <ArchiveIcon data-icon="inline-start" />
+            Archive
+          </Button>
+        )}
       </div>
       <div className="flex items-start gap-2 mt-2">
         <h2 className="text-2xl font-semibold tracking-tight">{name}</h2>
@@ -131,29 +153,6 @@ export function PieceDetailHeader({
           {notes}
         </p>
       )}
-
-      <div className="mt-4">
-        {piece.status === "archived" ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleReactivate}
-            disabled={reactivating}
-          >
-            <RotateCcwIcon data-icon="inline-start" />
-            {reactivating ? "Reactivating..." : "Reactivate"}
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setArchiveOpen(true)}
-          >
-            <ArchiveIcon data-icon="inline-start" />
-            Archive
-          </Button>
-        )}
-      </div>
 
       <ArchiveDialog
         piece={piece}
