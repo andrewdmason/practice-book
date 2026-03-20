@@ -1,42 +1,22 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { PlusIcon, LibraryIcon } from "lucide-react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  arrayMove,
-} from "@dnd-kit/sortable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PieceFormDialog } from "./piece-form-dialog";
 import { CollectionFormDialog } from "./collection-form-dialog";
-import { PieceRow } from "./piece-row";
-import { SortablePieceRow } from "./sortable-piece-row";
-import { CollectionRow } from "./collection-row";
-import { GettingStaleSection } from "./getting-stale-section";
-import { reorderPieces } from "@/app/(app)/repertoire/actions";
+import { RepertoireTable, type TabValue } from "./repertoire-table";
 import type {
   Piece,
   Collection,
   CollectionWithPieces,
   PieceStatus,
-  PieceWithLastPlayed,
 } from "@/lib/types";
 import { PIECE_STATUS_LABELS } from "@/lib/types";
 
-const TABS: PieceStatus[] = ["active", "upcoming", "archived"];
+const TABS: TabValue[] = ["active", "upcoming", "archived", "all"];
 
 function getStatusCount(
   status: PieceStatus,
@@ -56,66 +36,34 @@ function getStatusCount(
 export function RepertoireList({
   pieces,
   collections,
-  stalePieces = [],
 }: {
   pieces: Piece[];
   collections: CollectionWithPieces[];
-  stalePieces?: PieceWithLastPlayed[];
 }) {
-  const [activeTab, setActiveTab] = useState<PieceStatus>("active");
+  const [activeTab, setActiveTab] = useState<TabValue>("active");
   const allCollections: Collection[] = collections;
-  const hasAnyPieces = pieces.length > 0;
 
-  // For active tab, maintain local order for optimistic drag updates
-  const allActivePieces = [
-    ...pieces.filter((p) => p.collection_id === null && p.status === "active"),
-    ...collections.flatMap((c) =>
-      c.pieces.filter((p) => p.status === "active")
-    ),
-  ].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
-  const [localActiveOrder, setLocalActiveOrder] = useState<string[] | null>(null);
+  // Flatten all pieces (standalone + from collections) for the current tab
+  const allPieces = useMemo(() => {
+    const standalone = pieces.filter((p) => p.collection_id === null);
+    const fromCollections = collections.flatMap((c) => c.pieces);
+    return [...standalone, ...fromCollections];
+  }, [pieces, collections]);
 
-  const standalonePieces = pieces.filter(
-    (p) => p.collection_id === null && p.status === activeTab
-  );
-  const filteredCollections = collections
-    .map((c) => ({
-      collection: c,
-      pieces: c.pieces.filter((p) => p.status === activeTab),
-    }))
-    .filter((c) => c.pieces.length > 0);
-  const totalCount = standalonePieces.length +
-    filteredCollections.reduce((sum, c) => sum + c.pieces.length, 0);
+  const tabPieces = useMemo(() => {
+    if (activeTab === "all") {
+      return allPieces.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    const filtered = allPieces.filter((p) => p.status === activeTab);
+    if (activeTab === "active") {
+      return filtered.sort(
+        (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)
+      );
+    }
+    return filtered.sort((a, b) => a.name.localeCompare(b.name));
+  }, [allPieces, activeTab]);
 
-  // Build the sorted active pieces list (standalone + collection pieces, sorted together)
-  const sortedActivePieces = localActiveOrder
-    ? localActiveOrder
-        .map((id) => allActivePieces.find((p) => p.id === id))
-        .filter(Boolean) as Piece[]
-    : allActivePieces;
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-
-      const currentOrder = localActiveOrder ?? allActivePieces.map((p) => p.id);
-      const oldIndex = currentOrder.indexOf(active.id as string);
-      const newIndex = currentOrder.indexOf(over.id as string);
-      if (oldIndex === -1 || newIndex === -1) return;
-
-      const newOrder = arrayMove(currentOrder, oldIndex, newIndex);
-      setLocalActiveOrder(newOrder);
-      reorderPieces(newOrder);
-    },
-    [localActiveOrder, allActivePieces]
-  );
-
+  const hasAnyPieces = allPieces.length > 0;
   const isActiveTab = activeTab === "active";
 
   return (
@@ -146,7 +94,12 @@ export function RepertoireList({
       {/* Tab bar */}
       <div className="flex gap-1 border-b">
         {TABS.map((tab) => {
-          const count = getStatusCount(tab, pieces, collections);
+          const count =
+            tab === "all"
+              ? allPieces.length
+              : getStatusCount(tab, pieces, collections);
+          const label =
+            tab === "all" ? "All" : PIECE_STATUS_LABELS[tab];
           const isActive = activeTab === tab;
           return (
             <button
@@ -158,7 +111,7 @@ export function RepertoireList({
                   : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
               }`}
             >
-              {PIECE_STATUS_LABELS[tab]}
+              {label}
               {count > 0 && (
                 <Badge
                   variant="secondary"
@@ -172,8 +125,6 @@ export function RepertoireList({
         })}
       </div>
 
-      {activeTab === "active" && <GettingStaleSection stalePieces={stalePieces} />}
-
       {!hasAnyPieces && (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
@@ -182,58 +133,17 @@ export function RepertoireList({
         </Card>
       )}
 
-      {hasAnyPieces && totalCount === 0 && (
-        <p className="text-sm text-muted-foreground py-8 text-center">
-          No {PIECE_STATUS_LABELS[activeTab].toLowerCase()} pieces.
-        </p>
-      )}
-
-      {totalCount > 0 && isActiveTab && (
-        <Card>
-          <CardContent className="px-1 py-2">
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-            >
-              <SortableContext
-                items={sortedActivePieces.map((p) => p.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                {sortedActivePieces.map((piece) => (
-                  <SortablePieceRow
-                    key={piece.id}
-                    piece={piece}
-                    collections={allCollections}
-                  />
-                ))}
-              </SortableContext>
-            </DndContext>
-          </CardContent>
-        </Card>
-      )}
-
-      {totalCount > 0 && !isActiveTab && (
-        <Card>
-          <CardContent className="px-1 py-2">
-            {filteredCollections.map(({ collection, pieces: collPieces }) => (
-              <CollectionRow
-                key={collection.id}
-                collection={collection}
-                pieces={collPieces}
-                allCollections={allCollections}
-              />
-            ))}
-            {standalonePieces.map((piece) => (
-              <PieceRow
-                key={piece.id}
-                piece={piece}
-                collections={allCollections}
-              />
-            ))}
-          </CardContent>
-        </Card>
-      )}
+      <Card className="overflow-visible">
+        <CardContent className="p-0">
+          <RepertoireTable
+            pieces={tabPieces}
+            allPieces={allPieces}
+            collections={allCollections}
+            isActiveTab={isActiveTab}
+            activeTab={activeTab}
+          />
+        </CardContent>
+      </Card>
     </div>
   );
 }

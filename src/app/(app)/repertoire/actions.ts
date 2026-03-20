@@ -26,7 +26,7 @@ export async function createPiece(formData: FormData) {
   const supabase = await createClient();
 
   const name = formData.get("name") as string;
-  const composer = (formData.get("composer") as string) || null;
+  const composer = (formData.get("composer") as string) ?? "";
   const collectionId = (formData.get("collection_id") as string) || null;
   const status = (formData.get("status") as PieceStatus) || "active";
   const masteryLevel =
@@ -68,7 +68,7 @@ export async function updatePiece(id: string, formData: FormData) {
   const supabase = await createClient();
 
   const name = formData.get("name") as string;
-  const composer = (formData.get("composer") as string) || null;
+  const composer = (formData.get("composer") as string) ?? "";
   const collectionId = (formData.get("collection_id") as string) || null;
   const status = (formData.get("status") as PieceStatus) || "active";
   const masteryLevel =
@@ -83,7 +83,7 @@ export async function updatePiece(id: string, formData: FormData) {
     .from("pieces")
     .update({
       name,
-      composer,
+      composer: composer.trim(),
       collection_id: collectionId,
       status,
       mastery_level: masteryLevel,
@@ -140,6 +140,39 @@ export async function updatePieceMastery(id: string, masteryLevel: MasteryLevel)
   const { error } = await supabase
     .from("pieces")
     .update({ mastery_level: masteryLevel })
+    .eq("id", id);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidateRepertoire(id);
+  return { success: true };
+}
+
+export async function updatePieceField(
+  id: string,
+  field: "name" | "composer" | "collection_id",
+  value: string | null
+) {
+  if (field === "name" && (!value || !value.trim())) {
+    return { error: "Name is required" };
+  }
+
+  const supabase = await createClient();
+
+  const dbValue =
+    field === "name" ? value!.trim()
+    : field === "composer" ? (value?.trim() ?? "")
+    : (value?.trim() || null);
+
+  const update: Record<string, string | null> = {
+    [field]: dbValue,
+  };
+
+  const { error } = await supabase
+    .from("pieces")
+    .update(update)
     .eq("id", id);
 
   if (error) {
