@@ -107,11 +107,24 @@ export function PracticeFeed({ initialData, pieces, typeFilter }: PracticeFeedPr
 
   const handleNewLesson = () => {
     const today = localDate();
+    const optimisticId = `optimistic-${Date.now()}`;
     const optimisticLesson: FeedPracticeEntry = {
-      id: `optimistic-${Date.now()}`,
+      id: optimisticId,
       date: today,
       type: "lesson",
-      sections: [],
+      sections: [
+        {
+          id: `${optimisticId}-general`,
+          practice_entry_id: optimisticId,
+          piece_id: null,
+          category: "general",
+          content: null,
+          sort_order: 0,
+          piece_name: null,
+          composer: null,
+          time_override_seconds: null,
+        },
+      ],
     };
 
     // Immediately insert the lesson into the feed

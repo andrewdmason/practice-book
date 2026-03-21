@@ -657,7 +657,14 @@ export async function createLesson(date?: string): Promise<string> {
     throw new Error(error?.message ?? "Failed to create lesson");
   }
 
-  await ensureSections(data.id);
+  // Lessons start with only a general notes section.
+  // Pieces and other categories are added manually by the user.
+  await supabase.from("practice_entry_sections").insert({
+    practice_entry_id: data.id,
+    piece_id: null,
+    category: "general",
+    sort_order: 0,
+  });
 
   revalidatePath("/");
   return data.id;

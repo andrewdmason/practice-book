@@ -60,7 +60,8 @@ type FeedSectionProps = {
 
 export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, hasTimeOverride, editorContext = "practice_entry" }: FeedSectionProps) {
   const sectionHasContent = hasContent(section.content);
-  const [isEditorVisible, setIsEditorVisible] = useState(sectionHasContent);
+  const isLessonGeneral = section.category === "general" && editorContext === "lesson";
+  const [isEditorVisible, setIsEditorVisible] = useState(sectionHasContent || isLessonGeneral);
   const [isTimeDialogOpen, setIsTimeDialogOpen] = useState(false);
   const [optimisticTime, setOptimisticTime] = useState<number | null | undefined>(undefined);
   const [isDeleted, setIsDeleted] = useState(false);
