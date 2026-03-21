@@ -4,6 +4,41 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { localDate } from "@/lib/date-utils";
 import type { TimerTarget, TimerCategory, TimeSummaryEntry, PieceWithLastPlayed } from "@/lib/types";
+import { ensureTodayEntry } from "@/app/(app)/feed/actions";
+
+/**
+ * Ensure a piece section exists in today's practice entry for the given piece.
+ * Called when the timer starts/switches to a piece so the feed can render it.
+ */
+async function ensurePieceSection(pieceId: string) {
+  const supabase = await createClient();
+  const entryId = await ensureTodayEntry();
+
+  const { data: existing } = await supabase
+    .from("practice_entry_sections")
+    .select("id")
+    .eq("practice_entry_id", entryId)
+    .eq("category", "piece")
+    .eq("piece_id", pieceId)
+    .limit(1);
+
+  if (!existing || existing.length === 0) {
+    const { data: maxRow } = await supabase
+      .from("practice_entry_sections")
+      .select("sort_order")
+      .eq("practice_entry_id", entryId)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .single();
+
+    await supabase.from("practice_entry_sections").insert({
+      practice_entry_id: entryId,
+      piece_id: pieceId,
+      category: "piece",
+      sort_order: (maxRow?.sort_order ?? 0) + 1,
+    });
+  }
+}
 
 export async function startSession(target: TimerTarget) {
   const supabase = await createClient();
@@ -33,6 +68,11 @@ export async function startSession(target: TimerTarget) {
 
   if (entryError || !entry) {
     return { error: entryError?.message ?? "Failed to create timer entry" };
+  }
+
+  // Ensure a piece section exists so it renders in the feed
+  if (target.category === "piece" && target.pieceId) {
+    await ensurePieceSection(target.pieceId);
   }
 
   return { sessionId: session.id, entryId: entry.id, startedAt: now };
@@ -68,6 +108,11 @@ export async function switchEntry(
 
   if (entryError || !entry) {
     return { error: entryError?.message ?? "Failed to create timer entry" };
+  }
+
+  // Ensure a piece section exists so it renders in the feed
+  if (newTarget.category === "piece" && newTarget.pieceId) {
+    await ensurePieceSection(newTarget.pieceId);
   }
 
   return { entryId: entry.id, switchedAt: now };
