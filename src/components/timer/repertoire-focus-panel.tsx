@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -350,8 +350,6 @@ function TaskRow({
   onNoteChange: (note: string | null) => void;
   showCompletedDate?: boolean;
 }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
   const [editingNote, setEditingNote] = useState(false);
   const [noteValue, setNoteValue] = useState(task.note ?? "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -364,20 +362,14 @@ function TaskRow({
       newProgress = task.progress === 4 ? 0 : 4;
     }
     onProgressChange(newProgress);
-    startTransition(async () => {
-      await updateTaskProgress(task.id, newProgress);
-      router.refresh();
-    });
+    updateTaskProgress(task.id, newProgress);
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     const newProgress = getNextBounceProgress(task.id, task.progress);
     onProgressChange(newProgress);
-    startTransition(async () => {
-      await updateTaskProgress(task.id, newProgress);
-      router.refresh();
-    });
+    updateTaskProgress(task.id, newProgress);
   };
 
   const handleNoteSave = () => {
@@ -391,9 +383,7 @@ function TaskRow({
           detail: { taskId: task.id, note: trimmed },
         })
       );
-      startTransition(async () => {
-        await updateTaskNote(task.id, trimmed);
-      });
+      updateTaskNote(task.id, trimmed);
     }
   };
 
@@ -410,12 +400,11 @@ function TaskRow({
           type="button"
           onClick={handleClick}
           onContextMenu={handleContextMenu}
-          disabled={isPending}
-          className="mt-0.5 shrink-0 text-primary disabled:opacity-50"
+          className="mt-0.5 shrink-0 text-primary"
         >
           <ProgressCircle progress={task.progress} size={16} />
         </button>
-        <span className={`flex-1 ${task.progress === 4 ? "line-through text-muted-foreground" : ""} ${isPending ? "opacity-50" : ""}`}>
+        <span className={`flex-1 ${task.progress === 4 ? "line-through text-muted-foreground" : ""}`}>
           <TaskTextWithMetronome text={task.text} />
         </span>
         <button
@@ -572,7 +561,6 @@ function PracticeOverview({
   onFocusItem: (focusKey: string) => void;
   activePieces: Piece[];
 }) {
-  const router = useRouter();
   const [summary, setSummary] = useState<TimeSummaryEntry[]>([]);
   const [allTasks, setAllTasks] = useState<TaskWithPiece[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -704,14 +692,8 @@ function PracticeOverview({
                     <TaskRow
                       key={task.id}
                       task={task}
-                      onProgressChange={(progress) => {
-                        handleProgressChange(task.id, progress);
-                        updateTaskProgress(task.id, progress).then(() => router.refresh());
-                      }}
-                      onNoteChange={(note) => {
-                        handleNoteChange(task.id, note);
-                        updateTaskNote(task.id, note);
-                      }}
+                      onProgressChange={(progress) => handleProgressChange(task.id, progress)}
+                      onNoteChange={(note) => handleNoteChange(task.id, note)}
                     />
                   ))}
                 </div>

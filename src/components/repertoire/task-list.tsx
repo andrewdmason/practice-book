@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle2Icon, PencilIcon } from "lucide-react";
 import { ProgressCircle } from "@/components/ui/progress-circle";
 import { updateTaskProgress, updateTaskNote } from "@/app/(app)/focus-panel/actions";
@@ -56,7 +56,6 @@ function TaskRow({
   onProgressChange: (progress: number) => void;
   onNoteChange: (note: string | null) => void;
 }) {
-  const [isPending, startTransition] = useTransition();
   const [editingNote, setEditingNote] = useState(false);
   const [noteValue, setNoteValue] = useState(task.note ?? "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -69,18 +68,14 @@ function TaskRow({
       newProgress = task.progress === 4 ? 0 : 4;
     }
     onProgressChange(newProgress);
-    startTransition(() => {
-      updateTaskProgress(task.id, newProgress);
-    });
+    updateTaskProgress(task.id, newProgress);
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     const newProgress = getNextBounceProgress(task.id, task.progress);
     onProgressChange(newProgress);
-    startTransition(() => {
-      updateTaskProgress(task.id, newProgress);
-    });
+    updateTaskProgress(task.id, newProgress);
   };
 
   const handleNoteSave = () => {
@@ -93,9 +88,7 @@ function TaskRow({
           detail: { taskId: task.id, note: trimmed },
         })
       );
-      startTransition(async () => {
-        await updateTaskNote(task.id, trimmed);
-      });
+      updateTaskNote(task.id, trimmed);
     }
   };
 
@@ -112,13 +105,12 @@ function TaskRow({
           type="button"
           onClick={handleClick}
           onContextMenu={handleContextMenu}
-          disabled={isPending}
-          className="mt-0.5 shrink-0 text-primary disabled:opacity-50"
+          className="mt-0.5 shrink-0 text-primary"
         >
           <ProgressCircle progress={task.progress} size={16} />
         </button>
         <span
-          className={`flex-1 ${task.progress === 4 ? "line-through text-muted-foreground" : ""} ${isPending ? "opacity-50" : ""}`}
+          className={`flex-1 ${task.progress === 4 ? "line-through text-muted-foreground" : ""}`}
         >
           {task.text}
         </span>
