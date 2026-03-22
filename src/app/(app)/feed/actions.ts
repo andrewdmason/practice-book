@@ -180,7 +180,8 @@ export async function addSection(
 
 /**
  * Ensure today's practice entry and sections exist.
- * Creates the entry row and sections for each active piece + technique + sight_reading + general.
+ * Creates fixed-category sections (technique, sight_reading, general) and
+ * piece sections only for pieces with existing timer data.
  */
 export async function ensureTodayEntry(): Promise<string> {
   const supabase = await createClient();
@@ -207,6 +208,17 @@ export async function ensureTodayEntry(): Promise<string> {
   }
 
   if (!entry) throw new Error("Failed to create practice entry");
+
+  // Remove stale empty piece sections left by the old ensureSections behavior.
+  // These have no content and no manual time override, so they're safe to remove.
+  // Sections for pieces with timer data will be recreated below.
+  await supabase
+    .from("practice_entry_sections")
+    .delete()
+    .eq("practice_entry_id", entry.id)
+    .eq("category", "piece")
+    .is("content", null)
+    .is("time_override_seconds", null);
 
   await ensureSections(entry.id);
 
