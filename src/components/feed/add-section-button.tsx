@@ -43,8 +43,16 @@ export function AddSectionButton({
   const hasSightReading = existingSections.some((s) => s.category === "sight_reading");
   const hasGeneral = existingSections.some((s) => s.category === "general");
 
+  // Only exclude pieces whose section has content or a time override.
+  // Empty auto-created sections (hidden in the feed) shouldn't block the dropdown.
   const existingPieceIds = new Set(
-    existingSections.filter((s) => s.category === "piece").map((s) => s.piece_id)
+    existingSections
+      .filter(
+        (s) =>
+          s.category === "piece" &&
+          (s.content != null || s.time_override_seconds != null)
+      )
+      .map((s) => s.piece_id)
   );
 
   const availablePieces = pieces.filter((p) => !existingPieceIds.has(p.id));

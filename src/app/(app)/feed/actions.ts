@@ -148,7 +148,8 @@ export async function addSection(
 
   const { data: existing } = await query;
   if (existing && existing.length > 0) {
-    return { error: "Section already exists" };
+    // Section already exists (possibly hidden/empty) — treat as success
+    return {};
   }
 
   // Get next sort_order
