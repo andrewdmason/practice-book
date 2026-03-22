@@ -13,17 +13,11 @@ import type {
 } from "@/lib/types";
 
 /**
- * Ensure sections exist for a practice entry (technique, sight_reading, general + active pieces).
+ * Ensure fixed-category sections exist for a practice entry (technique, sight_reading, general).
+ * Piece sections are created on-demand when the user adds them or when timer data exists.
  */
 async function ensureSections(entryId: string): Promise<void> {
   const supabase = await createClient();
-
-  // Fetch active pieces
-  const { data: activePieces } = await supabase
-    .from("pieces")
-    .select("id")
-    .eq("status", "active")
-    .order("name");
 
   // Fetch existing sections
   const { data: existingSections } = await supabase
@@ -47,19 +41,7 @@ async function ensureSections(entryId: string): Promise<void> {
 
   let sortOrder = (existingSections ?? []).length;
 
-  // Piece sections
-  for (const piece of activePieces ?? []) {
-    if (!existingKeys.has(`piece:${piece.id}`)) {
-      toInsert.push({
-        practice_entry_id: entryId,
-        piece_id: piece.id,
-        category: "piece",
-        sort_order: sortOrder++,
-      });
-    }
-  }
-
-  // Fixed category sections
+  // Fixed category sections only — piece sections are added on-demand
   const fixedCategories: EntrySectionCategory[] = [
     "technique",
     "sight_reading",
@@ -79,6 +61,66 @@ async function ensureSections(entryId: string): Promise<void> {
   if (toInsert.length > 0) {
     await supabase.from("practice_entry_sections").insert(toInsert);
   }
+}
+
+/**
+ * Create piece sections for any pieces that have timer data today but no section yet.
+ */
+async function ensurePieceSectionsFromTimerData(
+  entryId: string,
+  date: string
+): Promise<void> {
+  const supabase = await createClient();
+
+  // Get today's sessions
+  const { data: sessions } = await supabase
+    .from("practice_sessions")
+    .select("id")
+    .eq("date", date);
+
+  if (!sessions || sessions.length === 0) return;
+
+  // Get piece IDs from timer entries
+  const { data: timerEntries } = await supabase
+    .from("timer_entries")
+    .select("piece_id")
+    .in("session_id", sessions.map((s) => s.id))
+    .not("piece_id", "is", null);
+
+  const timedPieceIds = [...new Set((timerEntries ?? []).map((e) => e.piece_id!))];
+  if (timedPieceIds.length === 0) return;
+
+  // Get existing piece sections
+  const { data: existingSections } = await supabase
+    .from("practice_entry_sections")
+    .select("piece_id")
+    .eq("practice_entry_id", entryId)
+    .eq("category", "piece");
+
+  const existingPieceIds = new Set((existingSections ?? []).map((s) => s.piece_id));
+  const missingPieceIds = timedPieceIds.filter((id) => !existingPieceIds.has(id));
+
+  if (missingPieceIds.length === 0) return;
+
+  // Get max sort_order
+  const { data: maxRow } = await supabase
+    .from("practice_entry_sections")
+    .select("sort_order")
+    .eq("practice_entry_id", entryId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .single();
+
+  let sortOrder = (maxRow?.sort_order ?? 0) + 1;
+
+  await supabase.from("practice_entry_sections").insert(
+    missingPieceIds.map((pieceId) => ({
+      practice_entry_id: entryId,
+      piece_id: pieceId,
+      category: "piece" as EntrySectionCategory,
+      sort_order: sortOrder++,
+    }))
+  );
 }
 
 /**
@@ -106,7 +148,8 @@ export async function addSection(
 
   const { data: existing } = await query;
   if (existing && existing.length > 0) {
-    return { error: "Section already exists" };
+    // Section already exists (possibly hidden/empty) — treat as success
+    return {};
   }
 
   // Get next sort_order
@@ -137,7 +180,8 @@ export async function addSection(
 
 /**
  * Ensure today's practice entry and sections exist.
- * Creates the entry row and sections for each active piece + technique + sight_reading + general.
+ * Creates fixed-category sections (technique, sight_reading, general) and
+ * piece sections only for pieces with existing timer data.
  */
 export async function ensureTodayEntry(): Promise<string> {
   const supabase = await createClient();
@@ -165,7 +209,21 @@ export async function ensureTodayEntry(): Promise<string> {
 
   if (!entry) throw new Error("Failed to create practice entry");
 
+  // Remove stale empty piece sections left by the old ensureSections behavior.
+  // These have no content and no manual time override, so they're safe to remove.
+  // Sections for pieces with timer data will be recreated below.
+  await supabase
+    .from("practice_entry_sections")
+    .delete()
+    .eq("practice_entry_id", entry.id)
+    .eq("category", "piece")
+    .is("content", null)
+    .is("time_override_seconds", null);
+
   await ensureSections(entry.id);
+
+  // Create sections for pieces that have timer data but no section yet
+  await ensurePieceSectionsFromTimerData(entry.id, today);
 
   return entry.id;
 }
@@ -657,7 +715,14 @@ export async function createLesson(date?: string): Promise<string> {
     throw new Error(error?.message ?? "Failed to create lesson");
   }
 
-  await ensureSections(data.id);
+  // Lessons start with only a general notes section.
+  // Pieces and other categories are added manually by the user.
+  await supabase.from("practice_entry_sections").insert({
+    practice_entry_id: data.id,
+    piece_id: null,
+    category: "general",
+    sort_order: 0,
+  });
 
   revalidatePath("/");
   return data.id;

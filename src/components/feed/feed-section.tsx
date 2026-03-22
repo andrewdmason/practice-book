@@ -60,7 +60,8 @@ type FeedSectionProps = {
 
 export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, hasTimeOverride, editorContext = "practice_entry" }: FeedSectionProps) {
   const sectionHasContent = hasContent(section.content);
-  const [isEditorVisible, setIsEditorVisible] = useState(sectionHasContent);
+  const isLessonGeneral = section.category === "general" && editorContext === "lesson";
+  const [isEditorVisible, setIsEditorVisible] = useState(sectionHasContent || isLessonGeneral);
   const [isTimeDialogOpen, setIsTimeDialogOpen] = useState(false);
   const [optimisticTime, setOptimisticTime] = useState<number | null | undefined>(undefined);
   const [isDeleted, setIsDeleted] = useState(false);
@@ -105,12 +106,12 @@ export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, h
 
   if (isDeleted) return null;
 
-  // Hide sections with no time, no content, and not actively being timed —
-  // but only on today's entry where sections are auto-created.
-  // Past entries only have sections for pieces that were practiced or manually added.
+  // Hide auto-created fixed-category sections (technique, sight_reading) when they
+  // have no time, no content, and aren't actively being timed. Piece sections are
+  // always shown since they're only created intentionally (by the user or timer).
   if (
     isToday &&
-    section.category !== "general" &&
+    (section.category === "technique" || section.category === "sight_reading") &&
     !sectionHasContent &&
     (displayTime == null || displayTime <= 0) &&
     !isActive
