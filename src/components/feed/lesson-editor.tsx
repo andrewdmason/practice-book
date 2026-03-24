@@ -101,6 +101,7 @@ export function LessonEditor({
             <FeedSection
               key={section.id}
               section={section}
+              date={lessonDate}
               isToday={true}
               pieces={pieces}
               editorContext="lesson"

@@ -211,15 +211,13 @@ export async function ensureTodayEntry(): Promise<string> {
   if (!entry) throw new Error("Failed to create practice entry");
 
   // Remove stale empty piece sections left by the old ensureSections behavior.
-  // These have no content and no manual time override, so they're safe to remove.
   // Sections for pieces with timer data will be recreated below.
   await supabase
     .from("practice_entry_sections")
     .delete()
     .eq("practice_entry_id", entry.id)
     .eq("category", "piece")
-    .is("content", null)
-    .is("time_override_seconds", null);
+    .is("content", null);
 
   await ensureSections(entry.id);
 
@@ -522,7 +520,7 @@ export async function getFeedPage(
   const { data: allSections } = allEntryIds.length > 0
     ? await supabase
         .from("practice_entry_sections")
-        .select("id, practice_entry_id, piece_id, category, content, sort_order, time_override_seconds, pieces(name, composer)")
+        .select("id, practice_entry_id, piece_id, category, content, sort_order, pieces(name, composer)")
         .in("practice_entry_id", allEntryIds)
         .order("sort_order")
     : { data: null };
@@ -552,7 +550,6 @@ export async function getFeedPage(
         sort_order: s.sort_order,
         piece_name: (s.pieces as unknown as { name: string; composer: string | null } | null)?.name ?? null,
         composer: (s.pieces as unknown as { name: string; composer: string | null } | null)?.composer ?? null,
-        time_override_seconds: s.time_override_seconds,
       })),
     };
   }
@@ -662,18 +659,181 @@ export async function deleteSection(sectionId: string): Promise<void> {
 }
 
 /**
- * Update the time override for a practice entry section.
- * Pass null to clear the override and revert to timer-derived time.
+ * Fetch individual timer entries for a given section (date + category + piece).
  */
-export async function updateSectionTime(
-  sectionId: string,
-  totalSeconds: number | null
+export async function getTimerEntriesForSection(
+  date: string,
+  category: TimerCategory,
+  pieceId: string | null
+): Promise<{ id: string; started_at: string; ended_at: string | null; duration_seconds: number }[]> {
+  const supabase = await createClient();
+
+  const { data: sessions } = await supabase
+    .from("practice_sessions")
+    .select("id")
+    .eq("date", date);
+
+  if (!sessions || sessions.length === 0) return [];
+
+  let query = supabase
+    .from("timer_entries")
+    .select("id, started_at, ended_at")
+    .in("session_id", sessions.map((s) => s.id))
+    .eq("category", category);
+
+  if (category === "piece" && pieceId) {
+    query = query.eq("piece_id", pieceId);
+  } else if (category !== "piece") {
+    query = query.is("piece_id", null);
+  }
+
+  const { data: entries } = await query.order("started_at");
+  if (!entries) return [];
+
+  const now = Date.now();
+  return entries.map((e) => {
+    const start = new Date(e.started_at).getTime();
+    const end = e.ended_at ? new Date(e.ended_at).getTime() : now;
+    return {
+      id: e.id,
+      started_at: e.started_at,
+      ended_at: e.ended_at,
+      duration_seconds: Math.floor((end - start) / 1000),
+    };
+  });
+}
+
+/**
+ * Update a timer entry's duration by recomputing ended_at from started_at + duration.
+ */
+export async function updateTimerEntryDuration(
+  entryId: string,
+  durationSeconds: number
 ): Promise<void> {
   const supabase = await createClient();
+
+  const { data: entry } = await supabase
+    .from("timer_entries")
+    .select("started_at")
+    .eq("id", entryId)
+    .single();
+
+  if (!entry) return;
+
+  const endedAt = new Date(
+    new Date(entry.started_at).getTime() + durationSeconds * 1000
+  ).toISOString();
+
   await supabase
-    .from("practice_entry_sections")
-    .update({ time_override_seconds: totalSeconds })
-    .eq("id", sectionId);
+    .from("timer_entries")
+    .update({ ended_at: endedAt })
+    .eq("id", entryId);
+
+  revalidatePath("/");
+}
+
+/**
+ * Add a manual timer entry for a forgotten practice session.
+ */
+export async function addManualTimerEntry(
+  date: string,
+  category: TimerCategory,
+  pieceId: string | null,
+  durationSeconds: number
+): Promise<{ id: string }> {
+  const supabase = await createClient();
+  const now = new Date().toISOString();
+  const endedAt = new Date(
+    Date.now() + durationSeconds * 1000
+  ).toISOString();
+
+  // Create a closed session for this date
+  const { data: session } = await supabase
+    .from("practice_sessions")
+    .insert({ date, started_at: now, ended_at: now })
+    .select("id")
+    .single();
+
+  if (!session) throw new Error("Failed to create session");
+
+  const { data: entry } = await supabase
+    .from("timer_entries")
+    .insert({
+      session_id: session.id,
+      piece_id: pieceId,
+      category,
+      started_at: now,
+      ended_at: endedAt,
+    })
+    .select("id")
+    .single();
+
+  if (!entry) throw new Error("Failed to create timer entry");
+
+  // Ensure a piece section exists so it renders in the feed
+  if (category === "piece" && pieceId) {
+    const entryId = await ensureTodayEntry();
+    const { data: existing } = await supabase
+      .from("practice_entry_sections")
+      .select("id")
+      .eq("practice_entry_id", entryId)
+      .eq("category", "piece")
+      .eq("piece_id", pieceId)
+      .limit(1);
+
+    if (!existing || existing.length === 0) {
+      const { data: maxRow } = await supabase
+        .from("practice_entry_sections")
+        .select("sort_order")
+        .eq("practice_entry_id", entryId)
+        .order("sort_order", { ascending: false })
+        .limit(1)
+        .single();
+
+      await supabase.from("practice_entry_sections").insert({
+        practice_entry_id: entryId,
+        piece_id: pieceId,
+        category: "piece",
+        sort_order: (maxRow?.sort_order ?? 0) + 1,
+      });
+    }
+  }
+
+  revalidatePath("/");
+  return { id: entry.id };
+}
+
+/**
+ * Delete a timer entry and clean up orphaned sessions.
+ */
+export async function deleteTimerEntry(entryId: string): Promise<void> {
+  const supabase = await createClient();
+
+  // Get the session ID before deleting
+  const { data: entry } = await supabase
+    .from("timer_entries")
+    .select("session_id")
+    .eq("id", entryId)
+    .single();
+
+  if (!entry) return;
+
+  await supabase.from("timer_entries").delete().eq("id", entryId);
+
+  // Clean up orphaned session
+  const { data: remaining } = await supabase
+    .from("timer_entries")
+    .select("id")
+    .eq("session_id", entry.session_id)
+    .limit(1);
+
+  if (!remaining || remaining.length === 0) {
+    await supabase
+      .from("practice_sessions")
+      .delete()
+      .eq("id", entry.session_id);
+  }
+
   revalidatePath("/");
 }
 

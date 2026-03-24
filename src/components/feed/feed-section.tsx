@@ -13,10 +13,10 @@ const RichTextEditor = dynamic(
   { ssr: false }
 );
 import { saveEditorContent } from "@/app/(app)/editor/actions";
-import { updateSectionTime, deleteSection } from "@/app/(app)/feed/actions";
+import { deleteSection } from "@/app/(app)/feed/actions";
 import { formatMinutes } from "@/lib/timer-utils";
-import { TimeEditDialog } from "@/components/feed/time-edit-dialog";
-import type { PracticeEntrySection, PieceSuggestion } from "@/lib/types";
+import { SessionEntriesDialog } from "@/components/feed/session-entries-dialog";
+import type { PracticeEntrySection, PieceSuggestion, TimerCategory } from "@/lib/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,23 +50,22 @@ function hasContent(content: unknown): boolean {
 
 type FeedSectionProps = {
   section: PracticeEntrySection;
+  date: string;
   isToday: boolean;
   isActive?: boolean;
   pieces: PieceSuggestion[];
   timeSeconds?: number;
-  hasTimeOverride?: boolean;
   editorContext?: "practice_entry" | "lesson";
 };
 
-export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, hasTimeOverride, editorContext = "practice_entry" }: FeedSectionProps) {
+export function FeedSection({ section, date, isToday, isActive, pieces, timeSeconds, editorContext = "practice_entry" }: FeedSectionProps) {
   const sectionHasContent = hasContent(section.content);
   const isLessonGeneral = section.category === "general" && editorContext === "lesson";
   const [isEditorVisible, setIsEditorVisible] = useState(sectionHasContent || isLessonGeneral);
   const [isTimeDialogOpen, setIsTimeDialogOpen] = useState(false);
-  const [optimisticTime, setOptimisticTime] = useState<number | null | undefined>(undefined);
   const [isDeleted, setIsDeleted] = useState(false);
 
-  const displayTime = optimisticTime !== undefined ? optimisticTime : timeSeconds;
+  const displayTime = timeSeconds;
 
   const label =
     section.category === "piece"
@@ -94,15 +93,6 @@ export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, h
     if (section.category === "general") return;
     setIsTimeDialogOpen(true);
   };
-
-  const handleTimeSave = useCallback(
-    (seconds: number | null) => {
-      setIsTimeDialogOpen(false);
-      setOptimisticTime(seconds);
-      updateSectionTime(section.id, seconds);
-    },
-    [section.id]
-  );
 
   if (isDeleted) return null;
 
@@ -186,11 +176,13 @@ export function FeedSection({ section, isToday, isActive, pieces, timeSeconds, h
         </div>
       )}
       {section.category !== "general" && (
-        <TimeEditDialog
+        <SessionEntriesDialog
           open={isTimeDialogOpen}
           onOpenChange={setIsTimeDialogOpen}
-          timeSeconds={displayTime ?? undefined}
-          onSave={handleTimeSave}
+          date={date}
+          category={section.category as TimerCategory}
+          pieceId={section.piece_id}
+          label={label}
         />
       )}
       {isEditorVisible && (
