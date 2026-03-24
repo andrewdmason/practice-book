@@ -122,7 +122,6 @@ export function PracticeFeed({ initialData, pieces, typeFilter }: PracticeFeedPr
           sort_order: 0,
           piece_name: null,
           composer: null,
-          time_override_seconds: null,
         },
       ],
     };

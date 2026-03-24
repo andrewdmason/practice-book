@@ -203,17 +203,17 @@ function EntryCard({
   return (
     <div className="px-1 py-2 text-sm">
       {sortedSections.map((section) => {
-        const serverTime = section.time_override_seconds ?? getSectionTime(section, timeSummary);
+        const serverTime = getSectionTime(section, timeSummary);
         const isActiveSection = isToday && isRunning && sectionMatchesTarget(section, currentTarget);
         return (
           <FeedSection
             key={section.id}
             section={section}
+            date={entry.date}
             isToday={isToday}
             isActive={isActiveSection}
             pieces={pieces}
             timeSeconds={isActiveSection ? serverTime + liveDelta : serverTime}
-            hasTimeOverride={section.time_override_seconds != null}
             editorContext={entry.type === "lesson" ? "lesson" : "practice_entry"}
           />
         );
@@ -293,29 +293,10 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
 
   if (!hasPracticeSections && visibleLessons.length === 0) return null;
 
-  // Compute day total from sections so manual time overrides are included.
-  // For each section with an override, use it; otherwise fall back to timer data.
-  const allSections = [
-    ...(mergedPracticeEntry?.sections ?? []),
-    ...mergedLessons.flatMap((l) => l.sections),
-  ].filter((s) => s.category !== "general");
-  const overriddenKeys = new Set<string>();
+  // Compute day total from timer data (single source of truth).
   let serverDayTotal = 0;
-  for (const s of allSections) {
-    if (s.time_override_seconds != null) {
-      const key = `${s.category}:${s.piece_id ?? ""}`;
-      if (!overriddenKeys.has(key)) {
-        overriddenKeys.add(key);
-        serverDayTotal += s.time_override_seconds;
-      }
-    }
-  }
-  // Add timer data for entries that weren't overridden
   for (const e of day.timeSummary) {
-    const key = `${e.category}:${e.piece_id ?? ""}`;
-    if (!overriddenKeys.has(key)) {
-      serverDayTotal += e.total_seconds;
-    }
+    serverDayTotal += e.total_seconds;
   }
   const liveDelta = isToday && isRunning
     ? Math.max(0, entryElapsedSeconds - initialEntryElapsedRef.current)
