@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { localDate } from "@/lib/date-utils";
+import { localDate, getUserTimezone } from "@/lib/date-utils";
 import type { TimerTarget, TimerCategory, TimeSummaryEntry, PieceWithLastPlayed } from "@/lib/types";
 import { ensureTodayEntry } from "@/app/(app)/feed/actions";
 
@@ -43,7 +43,8 @@ async function ensurePieceSection(pieceId: string) {
 export async function startSession(target: TimerTarget) {
   const supabase = await createClient();
   const now = new Date().toISOString();
-  const today = localDate();
+  const tz = await getUserTimezone();
+  const today = localDate(new Date(), tz);
 
   const { data: session, error: sessionError } = await supabase
     .from("practice_sessions")
@@ -163,7 +164,8 @@ export async function verifySession(sessionId: string) {
 
 export async function getTodaySummary(): Promise<TimeSummaryEntry[]> {
   const supabase = await createClient();
-  const today = localDate();
+  const tz = await getUserTimezone();
+  const today = localDate(new Date(), tz);
 
   const { data: sessions } = await supabase
     .from("practice_sessions")

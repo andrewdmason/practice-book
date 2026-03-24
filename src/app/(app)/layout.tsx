@@ -3,6 +3,7 @@ import { FooterBar } from "@/components/layout/footer-bar";
 import { TimerProvider } from "@/components/timer/timer-context";
 import { MetronomeProvider } from "@/components/metronome/metronome-context";
 import { SearchProvider } from "@/components/search/search-provider";
+import { TimezoneProvider } from "@/components/timezone-provider";
 import { createClient } from "@/lib/supabase/server";
 import type { Piece } from "@/lib/types";
 
@@ -22,6 +23,7 @@ export default async function AppLayout({
   return (
     <SearchProvider>
       <MetronomeProvider>
+        <TimezoneProvider />
         <div className="flex min-h-full flex-1 flex-col">
           <Header />
           <TimerProvider activePieces={(activePieces as Piece[]) ?? []}>
