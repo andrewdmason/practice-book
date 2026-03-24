@@ -132,16 +132,25 @@ export function SessionEntriesDialog({
     deleteTimerEntry(entryId);
   };
 
-  const handleAdd = async () => {
-    const result = await addManualTimerEntry(date, category, pieceId, 0);
+  const handleAdd = () => {
+    const optimisticId = `optimistic-${Date.now()}`;
+    const now = new Date().toISOString();
     const newEntry: TimerEntryRow = {
-      id: result.id,
-      started_at: new Date().toISOString(),
-      ended_at: new Date().toISOString(),
+      id: optimisticId,
+      started_at: now,
+      ended_at: now,
       duration_seconds: 0,
     };
     setEntries((prev) => [...prev, newEntry]);
-    setFocusNewId(result.id);
+    setFocusNewId(optimisticId);
+
+    // Replace optimistic ID with real server ID once created
+    addManualTimerEntry(date, category, pieceId, 0).then((result) => {
+      setEntries((prev) =>
+        prev.map((e) => (e.id === optimisticId ? { ...e, id: result.id } : e))
+      );
+      if (focusNewId === optimisticId) setFocusNewId(result.id);
+    });
   };
 
   return (
