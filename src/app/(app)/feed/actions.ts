@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { localDate } from "@/lib/date-utils";
+import { localDate, getUserTimezone } from "@/lib/date-utils";
 import type {
   TimerCategory,
   TimeSummaryEntry,
@@ -185,7 +185,8 @@ export async function addSection(
  */
 export async function ensureTodayEntry(): Promise<string> {
   const supabase = await createClient();
-  const today = localDate();
+  const tz = await getUserTimezone();
+  const today = localDate(new Date(), tz);
 
   // Get or create today's practice entry
   // Use .limit(1) instead of .single() to avoid errors when duplicate rows exist
@@ -416,7 +417,8 @@ export async function getFeedPage(
   const supabase = await createClient();
 
   // Get distinct dates that have practice entries, lessons, or timer sessions
-  const today = localDate();
+  const tz = await getUserTimezone();
+  const today = localDate(new Date(), tz);
   const beforeDate = cursor ?? today;
 
   // Fetch all entries (practice + lesson) for the date range
@@ -703,7 +705,8 @@ export async function deleteLesson(lessonId: string): Promise<void> {
  */
 export async function createLesson(date?: string): Promise<string> {
   const supabase = await createClient();
-  const lessonDate = date ?? localDate();
+  const tz = await getUserTimezone();
+  const lessonDate = date ?? localDate(new Date(), tz);
 
   const { data, error } = await supabase
     .from("practice_entries")
