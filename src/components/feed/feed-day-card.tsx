@@ -26,7 +26,7 @@ import { localDate } from "@/lib/date-utils";
 import { formatMinutes } from "@/lib/timer-utils";
 import { saveEditorContent } from "@/app/(app)/editor/actions";
 import { AddSectionButton } from "./add-section-button";
-import type { FeedDay, FeedPracticeEntry, PieceSuggestion, PracticeEntrySection, TimeSummaryEntry, TimerTarget } from "@/lib/types";
+import type { FeedDay, FeedPracticeEntry, LessonTimeSummary, PieceSuggestion, PracticeEntrySection, TimeSummaryEntry, TimerTarget } from "@/lib/types";
 
 function formatDateHeader(dateStr: string): string {
   const today = localDate();
@@ -184,12 +184,14 @@ function EntryCard({
   isToday,
   pieces,
   timeSummary,
+  lessonTimeSummary,
   focusKey,
 }: {
   entry: FeedPracticeEntry;
   isToday: boolean;
   pieces: PieceSuggestion[];
   timeSummary: TimeSummaryEntry[];
+  lessonTimeSummary?: LessonTimeSummary;
   focusKey?: string | null;
 }) {
   const { isRunning, currentTarget, entryElapsedSeconds } = useTimer();
@@ -198,6 +200,7 @@ function EntryCard({
   const sortedSections = filterAndSortSections(entry, focusKey);
   if (sortedSections.length === 0) return null;
 
+  const isLesson = entry.type === "lesson";
   const liveDelta = isRunning
     ? Math.max(0, entryElapsedSeconds - initialEntryElapsedRef.current)
     : 0;
@@ -207,6 +210,15 @@ function EntryCard({
       {sortedSections.map((section) => {
         const serverTime = getSectionTime(section, timeSummary);
         const isActiveSection = isToday && isRunning && sectionMatchesTarget(section, currentTarget);
+
+        // For lessons, compute "since last lesson" stats per section
+        const sinceLastLessonSeconds = isLesson && lessonTimeSummary
+          ? getSectionTime(section, lessonTimeSummary.entries)
+          : undefined;
+        const sinceLastLessonSecondsPerDay = isLesson && lessonTimeSummary && sinceLastLessonSeconds && lessonTimeSummary.dayCount > 0
+          ? Math.round(sinceLastLessonSeconds / lessonTimeSummary.dayCount)
+          : undefined;
+
         return (
           <FeedSection
             key={section.id}
@@ -215,8 +227,10 @@ function EntryCard({
             isToday={isToday}
             isActive={isActiveSection}
             pieces={pieces}
-            timeSeconds={isActiveSection ? serverTime + liveDelta : serverTime}
-            editorContext={entry.type === "lesson" ? "lesson" : "practice_entry"}
+            timeSeconds={isLesson ? undefined : (isActiveSection ? serverTime + liveDelta : serverTime)}
+            sinceLastLessonSeconds={sinceLastLessonSeconds}
+            sinceLastLessonSecondsPerDay={sinceLastLessonSecondsPerDay}
+            editorContext={isLesson ? "lesson" : "practice_entry"}
           />
         );
       })}
@@ -309,11 +323,24 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
     <div className="space-y-3">
       {/* Lesson entries — rendered above the date header */}
       {visibleLessons.map((lesson) => {
+        const lessonSummary = day.lessonTimeSummaries?.[lesson.id];
         return (
         <div key={lesson.id} className="space-y-3 rounded-lg border bg-accent/40 p-3 -mx-1">
           <div className="group/header flex items-center gap-2">
             <BookOpenIcon className="size-4 text-muted-foreground" />
             <h3 className="font-serif text-lg font-semibold">Lesson &middot; {formatDateHeader(day.date)}</h3>
+            {lessonSummary && lessonSummary.totalSeconds > 0 && (
+              <>
+                <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs tabular-nums font-medium">
+                  {formatMinutes(lessonSummary.totalSeconds)}
+                </span>
+                {lessonSummary.dayCount > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs tabular-nums font-medium">
+                    {formatMinutes(Math.round(lessonSummary.totalSeconds / lessonSummary.dayCount))}/day
+                  </span>
+                )}
+              </>
+            )}
             <AddSectionButton
               entryId={lesson.id}
               existingSections={lesson.sections}
@@ -347,7 +374,8 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
             entry={lesson}
             isToday={isToday}
             pieces={pieces}
-            timeSummary={day.timeSummary}
+            timeSummary={[]}
+            lessonTimeSummary={lessonSummary}
             focusKey={focusKey}
           />
         </div>
