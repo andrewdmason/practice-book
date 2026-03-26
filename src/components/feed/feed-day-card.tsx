@@ -101,7 +101,7 @@ function filterAndSortSections(
   });
 
   return [...unique].sort((a, b) => {
-    const order: Record<string, number> = { technique: 0, sight_reading: 1, piece: 2, general: 3 };
+    const order: Record<string, number> = { general: -1, technique: 0, sight_reading: 1, piece: 2 };
     return (order[a.category] ?? 2) - (order[b.category] ?? 2);
   });
 }
