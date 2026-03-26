@@ -60,6 +60,12 @@ export type TimeSummaryEntry = {
   total_seconds: number;
 };
 
+export type LessonTimeSummary = {
+  entries: TimeSummaryEntry[];
+  totalSeconds: number;
+  dayCount: number;
+};
+
 // Composite types for views
 export type CollectionWithPieces = Collection & {
   pieces: Piece[];
@@ -234,4 +240,5 @@ export type FeedDay = {
   practiceEntry: FeedPracticeEntry | null;
   lessons: FeedPracticeEntry[];
   timeSummary: TimeSummaryEntry[];
+  lessonTimeSummaries?: Record<string, LessonTimeSummary>;
 };

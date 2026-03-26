@@ -6,6 +6,7 @@ import { localDate, getUserTimezone } from "@/lib/date-utils";
 import type {
   TimerCategory,
   TimeSummaryEntry,
+  LessonTimeSummary,
   FeedDay,
   FeedPracticeEntry,
   EntrySectionCategory,
@@ -405,6 +406,88 @@ async function getTimeSummariesForDates(
 }
 
 /**
+ * Aggregate time summaries across a date range (inclusive on both ends).
+ * Returns a single set of TimeSummaryEntry[] plus the count of distinct practice days.
+ */
+async function getTimeSummaryForDateRange(
+  startDate: string,
+  endDate: string
+): Promise<LessonTimeSummary> {
+  const supabase = await createClient();
+
+  const { data: sessions } = await supabase
+    .from("practice_sessions")
+    .select("id, date")
+    .gte("date", startDate)
+    .lte("date", endDate);
+
+  if (!sessions || sessions.length === 0) {
+    return { entries: [], totalSeconds: 0, dayCount: 0 };
+  }
+
+  const sessionIds = sessions.map((s) => s.id);
+  const distinctDates = new Set(sessions.map((s) => s.date));
+
+  const { data: entries } = await supabase
+    .from("timer_entries")
+    .select("session_id, piece_id, category, started_at, ended_at")
+    .in("session_id", sessionIds);
+
+  if (!entries || entries.length === 0) {
+    return { entries: [], totalSeconds: 0, dayCount: distinctDates.size };
+  }
+
+  const pieceIds = [
+    ...new Set(entries.filter((e) => e.piece_id).map((e) => e.piece_id!)),
+  ];
+  let pieceNames: Record<string, string> = {};
+  if (pieceIds.length > 0) {
+    const { data: pieces } = await supabase
+      .from("pieces")
+      .select("id, name")
+      .in("id", pieceIds);
+    if (pieces) {
+      pieceNames = Object.fromEntries(pieces.map((p) => [p.id, p.name]));
+    }
+  }
+
+  const now = Date.now();
+  const groups = new Map<string, TimeSummaryEntry>();
+
+  for (const entry of entries) {
+    const key = entry.piece_id ?? entry.category;
+    const start = new Date(entry.started_at).getTime();
+    const end = entry.ended_at ? new Date(entry.ended_at).getTime() : now;
+    const seconds = Math.floor((end - start) / 1000);
+
+    const existing = groups.get(key);
+    if (existing) {
+      existing.total_seconds += seconds;
+    } else {
+      groups.set(key, {
+        category: entry.category as TimerCategory,
+        piece_id: entry.piece_id,
+        piece_name: entry.piece_id
+          ? (pieceNames[entry.piece_id] ?? null)
+          : null,
+        total_seconds: seconds,
+      });
+    }
+  }
+
+  const summaryEntries = Array.from(groups.values()).sort(
+    (a, b) => b.total_seconds - a.total_seconds
+  );
+  const totalSeconds = summaryEntries.reduce((sum, e) => sum + e.total_seconds, 0);
+
+  return {
+    entries: summaryEntries,
+    totalSeconds,
+    dayCount: distinctDates.size,
+  };
+}
+
+/**
  * Fetch a page of feed data, cursor-based by date descending.
  */
 export async function getFeedPage(
@@ -569,6 +652,52 @@ export async function getFeedPage(
       lessons: lessonEntries.map(buildFeedEntry),
       timeSummary,
     });
+  }
+
+  // Compute "practice since last lesson" summaries for each lesson on this page
+  const allLessonsOnPage = items.flatMap((item) => item.lessons);
+  if (allLessonsOnPage.length > 0) {
+    // Fetch all lesson dates globally to find predecessors
+    const { data: allLessonDates } = await supabase
+      .from("practice_entries")
+      .select("id, date")
+      .eq("type", "lesson")
+      .order("date", { ascending: false });
+
+    const lessonDateList = (allLessonDates ?? []).map((l) => ({ id: l.id, date: l.date }));
+
+    for (const item of items) {
+      if (item.lessons.length === 0) continue;
+      const summaries: Record<string, LessonTimeSummary> = {};
+
+      for (const lesson of item.lessons) {
+        // Find previous lesson date
+        const idx = lessonDateList.findIndex((l) => l.id === lesson.id);
+        const prevLesson = idx >= 0 && idx + 1 < lessonDateList.length
+          ? lessonDateList[idx + 1]
+          : null;
+
+        // Range: day after previous lesson through this lesson's date
+        let startDate: string;
+        if (prevLesson) {
+          const d = new Date(prevLesson.date + "T12:00:00");
+          d.setDate(d.getDate() + 1);
+          startDate = d.toISOString().slice(0, 10);
+        } else {
+          // No previous lesson — use earliest practice session date
+          const { data: earliest } = await supabase
+            .from("practice_sessions")
+            .select("date")
+            .order("date", { ascending: true })
+            .limit(1);
+          startDate = earliest?.[0]?.date ?? lesson.date;
+        }
+
+        summaries[lesson.id] = await getTimeSummaryForDateRange(startDate, lesson.date);
+      }
+
+      item.lessonTimeSummaries = summaries;
+    }
   }
 
   // Determine next cursor

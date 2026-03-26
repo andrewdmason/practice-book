@@ -55,10 +55,12 @@ type FeedSectionProps = {
   isActive?: boolean;
   pieces: PieceSuggestion[];
   timeSeconds?: number;
+  sinceLastLessonSeconds?: number;
+  sinceLastLessonSecondsPerDay?: number;
   editorContext?: "practice_entry" | "lesson";
 };
 
-export function FeedSection({ section, date, isToday, isActive, pieces, timeSeconds, editorContext = "practice_entry" }: FeedSectionProps) {
+export function FeedSection({ section, date, isToday, isActive, pieces, timeSeconds, sinceLastLessonSeconds, sinceLastLessonSecondsPerDay, editorContext = "practice_entry" }: FeedSectionProps) {
   const sectionHasContent = hasContent(section.content);
   const isLessonGeneral = section.category === "general" && editorContext === "lesson";
   const [isEditorVisible, setIsEditorVisible] = useState(sectionHasContent || isLessonGeneral);
@@ -123,7 +125,23 @@ export function FeedSection({ section, date, isToday, isActive, pieces, timeSeco
               {subtitle}
             </span>
           )}
-          {displayTime != null && displayTime > 0 ? (
+          {editorContext === "lesson" ? (
+            sinceLastLessonSeconds != null && sinceLastLessonSeconds > 0 ? (
+              <>
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs tabular-nums font-medium whitespace-nowrap">
+                  <ClockIcon className="size-3 shrink-0" />
+                  {formatMinutes(sinceLastLessonSeconds)}
+                </span>
+                {sinceLastLessonSecondsPerDay != null && sinceLastLessonSecondsPerDay > 0 && (
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs tabular-nums font-medium whitespace-nowrap">
+                    {formatMinutes(sinceLastLessonSecondsPerDay)}/day
+                  </span>
+                )}
+              </>
+            ) : !sectionHasContent ? (
+              <span className="shrink-0 text-xs text-muted-foreground/50">empty</span>
+            ) : null
+          ) : displayTime != null && displayTime > 0 ? (
             <span
               className={cn(
                 "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs tabular-nums font-medium whitespace-nowrap",
