@@ -339,6 +339,9 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
                     {formatMinutes(Math.round(lessonSummary.totalSeconds / lessonSummary.dayCount))}/day
                   </span>
                 )}
+                <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs tabular-nums font-medium">
+                  Practiced {lessonSummary.dayCount} of {lessonSummary.calendarDays} days
+                </span>
               </>
             )}
             <AddSectionButton
