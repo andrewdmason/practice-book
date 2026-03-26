@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { supabaseUrl, supabaseAnonKey } from "@/lib/supabase/config";
 
 // Local Supabase well-known service role key (never used in production)
 const SERVICE_ROLE_KEY =
@@ -19,8 +20,6 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 
   // Use admin client to create/get user and generate a link
   const admin = createClient(supabaseUrl, SERVICE_ROLE_KEY, {
@@ -67,7 +66,7 @@ export async function GET(request: Request) {
   const cookieStore = await cookies();
   const supabase = createServerClient(
     supabaseUrl,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
