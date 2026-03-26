@@ -77,6 +77,8 @@ function filterAndSortSections(
   const allSections = entry.sections;
   const filtered = focusKey
     ? allSections.filter((section) => {
+        // For lessons, always keep general sections (lesson notes)
+        if (entry.type === "lesson" && section.category === "general") return true;
         if (focusKey === "technique") return section.category === "technique";
         if (focusKey === "sight_reading") return section.category === "sight_reading";
         return section.piece_id === focusKey;
