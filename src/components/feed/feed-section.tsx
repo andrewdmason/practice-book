@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { NotebookPenIcon, ClockIcon, MoreHorizontalIcon, Trash2Icon } from "lucide-react";
+import { NotebookPenIcon, ClockIcon, MoreHorizontalIcon, Trash2Icon, MusicIcon, PencilIcon, EyeIcon } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { JSONContent } from "@tiptap/core";
 
@@ -30,6 +30,12 @@ const CATEGORY_LABELS: Record<string, string> = {
   technique: "Technique",
   sight_reading: "Sight Reading",
   general: "General Notes",
+};
+
+const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  piece: MusicIcon,
+  technique: PencilIcon,
+  sight_reading: EyeIcon,
 };
 
 
@@ -77,6 +83,8 @@ export function FeedSection({ section, date, isToday, isActive, pieces, timeSeco
   const subtitle =
     section.category === "piece" ? section.composer : null;
 
+  const SectionIcon = CATEGORY_ICONS[section.category] ?? null;
+
   const handleSave = useCallback(
     async (content: JSONContent) => {
       await saveEditorContent("practice_entry", section.id, content);
@@ -101,7 +109,9 @@ export function FeedSection({ section, date, isToday, isActive, pieces, timeSeco
   // Hide auto-created fixed-category sections (technique, sight_reading) when they
   // have no time, no content, and aren't actively being timed. Piece sections are
   // always shown since they're only created intentionally (by the user or timer).
+  // Lesson sections are always shown — they're manually added via the + button.
   if (
+    editorContext !== "lesson" &&
     isToday &&
     (section.category === "technique" || section.category === "sight_reading") &&
     !sectionHasContent &&
@@ -119,6 +129,7 @@ export function FeedSection({ section, date, isToday, isActive, pieces, timeSeco
         <div
           className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm"
         >
+          {SectionIcon && <SectionIcon className="size-3.5 shrink-0 text-muted-foreground" />}
           <span className="font-medium truncate">{label}</span>
           {subtitle && (
             <span className="text-muted-foreground truncate text-xs">
