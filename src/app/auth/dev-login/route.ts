@@ -13,6 +13,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Not available" }, { status: 403 });
   }
 
+  if (process.env.NEXT_PUBLIC_SUPABASE_ENV === "production") {
+    return NextResponse.json(
+      { error: "Dev login is not available when using production Supabase. Use the normal login flow." },
+      { status: 403 }
+    );
+  }
+
   const email = process.env.AUTHORIZED_EMAIL;
   if (!email) {
     return NextResponse.json(
