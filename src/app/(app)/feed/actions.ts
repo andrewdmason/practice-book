@@ -415,6 +415,11 @@ async function getTimeSummaryForDateRange(
 ): Promise<LessonTimeSummary> {
   const supabase = await createClient();
 
+  // Calendar days in range (inclusive on both ends)
+  const startMs = new Date(startDate + "T12:00:00").getTime();
+  const endMs = new Date(endDate + "T12:00:00").getTime();
+  const calendarDays = Math.max(1, Math.round((endMs - startMs) / 86400000) + 1);
+
   const { data: sessions } = await supabase
     .from("practice_sessions")
     .select("id, date")
@@ -422,7 +427,7 @@ async function getTimeSummaryForDateRange(
     .lte("date", endDate);
 
   if (!sessions || sessions.length === 0) {
-    return { entries: [], totalSeconds: 0, dayCount: 0 };
+    return { entries: [], totalSeconds: 0, dayCount: 0, calendarDays };
   }
 
   const sessionIds = sessions.map((s) => s.id);
@@ -434,7 +439,7 @@ async function getTimeSummaryForDateRange(
     .in("session_id", sessionIds);
 
   if (!entries || entries.length === 0) {
-    return { entries: [], totalSeconds: 0, dayCount: distinctDates.size };
+    return { entries: [], totalSeconds: 0, dayCount: distinctDates.size, calendarDays };
   }
 
   const pieceIds = [
@@ -484,6 +489,7 @@ async function getTimeSummaryForDateRange(
     entries: summaryEntries,
     totalSeconds,
     dayCount: distinctDates.size,
+    calendarDays,
   };
 }
 

@@ -64,6 +64,7 @@ export type LessonTimeSummary = {
   entries: TimeSummaryEntry[];
   totalSeconds: number;
   dayCount: number;
+  calendarDays: number;
 };
 
 // Composite types for views
