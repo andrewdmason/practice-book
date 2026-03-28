@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { MinusIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +14,42 @@ import { cn } from "@/lib/utils";
 export function MetronomeControl() {
   const { bpm, setBpm, isActive, toggle, beatPulse } = useMetronome();
   const pulseRef = useRef<HTMLSpanElement>(null);
+
+  // Tap tempo state
+  const tapTimesRef = useRef<number[]>([]);
+  const tapResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleTap = useCallback(() => {
+    const now = performance.now();
+    const taps = tapTimesRef.current;
+
+    // Reset if last tap was more than 2 seconds ago
+    if (taps.length > 0 && now - taps[taps.length - 1] > 2000) {
+      taps.length = 0;
+    }
+
+    taps.push(now);
+
+    // Keep last 8 taps
+    if (taps.length > 8) taps.shift();
+
+    // Need at least 2 taps to calculate
+    if (taps.length >= 2) {
+      const intervals: number[] = [];
+      for (let i = 1; i < taps.length; i++) {
+        intervals.push(taps[i] - taps[i - 1]);
+      }
+      const avgMs = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+      const calculatedBpm = Math.round(60000 / avgMs);
+      setBpm(Math.max(20, Math.min(300, calculatedBpm)));
+    }
+
+    // Auto-reset after 2 seconds of no tapping
+    if (tapResetRef.current) clearTimeout(tapResetRef.current);
+    tapResetRef.current = setTimeout(() => {
+      tapTimesRef.current = [];
+    }, 2000);
+  }, [setBpm]);
 
   // Trigger pulse animation on each beat
   useEffect(() => {
@@ -90,6 +126,14 @@ export function MetronomeControl() {
               aria-label="Increase BPM"
             >
               <PlusIcon className="size-3" />
+            </Button>
+            <Button
+              variant="outline"
+              className="h-7 px-2 text-xs"
+              onClick={handleTap}
+              aria-label="Tap tempo"
+            >
+              Tap
             </Button>
           </div>
         </PopoverContent>

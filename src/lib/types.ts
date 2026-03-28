@@ -287,6 +287,8 @@ export type PieceVideo = {
   youtube_video_id: string;
   title: string | null;
   sort_order: number;
+  start_seconds: number | null;
+  end_seconds: number | null;
   created_at: string;
   updated_at: string;
 };
