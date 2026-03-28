@@ -3,8 +3,7 @@ import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PieceDetailHeader } from "@/components/repertoire/piece-detail-header";
-import { SectionManager } from "@/components/repertoire/section-manager";
-import { SectionTimestampEditor } from "@/components/repertoire/section-timestamp-editor";
+import { SectionEditor } from "@/components/repertoire/section-editor";
 import { TaskList } from "@/components/repertoire/task-list";
 import dynamic from "next/dynamic";
 
@@ -22,7 +21,6 @@ import {
 import { getSections } from "@/app/(app)/repertoire/section-actions";
 import { getVideos, getTimestamps } from "@/app/(app)/repertoire/video-actions";
 import { getPieceCumulativeData } from "@/app/(app)/reports/actions";
-import { flattenSections } from "@/lib/section-utils";
 import type { Piece, Collection } from "@/lib/types";
 
 export default async function PieceDetailPage({
@@ -83,15 +81,10 @@ export default async function PieceDetailPage({
       <PieceDetailHeader piece={typedPiece} collection={collection} />
 
       <div className="mt-6 space-y-6">
-        <SectionManager
+        <SectionEditor
           pieceId={typedPiece.id}
           pieceTargetTempo={typedPiece.target_tempo}
           initialSections={sections}
-        />
-
-        <SectionTimestampEditor
-          pieceId={typedPiece.id}
-          sections={flattenSections(sections)}
           initialVideos={videos}
           initialTimestamps={videoTimestamps}
         />

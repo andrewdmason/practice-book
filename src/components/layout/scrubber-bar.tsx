@@ -6,9 +6,9 @@ import { useTimer } from "@/components/timer/timer-context";
 import { useZenMode } from "@/components/layout/zen-mode-context";
 import { useVideo } from "@/components/video/video-context";
 import { SectionScrubber } from "@/components/layout/section-scrubber";
-import { getSections } from "@/app/(app)/repertoire/section-actions";
+import { getSections, updateSectionStatus } from "@/app/(app)/repertoire/section-actions";
 import { flattenSections } from "@/lib/section-utils";
-import type { TimerTarget, PieceSection } from "@/lib/types";
+import type { TimerTarget, PieceSection, SectionStatus } from "@/lib/types";
 
 export function ScrubberBar() {
   const isZenMode = useZenMode();
@@ -64,17 +64,15 @@ export function ScrubberBar() {
 
   const videoEnd = video.videoEnd ?? video.duration;
 
+  const activePiece = activePieceId
+    ? activePieces.find((p) => p.id === activePieceId)
+    : null;
+
   const handleScrubberSectionClick = (sectionId: string) => {
     if (!activeTarget || activeTarget.category !== "piece") return;
 
     const section = sections.find((s) => s.id === sectionId);
     if (!section) return;
-
-    const ts = video.timestamps.find((t) => t.section_id === sectionId);
-    if (!ts) return;
-
-    // Seek video to section start
-    video.seekTo(ts.start_seconds);
 
     // Build section target
     const sectionTarget: TimerTarget = {
@@ -94,6 +92,18 @@ export function ScrubberBar() {
     }
   };
 
+  const handleStatusCycle = (sectionId: string) => {
+    setSections((prev) =>
+      prev.map((s) => {
+        if (s.id !== sectionId) return s;
+        const next = ((s.status + 1) % 6) as SectionStatus;
+        updateSectionStatus(sectionId, next);
+        window.dispatchEvent(new CustomEvent("sections-changed"));
+        return { ...s, status: next };
+      })
+    );
+  };
+
   const activeSectionId =
     activeTarget?.category === "piece" ? activeTarget.sectionId : undefined;
 
@@ -111,7 +121,9 @@ export function ScrubberBar() {
           videoEnd={videoEnd}
           currentTime={video.currentTime}
           activeSectionId={activeSectionId}
+          pieceTargetTempo={activePiece?.target_tempo}
           onSectionClick={handleScrubberSectionClick}
+          onStatusCycle={handleStatusCycle}
         />
       </div>
     </div>

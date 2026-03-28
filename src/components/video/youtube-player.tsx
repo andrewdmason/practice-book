@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { ChevronDownIcon, ChevronRightIcon, VideoIcon } from "lucide-react";
+import { VideoIcon } from "lucide-react";
 import { useVideo, YT_PLAYING, type YTPlayer } from "./video-context";
 
 /* ------------------------------------------------------------------ */
@@ -40,16 +40,11 @@ function loadYouTubeApi(): Promise<void> {
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function YouTubePlayer({
-  defaultOpen = false,
-}: {
-  defaultOpen?: boolean;
-}) {
+export function YouTubePlayer() {
   const videoCtx = useVideo();
   const { videoId, videoStart, videoEnd, playerRef } = videoCtx;
   const containerRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
-  const [open, setOpen] = useState(defaultOpen);
   const localPlayerRef = useRef<YTPlayer | null>(null);
   const mountedVideoId = useRef<string | null>(null);
   const creatingRef = useRef(false);
@@ -123,12 +118,10 @@ export function YouTubePlayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoId, videoStart, videoEnd]);
 
-  // Create player when open and videoId is available
+  // Create player when videoId is available
   useEffect(() => {
-    if (open) {
-      createPlayer();
-    }
-  }, [open, createPlayer]);
+    createPlayer();
+  }, [createPlayer]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -146,20 +139,11 @@ export function YouTubePlayer({
 
   return (
     <div>
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer py-1"
-      >
-        {open ? (
-          <ChevronDownIcon className="size-3.5" />
-        ) : (
-          <ChevronRightIcon className="size-3.5" />
-        )}
+      <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
         <VideoIcon className="size-3.5" />
-        <span>Video</span>
-      </button>
-      {/* Always keep mounted so the iframe isn't destroyed */}
-      <div className={open ? "mt-1 rounded-md overflow-hidden" : "hidden"}>
+        Video
+      </h3>
+      <div className="rounded-md overflow-hidden">
         <div className="relative aspect-video bg-muted">
           <div ref={containerRef} className="absolute inset-0" />
           {!ready && (
