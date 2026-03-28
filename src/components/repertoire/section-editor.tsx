@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import {
   CircleIcon,
   LinkIcon,
+  PauseIcon,
+  PlayIcon,
   PlusIcon,
   Trash2Icon,
 } from "lucide-react";
@@ -145,6 +147,7 @@ function SectionRow({
   hasVideo,
   videoId,
   timestamp,
+  playingSectionId,
   onStatusCycle,
   onDelete,
   onTempoChange,
@@ -155,12 +158,14 @@ function SectionRow({
   hasVideo: boolean;
   videoId: string | null;
   timestamp: PieceSectionTimestamp | undefined;
+  playingSectionId: string | null;
   onStatusCycle: () => void;
   onDelete: () => void;
   onTempoChange: (tempo: number | null) => void;
   onTimestampUpdated: () => void;
 }) {
-  const { currentTime } = useVideo();
+  const video = useVideo();
+  const { currentTime } = video;
   const [editingTempo, setEditingTempo] = useState(false);
   const effectiveTempo = section.target_tempo ?? pieceTargetTempo;
   const [tempoValue, setTempoValue] = useState(
@@ -220,6 +225,36 @@ function SectionRow({
       <span className="text-sm font-medium min-w-[2rem]">
         {section.label}
       </span>
+
+      {/* Play/pause video toggle */}
+      {hasVideo && (() => {
+        if (!timestamp) return <span className="shrink-0 w-5" />;
+        const isThisSectionPlaying = playingSectionId === section.id;
+        return (
+          <button
+            onClick={() => {
+              if (isThisSectionPlaying) {
+                video.pause();
+              } else {
+                video.seekTo(timestamp.start_seconds);
+                video.play();
+              }
+            }}
+            className={cn(
+              "shrink-0 w-5 h-5 flex items-center justify-center cursor-pointer transition-colors rounded hover:bg-muted",
+              isThisSectionPlaying
+                ? "text-primary"
+                : "text-muted-foreground/40 hover:text-foreground"
+            )}
+          >
+            {isThisSectionPlaying ? (
+              <PauseIcon className="size-3.5" />
+            ) : (
+              <PlayIcon className="size-3.5" />
+            )}
+          </button>
+        );
+      })()}
 
       {/* Tempo */}
       {editingTempo ? (
@@ -397,6 +432,20 @@ export function SectionEditor({
   // Video URL input
   const [videoUrl, setVideoUrl] = useState("");
   const [addingVideo, setAddingVideo] = useState(false);
+
+  // Determine which section is currently playing
+  const playingSectionId = (() => {
+    if (!videoCtx.isPlaying) return null;
+    let best: { sectionId: string; start: number } | null = null;
+    for (const ts of timestamps) {
+      if (ts.start_seconds <= videoCtx.currentTime) {
+        if (!best || ts.start_seconds > best.start) {
+          best = { sectionId: ts.section_id, start: ts.start_seconds };
+        }
+      }
+    }
+    return best?.sectionId ?? null;
+  })();
 
   // Load video into context when component mounts / video changes
   useEffect(() => {
@@ -714,6 +763,7 @@ export function SectionEditor({
                     timestamp={timestamps.find(
                       (t) => t.section_id === row.section.id
                     )}
+                    playingSectionId={playingSectionId}
                     onStatusCycle={() => handleStatusCycle(row.section)}
                     onDelete={() => handleDelete(row.section.id)}
                     onTempoChange={(tempo) =>
