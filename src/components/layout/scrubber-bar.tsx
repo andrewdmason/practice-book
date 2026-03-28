@@ -7,7 +7,8 @@ import { useZenMode } from "@/components/layout/zen-mode-context";
 import { useVideo } from "@/components/video/video-context";
 import { SectionScrubber } from "@/components/layout/section-scrubber";
 import { getSections, updateSectionStatus } from "@/app/(app)/repertoire/section-actions";
-import { flattenSections } from "@/lib/section-utils";
+import { flattenSections, practiceTempo } from "@/lib/section-utils";
+import { useMetronome } from "@/components/metronome/metronome-context";
 import type { TimerTarget, PieceSection, SectionStatus } from "@/lib/types";
 
 export function ScrubberBar() {
@@ -22,6 +23,7 @@ export function ScrubberBar() {
     switchTarget,
   } = useTimer();
   const video = useVideo();
+  const { start: startMetronome, isActive: metronomeActive } = useMetronome();
 
   const activeTarget = isRunning ? currentTarget : focusedTarget;
   const activePieceId =
@@ -104,15 +106,22 @@ export function ScrubberBar() {
     return () => window.removeEventListener("section-status-changed", handler);
   }, []);
 
-  const handleStatusCycle = (sectionId: string) => {
+  const handleStatusCycle = (sectionId: string, reverse = false) => {
     const section = sections.find((s) => s.id === sectionId);
     if (!section) return;
-    const next = ((section.status + 1) % 9) as SectionStatus;
+    const next = (reverse
+      ? ((section.status + 8) % 9)
+      : ((section.status + 1) % 9)) as SectionStatus;
     setSections((prev) =>
       prev.map((s) => (s.id === sectionId ? { ...s, status: next } : s))
     );
     updateSectionStatus(sectionId, next);
     window.dispatchEvent(new CustomEvent("section-status-changed", { detail: { sectionId, status: next } }));
+    if (metronomeActive) {
+      const effectiveTempo = section.target_tempo ?? activePiece?.target_tempo ?? null;
+      const newTempo = practiceTempo(next, effectiveTempo);
+      if (newTempo) startMetronome(newTempo);
+    }
   };
 
   const activeSectionId =
@@ -135,6 +144,7 @@ export function ScrubberBar() {
           pieceTargetTempo={activePiece?.target_tempo}
           onSectionClick={handleScrubberSectionClick}
           onStatusCycle={handleStatusCycle}
+          onStatusCycleReverse={(sectionId) => handleStatusCycle(sectionId, true)}
         />
       </div>
     </div>

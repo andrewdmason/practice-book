@@ -93,7 +93,7 @@ function SectionRow({
   isLast: boolean;
 }) {
   const { isRunning, currentTarget, focusedTarget, setFocusedTarget, startTimer, switchTarget, stopTimer } = useTimer();
-  const { start: startMetronome } = useMetronome();
+  const { start: startMetronome, isActive: metronomeActive } = useMetronome();
   const [editingTempo, setEditingTempo] = useState(false);
   const [tempoValue, setTempoValue] = useState(
     String(section.target_tempo ?? "")
@@ -145,11 +145,17 @@ function SectionRow({
     }
   };
 
-  const handleStatusCycle = () => {
-    const next = ((section.status + 1) % 9) as SectionStatus;
+  const handleStatusCycle = (reverse = false) => {
+    const next = (reverse
+      ? ((section.status + 8) % 9)
+      : ((section.status + 1) % 9)) as SectionStatus;
     onStatusChange?.(section.id, next);
     updateSectionStatus(section.id, next);
     window.dispatchEvent(new CustomEvent("section-status-changed", { detail: { sectionId: section.id, status: next } }));
+    if (metronomeActive) {
+      const newTempo = practiceTempo(next, effectiveTempo);
+      if (newTempo) startMetronome(newTempo);
+    }
   };
 
   const handlePracticeTempoClick = () => {
@@ -194,7 +200,11 @@ function SectionRow({
       {/* Status color square — continuous column, no vertical gap */}
       <Tooltip>
         <TooltipTrigger
-          onClick={handleStatusCycle}
+          onClick={() => handleStatusCycle()}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            handleStatusCycle(true);
+          }}
           className={cn(
             "w-5 h-6 shrink-0 transition-colors cursor-pointer hover:opacity-80",
             SECTION_STATUS_COLORS[section.status],

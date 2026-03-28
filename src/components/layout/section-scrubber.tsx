@@ -48,6 +48,7 @@ export function SectionScrubber({
   pieceTargetTempo,
   onSectionClick,
   onStatusCycle,
+  onStatusCycleReverse,
 }: {
   sections: PieceSection[];
   timestamps: PieceSectionTimestamp[];
@@ -58,6 +59,7 @@ export function SectionScrubber({
   pieceTargetTempo?: number | null;
   onSectionClick: (sectionId: string) => void;
   onStatusCycle?: (sectionId: string) => void;
+  onStatusCycleReverse?: (sectionId: string) => void;
 }) {
   const totalDuration = videoEnd - videoStart;
   if (totalDuration <= 0) return null;
@@ -106,6 +108,7 @@ export function SectionScrubber({
             pieceTargetTempo={pieceTargetTempo ?? null}
             onSectionClick={() => onSectionClick(section.id)}
             onStatusCycle={onStatusCycle ? () => onStatusCycle(section.id) : undefined}
+            onStatusCycleReverse={onStatusCycleReverse ? () => onStatusCycleReverse(section.id) : undefined}
           />
         );
       })}
@@ -132,6 +135,7 @@ function ScrubberSegment({
   pieceTargetTempo,
   onSectionClick,
   onStatusCycle,
+  onStatusCycleReverse,
 }: {
   section: PieceSection;
   leftPct: number;
@@ -141,6 +145,7 @@ function ScrubberSegment({
   pieceTargetTempo: number | null;
   onSectionClick: () => void;
   onStatusCycle?: () => void;
+  onStatusCycleReverse?: () => void;
 }) {
   const video = useVideo();
   const metronome = useMetronome();
@@ -203,7 +208,14 @@ function ScrubberSegment({
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             {onStatusCycle && (
-              <button onClick={onStatusCycle} className="shrink-0">
+              <button
+                onClick={onStatusCycle}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  onStatusCycleReverse?.();
+                }}
+                className="shrink-0"
+              >
                 <CircleIcon
                   className={cn(
                     "size-3 fill-current",
