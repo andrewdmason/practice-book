@@ -33,6 +33,7 @@ export function SectionSidebar({
   pieceName,
   composer,
   onSectionsChanged,
+  onStatusChange,
 }: {
   sections: PieceSectionWithChildren[];
   pieceTargetTempo: number | null;
@@ -40,6 +41,7 @@ export function SectionSidebar({
   pieceName: string;
   composer: string | null;
   onSectionsChanged: () => void;
+  onStatusChange?: (sectionId: string, status: SectionStatus) => void;
 }) {
   const allSections = flattenSections(sections);
   if (allSections.length === 0) return null;
@@ -59,6 +61,7 @@ export function SectionSidebar({
             pieceName={pieceName}
             composer={composer}
             onSectionsChanged={onSectionsChanged}
+            onStatusChange={onStatusChange}
             isFirst={i === 0}
             isLast={i === allSections.length - 1}
           />
@@ -75,6 +78,7 @@ function SectionRow({
   pieceName,
   composer,
   onSectionsChanged,
+  onStatusChange,
   isFirst,
   isLast,
 }: {
@@ -84,6 +88,7 @@ function SectionRow({
   pieceName: string;
   composer: string | null;
   onSectionsChanged: () => void;
+  onStatusChange?: (sectionId: string, status: SectionStatus) => void;
   isFirst: boolean;
   isLast: boolean;
 }) {
@@ -140,10 +145,12 @@ function SectionRow({
     }
   };
 
-  const handleStatusCycle = async () => {
+  const handleStatusCycle = () => {
     const next = ((section.status + 1) % 6) as SectionStatus;
-    await updateSectionStatus(section.id, next);
-    onSectionsChanged();
+    onStatusChange?.(section.id, next);
+    updateSectionStatus(section.id, next);
+    window.dispatchEvent(new CustomEvent("sections-changed"));
+    window.dispatchEvent(new CustomEvent("section-status-changed", { detail: { sectionId: section.id, status: next } }));
   };
 
   const handlePracticeTempoClick = () => {

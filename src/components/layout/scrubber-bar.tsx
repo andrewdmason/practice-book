@@ -92,6 +92,18 @@ export function ScrubberBar() {
     }
   };
 
+  // Listen for optimistic status updates from other components (e.g. sidebar)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { sectionId, status } = (e as CustomEvent).detail;
+      setSections((prev) =>
+        prev.map((s) => (s.id === sectionId ? { ...s, status } : s))
+      );
+    };
+    window.addEventListener("section-status-changed", handler);
+    return () => window.removeEventListener("section-status-changed", handler);
+  }, []);
+
   const handleStatusCycle = (sectionId: string) => {
     setSections((prev) =>
       prev.map((s) => {
@@ -99,6 +111,7 @@ export function ScrubberBar() {
         const next = ((s.status + 1) % 6) as SectionStatus;
         updateSectionStatus(sectionId, next);
         window.dispatchEvent(new CustomEvent("sections-changed"));
+        window.dispatchEvent(new CustomEvent("section-status-changed", { detail: { sectionId, status: next } }));
         return { ...s, status: next };
       })
     );
