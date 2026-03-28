@@ -548,7 +548,7 @@ export function SectionEditor({
   };
 
   const handleStatusCycle = (section: PieceSection) => {
-    const next = ((section.status + 1) % 6) as SectionStatus;
+    const next = ((section.status + 1) % 9) as SectionStatus;
     setSections((prev) =>
       prev.map((s) => {
         if (s.id === section.id) return { ...s, status: next };
@@ -561,7 +561,6 @@ export function SectionEditor({
       })
     );
     updateSectionStatus(section.id, next);
-    dispatchSectionsChanged();
     window.dispatchEvent(new CustomEvent("section-status-changed", { detail: { sectionId: section.id, status: next } }));
   };
 

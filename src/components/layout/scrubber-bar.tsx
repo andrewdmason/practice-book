@@ -105,16 +105,14 @@ export function ScrubberBar() {
   }, []);
 
   const handleStatusCycle = (sectionId: string) => {
+    const section = sections.find((s) => s.id === sectionId);
+    if (!section) return;
+    const next = ((section.status + 1) % 9) as SectionStatus;
     setSections((prev) =>
-      prev.map((s) => {
-        if (s.id !== sectionId) return s;
-        const next = ((s.status + 1) % 6) as SectionStatus;
-        updateSectionStatus(sectionId, next);
-        window.dispatchEvent(new CustomEvent("sections-changed"));
-        window.dispatchEvent(new CustomEvent("section-status-changed", { detail: { sectionId, status: next } }));
-        return { ...s, status: next };
-      })
+      prev.map((s) => (s.id === sectionId ? { ...s, status: next } : s))
     );
+    updateSectionStatus(sectionId, next);
+    window.dispatchEvent(new CustomEvent("section-status-changed", { detail: { sectionId, status: next } }));
   };
 
   const activeSectionId =
