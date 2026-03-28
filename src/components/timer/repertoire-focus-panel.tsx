@@ -29,6 +29,8 @@ import { getNextBounceProgress } from "@/lib/progress-bounce";
 import { createClient } from "@/lib/supabase/client";
 import { useMetronome } from "@/components/metronome/metronome-context";
 import { SectionSidebar } from "@/components/timer/section-sidebar";
+import { YouTubePlayer } from "@/components/video/youtube-player";
+import { useVideo } from "@/components/video/video-context";
 import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
 import type {
   Piece,
@@ -297,9 +299,22 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
           />
         )}
 
+        {/* YouTube video */}
+        <PieceVideo />
+
       </CardContent>
     </Card>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Piece Video (YouTube embed in sidebar)
+// ---------------------------------------------------------------------------
+
+function PieceVideo() {
+  const { videoId } = useVideo();
+  if (!videoId) return null;
+  return <YouTubePlayer />;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,7 +1,9 @@
 import { Header } from "@/components/layout/header";
 import { FooterBar } from "@/components/layout/footer-bar";
+import { ScrubberBar } from "@/components/layout/scrubber-bar";
 import { TimerProvider } from "@/components/timer/timer-context";
 import { MetronomeProvider } from "@/components/metronome/metronome-context";
+import { VideoProvider } from "@/components/video/video-context";
 import { SearchProvider } from "@/components/search/search-provider";
 import { TimezoneProvider } from "@/components/timezone-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -28,10 +30,13 @@ export default async function AppLayout({
           <TimezoneProvider />
           <div className="flex min-h-full flex-1 flex-col">
             <Header />
-            <TimerProvider activePieces={(activePieces as Piece[]) ?? []}>
-              <FooterBar />
-              <div className="flex flex-1 flex-col">{children}</div>
-            </TimerProvider>
+            <VideoProvider>
+              <TimerProvider activePieces={(activePieces as Piece[]) ?? []}>
+                <FooterBar />
+                <ScrubberBar />
+                <div className="flex flex-1 flex-col">{children}</div>
+              </TimerProvider>
+            </VideoProvider>
           </div>
         </TooltipProvider>
       </MetronomeProvider>
