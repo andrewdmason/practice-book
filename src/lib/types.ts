@@ -227,42 +227,54 @@ export type FeedDay = {
 };
 
 // Piece section types
-export type SectionStatus = 0 | 1 | 2 | 3 | 4 | 5;
+export type SectionStatus = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 export const SECTION_STATUS_PERCENTAGE: Record<SectionStatus, number> = {
   0: 0,
-  1: 0.25,
+  1: 0.4,
   2: 0.5,
-  3: 0.75,
-  4: 0.9,
-  5: 1,
+  3: 0.6,
+  4: 0.7,
+  5: 0.8,
+  6: 0.9,
+  7: 1,
+  8: 1,
 };
 
 export const SECTION_STATUS_LABELS: Record<SectionStatus, string> = {
   0: "Not started",
-  1: "25% target tempo",
+  1: "40% target tempo",
   2: "50% target tempo",
-  3: "75% target tempo",
-  4: "90% target tempo",
-  5: "At tempo",
+  3: "60% target tempo",
+  4: "70% target tempo",
+  5: "80% target tempo",
+  6: "90% target tempo",
+  7: "100% target tempo",
+  8: "Complete",
 };
 
 export const SECTION_STATUS_COLORS: Record<SectionStatus, string> = {
-  0: "bg-muted",
-  1: "bg-[#E5A035]",
-  2: "bg-[#D4DF38]",
-  3: "bg-[#8DC04D]",
-  4: "bg-[#4BB87E]",
-  5: "bg-[#4FA8D1]",
+  0: "bg-white dark:bg-muted",
+  1: "bg-[#D6E4F0]",
+  2: "bg-[#B8D4F0]",
+  3: "bg-[#94BDE8]",
+  4: "bg-[#6FA3DE]",
+  5: "bg-[#4D8AD4]",
+  6: "bg-[#3070C4]",
+  7: "bg-[#1A56B0]",
+  8: "bg-[#22C55E]",
 };
 
 export const SECTION_STATUS_DOT_COLORS: Record<SectionStatus, string> = {
   0: "text-muted-foreground",
-  1: "text-[#E5A035]",
-  2: "text-[#D4DF38]",
-  3: "text-[#8DC04D]",
-  4: "text-[#4BB87E]",
-  5: "text-[#4FA8D1]",
+  1: "text-[#D6E4F0]",
+  2: "text-[#B8D4F0]",
+  3: "text-[#94BDE8]",
+  4: "text-[#6FA3DE]",
+  5: "text-[#4D8AD4]",
+  6: "text-[#3070C4]",
+  7: "text-[#1A56B0]",
+  8: "text-[#22C55E]",
 };
 
 export type PieceSection = {

@@ -146,10 +146,9 @@ function SectionRow({
   };
 
   const handleStatusCycle = () => {
-    const next = ((section.status + 1) % 6) as SectionStatus;
+    const next = ((section.status + 1) % 9) as SectionStatus;
     onStatusChange?.(section.id, next);
     updateSectionStatus(section.id, next);
-    window.dispatchEvent(new CustomEvent("sections-changed"));
     window.dispatchEvent(new CustomEvent("section-status-changed", { detail: { sectionId: section.id, status: next } }));
   };
 

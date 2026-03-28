@@ -27,6 +27,9 @@ const SECTION_SCRUBBER_TEXT_COLORS: Record<SectionStatus, string> = {
   3: "text-foreground/80",
   4: "text-white",
   5: "text-white",
+  6: "text-white",
+  7: "text-white",
+  8: "text-white",
 };
 
 interface ScrubberSection {
