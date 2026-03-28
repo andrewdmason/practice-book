@@ -449,6 +449,26 @@ export function SectionEditor({
     return () => window.removeEventListener("sections-changed", handler);
   }, [refreshSections]);
 
+  // Optimistically apply status changes from other components (e.g. scrubber bar)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { sectionId, status } = (e as CustomEvent).detail;
+      setSections((prev) =>
+        prev.map((s) => {
+          if (s.id === sectionId) return { ...s, status };
+          return {
+            ...s,
+            children: s.children.map((c) =>
+              c.id === sectionId ? { ...c, status } : c
+            ),
+          };
+        })
+      );
+    };
+    window.addEventListener("section-status-changed", handler);
+    return () => window.removeEventListener("section-status-changed", handler);
+  }, []);
+
   const dispatchSectionsChanged = () => {
     window.dispatchEvent(new CustomEvent("sections-changed"));
   };
@@ -542,6 +562,7 @@ export function SectionEditor({
     );
     updateSectionStatus(section.id, next);
     dispatchSectionsChanged();
+    window.dispatchEvent(new CustomEvent("section-status-changed", { detail: { sectionId: section.id, status: next } }));
   };
 
   const handleTempoChange = (section: PieceSection, tempo: number | null) => {

@@ -35,6 +35,7 @@ import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
 import type {
   Piece,
   PieceSectionWithChildren,
+  SectionStatus,
   Task,
   TimerTarget,
   TimeSummaryEntry,
@@ -168,6 +169,26 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
     return () => window.removeEventListener("sections-changed", handler);
   }, [refreshSections]);
 
+  // Optimistically apply status changes from other components (e.g. scrubber bar)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { sectionId, status } = (e as CustomEvent).detail;
+      setSections((prev) =>
+        prev.map((s) => {
+          if (s.id === sectionId) return { ...s, status };
+          return {
+            ...s,
+            children: s.children.map((c) =>
+              c.id === sectionId ? { ...c, status } : c
+            ),
+          };
+        })
+      );
+    };
+    window.addEventListener("section-status-changed", handler);
+    return () => window.removeEventListener("section-status-changed", handler);
+  }, []);
+
   const handleProgressChange = (taskId: string, progress: number) => {
     if (progress === 4) {
       // Move from open to completed
@@ -296,6 +317,19 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
             pieceName={piece.name}
             composer={piece.composer}
             onSectionsChanged={refreshSections}
+            onStatusChange={(sectionId, status) => {
+              setSections((prev) =>
+                prev.map((s) => {
+                  if (s.id === sectionId) return { ...s, status };
+                  return {
+                    ...s,
+                    children: s.children.map((c) =>
+                      c.id === sectionId ? { ...c, status } : c
+                    ),
+                  };
+                })
+              );
+            }}
           />
         )}
 
