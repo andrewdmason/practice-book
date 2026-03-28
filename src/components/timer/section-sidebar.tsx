@@ -1,14 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Play, Pause } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useTimer } from "@/components/timer/timer-context";
 import { useMetronome } from "@/components/metronome/metronome-context";
+import { useVideo } from "@/components/video/video-context";
 import {
   updateSectionStatus,
   updateSectionTargetTempo,
@@ -44,6 +41,23 @@ export function SectionSidebar({
   onStatusChange?: (sectionId: string, status: SectionStatus) => void;
 }) {
   const allSections = flattenSections(sections);
+  const video = useVideo();
+
+  // Determine which section is currently playing by finding the last section
+  // whose start_seconds <= currentTime
+  const playingSectionId = (() => {
+    if (!video.isPlaying) return null;
+    let best: { sectionId: string; start: number } | null = null;
+    for (const ts of video.timestamps) {
+      if (ts.start_seconds <= video.currentTime) {
+        if (!best || ts.start_seconds > best.start) {
+          best = { sectionId: ts.section_id, start: ts.start_seconds };
+        }
+      }
+    }
+    return best?.sectionId ?? null;
+  })();
+
   if (allSections.length === 0) return null;
 
   return (
@@ -64,6 +78,7 @@ export function SectionSidebar({
             onStatusChange={onStatusChange}
             isFirst={i === 0}
             isLast={i === allSections.length - 1}
+            playingSectionId={playingSectionId}
           />
         ))}
       </div>
@@ -81,6 +96,7 @@ function SectionRow({
   onStatusChange,
   isFirst,
   isLast,
+  playingSectionId,
 }: {
   section: PieceSection;
   pieceTargetTempo: number | null;
@@ -91,9 +107,11 @@ function SectionRow({
   onStatusChange?: (sectionId: string, status: SectionStatus) => void;
   isFirst: boolean;
   isLast: boolean;
+  playingSectionId: string | null;
 }) {
   const { isRunning, currentTarget, focusedTarget, setFocusedTarget, startTimer, switchTarget, stopTimer } = useTimer();
   const { start: startMetronome, isActive: metronomeActive } = useMetronome();
+  const video = useVideo();
   const [editingTempo, setEditingTempo] = useState(false);
   const [tempoValue, setTempoValue] = useState(
     String(section.target_tempo ?? "")
@@ -197,25 +215,51 @@ function SectionRow({
         {section.label}
       </button>
 
+      {/* Play/pause video toggle */}
+      {(() => {
+        const ts = video.timestamps.find((t) => t.section_id === section.id);
+        if (!ts) return <span className="shrink-0 w-4 mr-1" />;
+        const isThisSectionPlaying = playingSectionId === section.id;
+        return (
+          <button
+            onClick={() => {
+              if (isThisSectionPlaying) {
+                video.pause();
+              } else {
+                video.seekTo(ts.start_seconds);
+                video.play();
+              }
+            }}
+            className={cn(
+              "shrink-0 w-4 h-4 flex items-center justify-center cursor-pointer transition-colors mr-1",
+              isThisSectionPlaying
+                ? "text-primary"
+                : "text-muted-foreground/40 hover:text-foreground"
+            )}
+          >
+            {isThisSectionPlaying ? (
+              <Pause className="w-3 h-3" />
+            ) : (
+              <Play className="w-3 h-3" />
+            )}
+          </button>
+        );
+      })()}
+
       {/* Status color square — continuous column, no vertical gap */}
-      <Tooltip>
-        <TooltipTrigger
-          onClick={() => handleStatusCycle()}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            handleStatusCycle(true);
-          }}
-          className={cn(
-            "w-5 h-6 shrink-0 transition-colors cursor-pointer hover:opacity-80",
-            SECTION_STATUS_COLORS[section.status],
-            isFirst && "rounded-t-sm",
-            isLast && "rounded-b-sm"
-          )}
-        />
-        <TooltipContent side="left">
-          <p className="text-xs">{SECTION_STATUS_LABELS[section.status]}</p>
-        </TooltipContent>
-      </Tooltip>
+      <div
+        onClick={() => handleStatusCycle()}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          handleStatusCycle(true);
+        }}
+        className={cn(
+          "w-5 h-6 shrink-0 transition-colors cursor-pointer hover:opacity-80",
+          SECTION_STATUS_COLORS[section.status],
+          isFirst && "rounded-t-sm",
+          isLast && "rounded-b-sm"
+        )}
+      />
 
       {/* Practice tempo pill + percentage */}
       <div className="ml-1.5 shrink-0 flex items-center gap-1">
