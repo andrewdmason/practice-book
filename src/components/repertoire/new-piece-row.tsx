@@ -44,8 +44,6 @@ export function NewPieceRow({
     const formData = new FormData();
     formData.set("name", name);
     formData.set("status", status);
-    formData.set("mastery_level", "learning");
-
     return { tempId, promise: createPiece(formData) };
   }
 
@@ -99,13 +97,13 @@ export function NewPieceRow({
     setEditing(false);
   }
 
-  // The new row spans: [drag?] [name+composer+collection+mastery] [actions]
+  // The new row spans: [drag?] [name+composer+collection] [actions]
   // We use the same grid but span the middle columns
   return (
     <div className={gridClass}>
       {showDragColumn && <div />}
       <div
-        className="flex items-center min-w-0 px-3 py-2 col-span-4 max-md:col-span-2 cursor-pointer"
+        className="flex items-center min-w-0 px-3 py-2 col-span-3 max-md:col-span-1 cursor-pointer"
         onClick={() => {
           if (!editing) {
             setEditing(true);

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PieceDetailHeader } from "@/components/repertoire/piece-detail-header";
-import { PieceMasteryControl } from "@/components/repertoire/piece-mastery-control";
+import { SectionManager } from "@/components/repertoire/section-manager";
 import { TaskList } from "@/components/repertoire/task-list";
 import dynamic from "next/dynamic";
 
@@ -18,6 +18,7 @@ import {
   getPieceFocusData,
   getPieceMentions,
 } from "@/app/(app)/focus-panel/actions";
+import { getSections } from "@/app/(app)/repertoire/section-actions";
 import { getPieceCumulativeData } from "@/app/(app)/reports/actions";
 import type { Piece, Collection } from "@/lib/types";
 
@@ -41,7 +42,7 @@ export default async function PieceDetailPage({
 
   const typedPiece = piece as Piece;
 
-  const [collection, focusData, mentionPage, cumulativeData] = await Promise.all([
+  const [collection, focusData, mentionPage, cumulativeData, sections] = await Promise.all([
     typedPiece.collection_id
       ? supabase
           .from("collections")
@@ -53,6 +54,7 @@ export default async function PieceDetailPage({
     getPieceFocusData(id),
     getPieceMentions(id),
     getPieceCumulativeData(id),
+    getSections(id),
   ]);
 
   async function loadMoreMentions(cursor: string) {
@@ -73,9 +75,10 @@ export default async function PieceDetailPage({
       <PieceDetailHeader piece={typedPiece} collection={collection} />
 
       <div className="mt-6 space-y-6">
-        <PieceMasteryControl
+        <SectionManager
           pieceId={typedPiece.id}
-          initialLevel={typedPiece.mastery_level}
+          pieceTargetTempo={typedPiece.target_tempo}
+          initialSections={sections}
         />
 
         {(focusData.openTasks.length > 0 || focusData.completedTasks.length > 0) && <Separator />}

@@ -1,10 +1,5 @@
 // Enums matching database
 export type PieceStatus = "active" | "upcoming" | "archived";
-export type MasteryLevel =
-  | "learning"
-  | "playable"
-  | "performance_ready"
-  | "memorized";
 export type TimerCategory = "piece" | "technique" | "sight_reading";
 
 // Database row types
@@ -23,9 +18,9 @@ export type Piece = {
   name: string;
   composer: string | null;
   status: PieceStatus;
-  mastery_level: MasteryLevel;
   sort_order: number;
   notes: string | null;
+  target_tempo: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -44,12 +39,13 @@ export type TimerEntry = {
   session_id: string;
   piece_id: string | null;
   category: TimerCategory;
+  section_id: string | null;
   started_at: string;
   ended_at: string | null;
 };
 
 export type TimerTarget =
-  | { category: "piece"; pieceId: string; pieceName: string; composer: string | null }
+  | { category: "piece"; pieceId: string; pieceName: string; composer: string | null; sectionId?: string; sectionLabel?: string }
   | { category: "technique" }
   | { category: "sight_reading" };
 
@@ -83,20 +79,7 @@ export const PIECE_STATUS_LABELS: Record<PieceStatus, string> = {
   archived: "Archived",
 };
 
-export const MASTERY_LEVEL_LABELS: Record<MasteryLevel, string> = {
-  learning: "Learning",
-  playable: "Playable",
-  performance_ready: "Performance Ready",
-  memorized: "Memorized",
-};
-
 export const PIECE_STATUSES: PieceStatus[] = ["active", "upcoming", "archived"];
-export const MASTERY_LEVELS: MasteryLevel[] = [
-  "learning",
-  "playable",
-  "performance_ready",
-  "memorized",
-];
 
 // Editor types
 export type SourceType = "practice_entry";
@@ -212,7 +195,6 @@ export type RepertoireOverviewItem = {
   id: string;
   name: string;
   composer: string | null;
-  mastery_level: MasteryLevel;
   last_played: string | null;
   open_tasks: number;
 };
@@ -242,4 +224,79 @@ export type FeedDay = {
   lessons: FeedPracticeEntry[];
   timeSummary: TimeSummaryEntry[];
   lessonTimeSummaries?: Record<string, LessonTimeSummary>;
+};
+
+// Piece section types
+export type SectionStatus = 0 | 1 | 2 | 3 | 4 | 5;
+
+export const SECTION_STATUS_PERCENTAGE: Record<SectionStatus, number> = {
+  0: 0,
+  1: 0.25,
+  2: 0.5,
+  3: 0.75,
+  4: 0.9,
+  5: 1,
+};
+
+export const SECTION_STATUS_LABELS: Record<SectionStatus, string> = {
+  0: "Not started",
+  1: "25% target tempo",
+  2: "50% target tempo",
+  3: "75% target tempo",
+  4: "90% target tempo",
+  5: "At tempo",
+};
+
+export const SECTION_STATUS_COLORS: Record<SectionStatus, string> = {
+  0: "bg-muted",
+  1: "bg-[#E5A035]",
+  2: "bg-[#D4DF38]",
+  3: "bg-[#8DC04D]",
+  4: "bg-[#4BB87E]",
+  5: "bg-[#4FA8D1]",
+};
+
+export const SECTION_STATUS_DOT_COLORS: Record<SectionStatus, string> = {
+  0: "text-muted-foreground",
+  1: "text-[#E5A035]",
+  2: "text-[#D4DF38]",
+  3: "text-[#8DC04D]",
+  4: "text-[#4BB87E]",
+  5: "text-[#4FA8D1]",
+};
+
+export type PieceSection = {
+  id: string;
+  piece_id: string;
+  parent_id: string | null;
+  label: string;
+  sort_order: number;
+  status: SectionStatus;
+  target_tempo: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PieceSectionWithChildren = PieceSection & {
+  children: PieceSection[];
+};
+
+export type PieceVideo = {
+  id: string;
+  piece_id: string;
+  youtube_video_id: string;
+  title: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PieceSectionTimestamp = {
+  id: string;
+  section_id: string;
+  video_id: string;
+  start_seconds: number;
+  end_seconds: number | null;
+  created_at: string;
+  updated_at: string;
 };

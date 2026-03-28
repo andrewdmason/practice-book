@@ -20,9 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { MasterySelector } from "./mastery-selector";
 import { createPiece, updatePiece } from "@/app/(app)/repertoire/actions";
-import type { Piece, Collection, PieceStatus, MasteryLevel } from "@/lib/types";
+import type { Piece, Collection, PieceStatus } from "@/lib/types";
 import { PIECE_STATUSES, PIECE_STATUS_LABELS } from "@/lib/types";
 
 export function PieceFormDialog({
@@ -38,9 +37,6 @@ export function PieceFormDialog({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<PieceStatus>(piece?.status ?? "active");
-  const [masteryLevel, setMasteryLevel] = useState<MasteryLevel>(
-    piece?.mastery_level ?? "learning"
-  );
   const [collectionId, setCollectionId] = useState<string>(
     piece?.collection_id ?? ""
   );
@@ -52,7 +48,6 @@ export function PieceFormDialog({
 
     const formData = new FormData(e.currentTarget);
     formData.set("status", status);
-    formData.set("mastery_level", masteryLevel);
     formData.set("collection_id", collectionId);
 
     const result = piece
@@ -73,7 +68,6 @@ export function PieceFormDialog({
     if (nextOpen) {
       // Reset form state when opening
       setStatus(piece?.status ?? "active");
-      setMasteryLevel(piece?.mastery_level ?? "learning");
       setCollectionId(piece?.collection_id ?? "");
       setError(null);
     }
@@ -141,10 +135,6 @@ export function PieceFormDialog({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="grid gap-2">
-            <Label>Mastery Level</Label>
-            <MasterySelector value={masteryLevel} onChange={setMasteryLevel} />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="piece-notes">Notes</Label>

@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "./status-badge";
-import { MasteryBadge } from "./mastery-badge";
 import { ArchiveDialog } from "./archive-dialog";
 import { updatePieceDetails, updatePieceStatus } from "@/app/(app)/repertoire/actions";
 import type { Piece, Collection } from "@/lib/types";
@@ -61,7 +60,6 @@ export function PieceDetailHeader({
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2 mb-1">
           <StatusBadge status={piece.status} />
-          <MasteryBadge level={piece.mastery_level} />
         </div>
         <Input
           value={name}
@@ -101,7 +99,6 @@ export function PieceDetailHeader({
       <div className="flex items-center justify-between mb-1">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={piece.status} />
-          <MasteryBadge level={piece.mastery_level} />
         </div>
         {piece.status === "archived" ? (
           <Button

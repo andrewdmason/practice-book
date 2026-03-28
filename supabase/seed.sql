@@ -2,20 +2,20 @@
 -- Generated from practice-sessions CSV export
 
 -- Clear existing data (order matters for FK constraints)
-TRUNCATE timer_entries, practice_sessions, mentions, tasks, practice_entry_sections, practice_entries, pieces, collections CASCADE;
+TRUNCATE piece_section_timestamps, piece_videos, piece_sections, timer_entries, practice_sessions, mentions, tasks, practice_entry_sections, practice_entries, pieces, collections CASCADE;
 
 -- Collections
 INSERT INTO collections (id, name, composer, notes, created_at, updated_at) VALUES
   ('230825a8-c840-49bf-a4b9-f80b76b7c54f', 'Ballades', 'Chopin', '', '2026-03-19 15:35:58.525042+00', '2026-03-19 15:35:58.525042+00');
 
 -- Pieces
-INSERT INTO pieces (id, collection_id, name, composer, status, mastery_level, notes, created_at, updated_at) VALUES
-  ('c6b8d48f-e6de-41ce-bd32-5ec49b40de23', NULL, 'Scherzo No. 1', 'Chopin', 'active', 'memorized', '', '2026-03-19 04:34:06.888135+00', '2026-03-19 15:33:23.12205+00'),
-  ('671174b8-96df-46b9-bc39-2ceb999a22da', NULL, 'Trio in G major', 'Debussy', 'active', 'learning', '', '2026-03-19 14:30:53.221713+00', '2026-03-19 14:30:53.221713+00'),
-  ('e07a9e85-307a-4af9-8966-d1e824ec9ddb', NULL, 'Ballade 4', 'Chopin', 'active', 'memorized', '', '2026-03-19 15:35:20.96941+00', '2026-03-19 15:35:20.96941+00'),
-  ('b1a2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', NULL, 'Quintet in G minor', 'Bruch', 'active', 'learning', '', '2025-11-13 14:00:00+00', '2025-11-13 14:00:00+00'),
-  ('a2b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6d', NULL, 'Prelude 10', 'Bach', 'active', 'learning', '', '2025-11-13 14:00:00+00', '2025-11-13 14:00:00+00'),
-  ('c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f', NULL, 'Sonata 18 EbM', 'Beethoven', 'archived', 'playable', '', '2025-11-13 14:00:00+00', '2025-11-13 14:00:00+00');
+INSERT INTO pieces (id, collection_id, name, composer, status, notes, target_tempo, created_at, updated_at) VALUES
+  ('c6b8d48f-e6de-41ce-bd32-5ec49b40de23', NULL, 'Scherzo No. 1', 'Chopin', 'active', '', 160, '2026-03-19 04:34:06.888135+00', '2026-03-19 15:33:23.12205+00'),
+  ('671174b8-96df-46b9-bc39-2ceb999a22da', NULL, 'Trio in G major', 'Debussy', 'active', '', 120, '2026-03-19 14:30:53.221713+00', '2026-03-19 14:30:53.221713+00'),
+  ('e07a9e85-307a-4af9-8966-d1e824ec9ddb', NULL, 'Ballade 4', 'Chopin', 'active', '', 176, '2026-03-19 15:35:20.96941+00', '2026-03-19 15:35:20.96941+00'),
+  ('b1a2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', NULL, 'Quintet in G minor', 'Bruch', 'active', '', NULL, '2025-11-13 14:00:00+00', '2025-11-13 14:00:00+00'),
+  ('a2b3c4d5-e6f7-4a8b-9c0d-1e2f3a4b5c6d', NULL, 'Prelude 10', 'Bach', 'active', '', NULL, '2025-11-13 14:00:00+00', '2025-11-13 14:00:00+00'),
+  ('c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f', NULL, 'Sonata 18 EbM', 'Beethoven', 'archived', '', NULL, '2025-11-13 14:00:00+00', '2025-11-13 14:00:00+00');
 
 -- Lessons (transcribed from piano lesson log, Oct 2025 - Mar 2026)
 INSERT INTO practice_entries (id, date, type, created_at, updated_at) VALUES
@@ -817,3 +817,25 @@ INSERT INTO timer_entries (id, session_id, piece_id, category, started_at, ended
   ('8d141f72-6e4c-4a3b-a192-df836c08c3e4', 'd6415a66-3a63-44f8-adb3-2e0d1df56de2', 'c6b8d48f-e6de-41ce-bd32-5ec49b40de23', 'piece', '2025-11-13T15:16:16+00', '2025-11-13T15:26:52+00'),
   ('b2837876-d4d5-4a52-abcd-b809472b6a2e', 'd6415a66-3a63-44f8-adb3-2e0d1df56de2', 'c6b8d48f-e6de-41ce-bd32-5ec49b40de23', 'piece', '2025-11-13T15:32:14+00', '2025-11-13T15:45:22+00'),
   ('fe65cc6c-880f-4223-a713-1ceacf3c3404', 'd6415a66-3a63-44f8-adb3-2e0d1df56de2', 'c6b8d48f-e6de-41ce-bd32-5ec49b40de23', 'piece', '2025-11-13T15:45:33+00', '2025-11-13T15:50:46+00');
+
+-- Piece sections for Debussy Trio
+INSERT INTO piece_sections (id, piece_id, parent_id, label, sort_order, status, target_tempo) VALUES
+  ('aa000001-0001-4001-8001-000000000001', '671174b8-96df-46b9-bc39-2ceb999a22da', NULL, 'A', 0, 0, NULL),
+  ('aa000001-0002-4001-8001-000000000002', '671174b8-96df-46b9-bc39-2ceb999a22da', 'aa000001-0001-4001-8001-000000000001', 'A1', 0, 3, NULL),
+  ('aa000001-0003-4001-8001-000000000003', '671174b8-96df-46b9-bc39-2ceb999a22da', 'aa000001-0001-4001-8001-000000000001', 'A2', 1, 1, 100),
+  ('aa000001-0004-4001-8001-000000000004', '671174b8-96df-46b9-bc39-2ceb999a22da', NULL, 'B', 1, 0, NULL),
+  ('aa000001-0005-4001-8001-000000000005', '671174b8-96df-46b9-bc39-2ceb999a22da', 'aa000001-0004-4001-8001-000000000004', 'B1', 0, 2, NULL),
+  ('aa000001-0006-4001-8001-000000000006', '671174b8-96df-46b9-bc39-2ceb999a22da', 'aa000001-0004-4001-8001-000000000004', 'B2', 1, 0, 108),
+  ('aa000001-0007-4001-8001-000000000007', '671174b8-96df-46b9-bc39-2ceb999a22da', NULL, 'C', 2, 4, NULL);
+
+-- Piece videos for Debussy Trio
+INSERT INTO piece_videos (id, piece_id, youtube_video_id, title, sort_order) VALUES
+  ('bb000001-0001-4001-8001-000000000001', '671174b8-96df-46b9-bc39-2ceb999a22da', 'o2B4B4p7BDg', 'Debussy Trio in G major', 0);
+
+-- Section timestamps for the Debussy Trio video
+INSERT INTO piece_section_timestamps (id, section_id, video_id, start_seconds, end_seconds) VALUES
+  ('cc000001-0001-4001-8001-000000000001', 'aa000001-0002-4001-8001-000000000002', 'bb000001-0001-4001-8001-000000000001', 0, 120),
+  ('cc000001-0002-4001-8001-000000000002', 'aa000001-0003-4001-8001-000000000003', 'bb000001-0001-4001-8001-000000000001', 120, 240),
+  ('cc000001-0003-4001-8001-000000000003', 'aa000001-0005-4001-8001-000000000005', 'bb000001-0001-4001-8001-000000000001', 240, 400),
+  ('cc000001-0004-4001-8001-000000000004', 'aa000001-0006-4001-8001-000000000006', 'bb000001-0001-4001-8001-000000000001', 400, 520),
+  ('cc000001-0005-4001-8001-000000000005', 'aa000001-0007-4001-8001-000000000007', 'bb000001-0001-4001-8001-000000000001', 520, 680);

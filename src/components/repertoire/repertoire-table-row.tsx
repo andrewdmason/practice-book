@@ -18,8 +18,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MasteryBadge } from "./mastery-badge";
-import { MasterySelector } from "./mastery-selector";
 import { StatusBadge } from "./status-badge";
 import { StatusSelector } from "./status-selector";
 import { PieceFormDialog } from "./piece-form-dialog";
@@ -32,13 +30,12 @@ import {
 } from "@/components/ui/popover";
 import {
   updatePieceField,
-  updatePieceMastery,
   updatePieceStatus,
   deletePiece,
 } from "@/app/(app)/repertoire/actions";
-import type { Piece, Collection, MasteryLevel, PieceStatus } from "@/lib/types";
+import type { Piece, Collection, PieceStatus } from "@/lib/types";
 
-type EditingColumn = "name" | "composer" | "collection" | "status" | "mastery" | null;
+type EditingColumn = "name" | "composer" | "collection" | "status" | null;
 
 type RowProps = {
   piece: Piece;
@@ -67,7 +64,7 @@ export function RepertoireTableRow(props: RowProps & { gridClass: string }) {
 }
 
 /**
- * Just the cells (Name, Composer, Collection, Mastery, Actions).
+ * Just the cells (Name, Composer, Collection, Actions).
  * Used inside SortableTableRow which provides its own grid wrapper.
  */
 export function RepertoireTableRowCells({
@@ -84,14 +81,10 @@ export function RepertoireTableRowCells({
   nameIndent = 0,
 }: RowProps) {
   const [archiveOpen, setArchiveOpen] = useState(false);
-  const [masteryOpen, setMasteryOpen] = useState(false);
   const [statusOpen, setStatusOpen] = useState(false);
 
-  // Sync mastery popover with external editing state (e.g. Tab navigation)
+  // Sync status popover with external editing state (e.g. Tab navigation)
   const prevEditingColumn = useRef(editingColumn);
-  if (editingColumn === "mastery" && prevEditingColumn.current !== "mastery" && !masteryOpen) {
-    setMasteryOpen(true);
-  }
   if (editingColumn === "status" && prevEditingColumn.current !== "status" && !statusOpen) {
     setStatusOpen(true);
   }
@@ -109,13 +102,6 @@ export function RepertoireTableRowCells({
     onOptimisticUpdate({ ...piece, ...optimisticPatch });
     onStopEdit();
     updatePieceField(piece.id, field, value);
-  }
-
-  function saveMastery(level: MasteryLevel) {
-    onOptimisticUpdate({ ...piece, mastery_level: level });
-    setMasteryOpen(false);
-    onStopEdit();
-    updatePieceMastery(piece.id, level);
   }
 
   function saveStatus(status: PieceStatus) {
@@ -255,46 +241,6 @@ export function RepertoireTableRowCells({
           </Popover>
         </div>
       )}
-
-      {/* Mastery */}
-      <div className="flex items-center px-3 py-2 border-b border-border/50">
-        <Popover open={masteryOpen} onOpenChange={setMasteryOpen}>
-          <PopoverTrigger
-            render={
-              <button
-                type="button"
-                onClick={() => {
-                  setMasteryOpen(true);
-                  onStartEdit("mastery");
-                }}
-              />
-            }
-          >
-            <MasteryBadge level={piece.mastery_level} />
-          </PopoverTrigger>
-          <PopoverContent
-            side="bottom"
-            align="start"
-            className="w-auto p-2"
-            onKeyDown={(e: React.KeyboardEvent) => {
-              if (e.key === "Tab") {
-                e.preventDefault();
-                setMasteryOpen(false);
-                onStopEdit();
-                onNavigate(e.shiftKey ? "prev" : "next");
-              } else if (e.key === "Escape") {
-                setMasteryOpen(false);
-                onStopEdit();
-              }
-            }}
-          >
-            <MasterySelector
-              value={piece.mastery_level}
-              onChange={saveMastery}
-            />
-          </PopoverContent>
-        </Popover>
-      </div>
 
       {/* Actions */}
       <div className="flex items-center justify-center px-1 py-2 border-b border-border/50">

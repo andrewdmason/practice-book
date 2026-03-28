@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { MasteryBadge } from "./mastery-badge";
 import { PieceFormDialog } from "./piece-form-dialog";
 import { ArchiveDialog } from "./archive-dialog";
 import { deletePiece, updatePieceStatus } from "@/app/(app)/repertoire/actions";
@@ -45,7 +44,6 @@ export function PieceRow({
               </p>
             )}
           </div>
-          <MasteryBadge level={piece.mastery_level} />
         </Link>
 
         <DropdownMenu>

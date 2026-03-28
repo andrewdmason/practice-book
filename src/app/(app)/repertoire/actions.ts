@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type {
   PieceStatus,
-  MasteryLevel,
   Task,
   Mention,
   MentionPage,
@@ -29,8 +28,6 @@ export async function createPiece(formData: FormData) {
   const composer = (formData.get("composer") as string) ?? "";
   const collectionId = (formData.get("collection_id") as string) || null;
   const status = (formData.get("status") as PieceStatus) || "active";
-  const masteryLevel =
-    (formData.get("mastery_level") as MasteryLevel) || "learning";
   const notes = (formData.get("notes") as string) || null;
 
   if (!name) {
@@ -51,7 +48,6 @@ export async function createPiece(formData: FormData) {
     composer,
     collection_id: collectionId,
     status,
-    mastery_level: masteryLevel,
     notes,
     sort_order: nextOrder,
   }).select("id").single();
@@ -71,8 +67,6 @@ export async function updatePiece(id: string, formData: FormData) {
   const composer = (formData.get("composer") as string) ?? "";
   const collectionId = (formData.get("collection_id") as string) || null;
   const status = (formData.get("status") as PieceStatus) || "active";
-  const masteryLevel =
-    (formData.get("mastery_level") as MasteryLevel) || "learning";
   const notes = (formData.get("notes") as string) || null;
 
   if (!name) {
@@ -86,7 +80,6 @@ export async function updatePiece(id: string, formData: FormData) {
       composer: composer.trim(),
       collection_id: collectionId,
       status,
-      mastery_level: masteryLevel,
       notes,
     })
     .eq("id", id);
@@ -115,32 +108,10 @@ export async function deletePiece(id: string) {
 export async function updatePieceStatus(
   id: string,
   status: PieceStatus,
-  masteryLevel?: MasteryLevel
 ) {
   const supabase = await createClient();
 
-  const update: Record<string, unknown> = { status };
-  if (masteryLevel) {
-    update.mastery_level = masteryLevel;
-  }
-
-  const { error } = await supabase.from("pieces").update(update).eq("id", id);
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  revalidateRepertoire(id);
-  return { success: true };
-}
-
-export async function updatePieceMastery(id: string, masteryLevel: MasteryLevel) {
-  const supabase = await createClient();
-
-  const { error } = await supabase
-    .from("pieces")
-    .update({ mastery_level: masteryLevel })
-    .eq("id", id);
+  const { error } = await supabase.from("pieces").update({ status }).eq("id", id);
 
   if (error) {
     return { error: error.message };
