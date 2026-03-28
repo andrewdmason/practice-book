@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { MasteryBadge } from "@/components/repertoire/mastery-badge";
 import { TaskList } from "@/components/repertoire/task-list";
 import { MentionFeed } from "@/components/repertoire/mention-feed";
 import { Separator } from "@/components/ui/separator";
@@ -10,7 +9,7 @@ import {
   getCollectionFocusData,
   getCollectionMentions,
 } from "@/app/(app)/repertoire/actions";
-import type { Collection, Piece, MasteryLevel } from "@/lib/types";
+import type { Collection, Piece } from "@/lib/types";
 
 export default async function CollectionDetailPage({
   params,
@@ -92,10 +91,6 @@ export default async function CollectionDetailPage({
                       </p>
                     )}
                   </div>
-                  <MasteryBadge
-                    level={piece.mastery_level as MasteryLevel}
-                    size="sm"
-                  />
                 </Link>
               ))}
             </div>

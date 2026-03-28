@@ -25,21 +25,21 @@ import type { ComboboxOption } from "@/components/ui/combobox";
 
 type EditingCell = {
   pieceId: string;
-  column: "name" | "composer" | "collection" | "status" | "mastery";
+  column: "name" | "composer" | "collection" | "status";
 } | null;
 
-type Column = "name" | "composer" | "collection" | "status" | "mastery";
-const COLUMNS: Column[] = ["name", "composer", "collection", "mastery"];
-const MOBILE_COLUMNS: Column[] = ["name", "mastery"];
-const ALL_TAB_COLUMNS: Column[] = ["name", "composer", "collection", "status", "mastery"];
-const ALL_TAB_MOBILE_COLUMNS: Column[] = ["name", "status", "mastery"];
+type Column = "name" | "composer" | "collection" | "status";
+const COLUMNS: Column[] = ["name", "composer", "collection"];
+const MOBILE_COLUMNS: Column[] = ["name"];
+const ALL_TAB_COLUMNS: Column[] = ["name", "composer", "collection", "status"];
+const ALL_TAB_MOBILE_COLUMNS: Column[] = ["name", "status"];
 
 export type TabValue = PieceStatus | "all";
 
 // Shared grid class so all rows align
-export const ROW_GRID = "grid grid-cols-[1fr_180px_160px_120px_36px] max-md:grid-cols-[1fr_auto_36px]";
-export const ROW_GRID_DRAG = "grid grid-cols-[28px_1fr_180px_160px_120px_36px] max-md:grid-cols-[28px_1fr_auto_36px]";
-export const ROW_GRID_ALL = "grid grid-cols-[1fr_180px_160px_100px_120px_36px] max-md:grid-cols-[1fr_auto_auto_36px]";
+export const ROW_GRID = "grid grid-cols-[1fr_180px_160px_36px] max-md:grid-cols-[1fr_36px]";
+export const ROW_GRID_DRAG = "grid grid-cols-[28px_1fr_180px_160px_36px] max-md:grid-cols-[28px_1fr_36px]";
+export const ROW_GRID_ALL = "grid grid-cols-[1fr_180px_160px_100px_36px] max-md:grid-cols-[1fr_auto_36px]";
 
 type ComposerGroup = {
   composer: string;
@@ -276,9 +276,9 @@ export function RepertoireTable({
       composer: null,
       collection_id: null,
       status: temp.status,
-      mastery_level: "learning",
       sort_order: 9999,
       notes: null,
+      target_tempo: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -334,7 +334,6 @@ export function RepertoireTable({
         <div className="hidden md:block px-3 py-2 border-b">Composer</div>
         <div className="hidden md:block px-3 py-2 border-b">Collection</div>
         <div className="px-3 py-2 border-b">Status</div>
-        <div className="px-3 py-2 border-b">Mastery</div>
         <div className="border-b" />
       </div>
     );
@@ -376,7 +375,6 @@ export function RepertoireTable({
       <div className="px-3 py-2 border-b">Name</div>
       <div className="hidden md:block px-3 py-2 border-b">Composer</div>
       <div className="hidden md:block px-3 py-2 border-b">Collection</div>
-      <div className="px-3 py-2 border-b">Mastery</div>
       <div className="border-b" />
     </div>
   );

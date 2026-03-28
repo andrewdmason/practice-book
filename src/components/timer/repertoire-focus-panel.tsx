@@ -24,12 +24,15 @@ import {
   updateTaskNote,
 } from "@/app/(app)/focus-panel/actions";
 import type { TaskWithPiece } from "@/app/(app)/focus-panel/actions";
+import { getSections } from "@/app/(app)/repertoire/section-actions";
 import { getNextBounceProgress } from "@/lib/progress-bounce";
 import { createClient } from "@/lib/supabase/client";
 import { useMetronome } from "@/components/metronome/metronome-context";
+import { SectionSidebar } from "@/components/timer/section-sidebar";
 import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
 import type {
   Piece,
+  PieceSectionWithChildren,
   Task,
   TimerTarget,
   TimeSummaryEntry,
@@ -98,17 +101,18 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
   const [piece, setPiece] = useState<{
     name: string;
     composer: string | null;
-    mastery_level: string;
-  } | null>(knownPiece ? { name: knownPiece.name, composer: knownPiece.composer, mastery_level: knownPiece.mastery_level } : null);
+    target_tempo: number | null;
+  } | null>(knownPiece ? { name: knownPiece.name, composer: knownPiece.composer, target_tempo: knownPiece.target_tempo } : null);
   const [openTasks, setOpenTasks] = useState<Task[]>([]);
   const [completedTasks, setCompletedTasks] = useState<Task[]>([]);
+  const [sections, setSections] = useState<PieceSectionWithChildren[]>([]);
   const [showCompleted, setShowCompleted] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   // Update piece immediately when knownPiece changes (no network needed)
   useEffect(() => {
     if (knownPiece) {
-      setPiece({ name: knownPiece.name, composer: knownPiece.composer, mastery_level: knownPiece.mastery_level });
+      setPiece({ name: knownPiece.name, composer: knownPiece.composer, target_tempo: knownPiece.target_tempo });
     }
   }, [knownPiece]);
 
@@ -118,6 +122,10 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
       setCompletedTasks(data.completedTasks);
       setLoaded(true);
     });
+  }, [pieceId]);
+
+  const refreshSections = useCallback(() => {
+    getSections(pieceId).then(setSections);
   }, [pieceId]);
 
   useEffect(() => {
@@ -131,17 +139,18 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
       const supabase = createClient();
       supabase
         .from("pieces")
-        .select("name, composer, mastery_level")
+        .select("name, composer, target_tempo")
         .eq("id", pieceId)
         .single()
         .then(({ data }) => {
           if (data) {
-            setPiece({ name: data.name, composer: data.composer, mastery_level: data.mastery_level });
+            setPiece({ name: data.name, composer: data.composer, target_tempo: data.target_tempo });
           }
         });
     }
 
     refreshTasks();
+    refreshSections();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pieceId, refreshTasks]);
 
@@ -150,6 +159,12 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
     window.addEventListener("tasks-changed", handler);
     return () => window.removeEventListener("tasks-changed", handler);
   }, [refreshTasks]);
+
+  useEffect(() => {
+    const handler = () => refreshSections();
+    window.addEventListener("sections-changed", handler);
+    return () => window.removeEventListener("sections-changed", handler);
+  }, [refreshSections]);
 
   const handleProgressChange = (taskId: string, progress: number) => {
     if (progress === 4) {
@@ -268,6 +283,18 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
           <p className="text-sm text-muted-foreground">
             No tasks yet.
           </p>
+        )}
+
+        {/* Sections */}
+        {sections.length > 0 && (
+          <SectionSidebar
+            sections={sections}
+            pieceTargetTempo={piece.target_tempo}
+            pieceId={pieceId}
+            pieceName={piece.name}
+            composer={piece.composer}
+            onSectionsChanged={refreshSections}
+          />
         )}
 
       </CardContent>

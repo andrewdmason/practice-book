@@ -4,6 +4,7 @@ import { TimerProvider } from "@/components/timer/timer-context";
 import { MetronomeProvider } from "@/components/metronome/metronome-context";
 import { SearchProvider } from "@/components/search/search-provider";
 import { TimezoneProvider } from "@/components/timezone-provider";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { createClient } from "@/lib/supabase/server";
 import type { Piece } from "@/lib/types";
 
@@ -23,14 +24,16 @@ export default async function AppLayout({
   return (
     <SearchProvider>
       <MetronomeProvider>
-        <TimezoneProvider />
-        <div className="flex min-h-full flex-1 flex-col">
-          <Header />
-          <TimerProvider activePieces={(activePieces as Piece[]) ?? []}>
-            <FooterBar />
-            <div className="flex flex-1 flex-col">{children}</div>
-          </TimerProvider>
-        </div>
+        <TooltipProvider>
+          <TimezoneProvider />
+          <div className="flex min-h-full flex-1 flex-col">
+            <Header />
+            <TimerProvider activePieces={(activePieces as Piece[]) ?? []}>
+              <FooterBar />
+              <div className="flex flex-1 flex-col">{children}</div>
+            </TimerProvider>
+          </div>
+        </TooltipProvider>
       </MetronomeProvider>
     </SearchProvider>
   );

@@ -61,6 +61,7 @@ export async function startSession(target: TimerTarget) {
     .insert({
       session_id: session.id,
       piece_id: target.category === "piece" ? target.pieceId : null,
+      section_id: target.category === "piece" ? (target.sectionId ?? null) : null,
       category: target.category as TimerCategory,
       started_at: now,
     })
@@ -101,6 +102,7 @@ export async function switchEntry(
     .insert({
       session_id: sessionId,
       piece_id: newTarget.category === "piece" ? newTarget.pieceId : null,
+      section_id: newTarget.category === "piece" ? (newTarget.sectionId ?? null) : null,
       category: newTarget.category as TimerCategory,
       started_at: now,
     })

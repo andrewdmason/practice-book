@@ -119,7 +119,6 @@ export function AddSectionButton({
 
     const formData = new FormData(e.currentTarget);
     formData.set("status", "active");
-    formData.set("mastery_level", "learning");
 
     const result = await createPiece(formData);
     if (result?.error) {

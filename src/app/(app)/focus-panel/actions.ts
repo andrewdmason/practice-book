@@ -8,7 +8,6 @@ import type {
   MentionWithSource,
   MentionPage,
   RepertoireOverviewItem,
-  MasteryLevel,
 } from "@/lib/types";
 
 export async function getPieceFocusData(pieceId: string): Promise<{
@@ -330,7 +329,7 @@ export async function getRepertoireOverview(): Promise<RepertoireOverviewItem[]>
   // Get all active pieces
   const { data: pieces } = await supabase
     .from("pieces")
-    .select("id, name, composer, mastery_level")
+    .select("id, name, composer")
     .eq("status", "active")
     .order("name");
 
@@ -376,7 +375,6 @@ export async function getRepertoireOverview(): Promise<RepertoireOverviewItem[]>
     id: p.id,
     name: p.name,
     composer: p.composer,
-    mastery_level: p.mastery_level as MasteryLevel,
     last_played: lastPlayedMap.get(p.id) ?? null,
     open_tasks: taskCounts.get(p.id) ?? 0,
   }));

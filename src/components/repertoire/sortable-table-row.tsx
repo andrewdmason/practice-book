@@ -7,7 +7,7 @@ import { RepertoireTableRowCells } from "./repertoire-table-row";
 import type { Piece, Collection } from "@/lib/types";
 import type { ComboboxOption } from "@/components/ui/combobox";
 
-type EditingColumn = "name" | "composer" | "collection" | "status" | "mastery" | null;
+type EditingColumn = "name" | "composer" | "collection" | "status" | null;
 
 export function SortableTableRow({
   piece,

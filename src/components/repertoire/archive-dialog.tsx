@@ -10,9 +10,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { MasterySelector } from "./mastery-selector";
 import { updatePieceStatus } from "@/app/(app)/repertoire/actions";
-import type { MasteryLevel, Piece } from "@/lib/types";
+import type { Piece } from "@/lib/types";
 
 export function ArchiveDialog({
   piece,
@@ -23,14 +22,11 @@ export function ArchiveDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const [masteryLevel, setMasteryLevel] = useState<MasteryLevel>(
-    piece.mastery_level
-  );
   const [pending, setPending] = useState(false);
 
   async function handleArchive() {
     setPending(true);
-    await updatePieceStatus(piece.id, "archived", masteryLevel);
+    await updatePieceStatus(piece.id, "archived");
     setPending(false);
     onOpenChange(false);
   }
@@ -41,12 +37,9 @@ export function ArchiveDialog({
         <DialogHeader>
           <DialogTitle>Archive &ldquo;{piece.name}&rdquo;?</DialogTitle>
           <DialogDescription>
-            Before archiving, you can update the mastery level for this piece.
+            This piece will be moved to the archived tab.
           </DialogDescription>
         </DialogHeader>
-        <div className="py-2">
-          <MasterySelector value={masteryLevel} onChange={setMasteryLevel} />
-        </div>
         <DialogFooter>
           <Button
             variant="outline"
