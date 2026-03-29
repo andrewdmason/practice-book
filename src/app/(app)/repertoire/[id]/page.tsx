@@ -12,13 +12,18 @@ const PieceCumulativeChart = dynamic(() =>
     (m) => m.PieceCumulativeChart
   )
 );
+const ProgressGrid = dynamic(() =>
+  import("@/components/repertoire/progress-grid").then(
+    (m) => m.ProgressGrid
+  )
+);
 import { MentionFeed } from "@/components/repertoire/mention-feed";
 import { Separator } from "@/components/ui/separator";
 import {
   getPieceFocusData,
   getPieceMentions,
 } from "@/app/(app)/focus-panel/actions";
-import { getSections } from "@/app/(app)/repertoire/section-actions";
+import { getSections, getProgressSnapshots } from "@/app/(app)/repertoire/section-actions";
 import { getVideos, getTimestamps } from "@/app/(app)/repertoire/video-actions";
 import { getPieceCumulativeData } from "@/app/(app)/reports/actions";
 import type { Piece, Collection } from "@/lib/types";
@@ -43,7 +48,7 @@ export default async function PieceDetailPage({
 
   const typedPiece = piece as Piece;
 
-  const [collection, focusData, mentionPage, cumulativeData, sections, videos] = await Promise.all([
+  const [collection, focusData, mentionPage, cumulativeData, sections, videos, progressSnapshots] = await Promise.all([
     typedPiece.collection_id
       ? supabase
           .from("collections")
@@ -57,6 +62,7 @@ export default async function PieceDetailPage({
     getPieceCumulativeData(id),
     getSections(id),
     getVideos(id),
+    getProgressSnapshots(id),
   ]);
 
   const videoTimestamps = videos[0]
@@ -96,6 +102,10 @@ export default async function PieceDetailPage({
         <Separator />
 
         <PieceCumulativeChart data={cumulativeData} />
+
+        <Separator />
+
+        <ProgressGrid sections={sections} snapshots={progressSnapshots} />
 
         <Separator />
 

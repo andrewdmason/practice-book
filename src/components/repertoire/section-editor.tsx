@@ -538,7 +538,7 @@ export function SectionEditor({
       if (result1.success && result1.id) {
         // Copy parent's status and tempo to A1
         if (parent.status !== 0) {
-          await updateSectionStatus(result1.id, parent.status as SectionStatus);
+          await updateSectionStatus(result1.id, parent.status as SectionStatus, { pieceId, skipSnapshot: true });
         }
         if (parent.target_tempo !== null) {
           await updateSectionTargetTempo(result1.id, parent.target_tempo);
@@ -577,7 +577,7 @@ export function SectionEditor({
       if (parent.children.length === 1) {
         const remaining = parent.children[0];
         // Copy child's data to parent
-        await updateSectionStatus(parent.id, remaining.status as SectionStatus);
+        await updateSectionStatus(parent.id, remaining.status as SectionStatus, { pieceId, skipSnapshot: true });
         await updateSectionTargetTempo(parent.id, remaining.target_tempo);
         // Copy timestamp if exists
         if (activeVideo) {
@@ -609,7 +609,7 @@ export function SectionEditor({
         };
       })
     );
-    updateSectionStatus(section.id, next);
+    updateSectionStatus(section.id, next, { pieceId });
     window.dispatchEvent(new CustomEvent("section-status-changed", { detail: { sectionId: section.id, status: next } }));
   };
 

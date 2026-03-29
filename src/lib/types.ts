@@ -181,9 +181,16 @@ export type TypeaheadResult = {
 };
 
 // Focus panel types
+export type StatusChange = {
+  sectionLabel: string;
+  oldStatus: SectionStatus;
+  newStatus: SectionStatus;
+};
+
 export type MentionWithSource = Mention & {
   source_date: string;
   source_label: string;
+  statusChanges?: StatusChange[];
 };
 
 export type MentionPage = {
@@ -224,6 +231,8 @@ export type FeedDay = {
   lessons: FeedPracticeEntry[];
   timeSummary: TimeSummaryEntry[];
   lessonTimeSummaries?: Record<string, LessonTimeSummary>;
+  /** Status changes grouped by piece_id for this date */
+  statusChangesByPiece?: Record<string, StatusChange[]>;
 };
 
 // Piece section types
@@ -275,6 +284,29 @@ export const SECTION_STATUS_DOT_COLORS: Record<SectionStatus, string> = {
   6: "text-[#3070C4]",
   7: "text-[#1A56B0]",
   8: "text-[#22C55E]",
+};
+
+export const SECTION_STATUS_HEX_COLORS: Record<SectionStatus, string> = {
+  0: "#E5E7EB",
+  1: "#D6E4F0",
+  2: "#B8D4F0",
+  3: "#94BDE8",
+  4: "#6FA3DE",
+  5: "#4D8AD4",
+  6: "#3070C4",
+  7: "#1A56B0",
+  8: "#22C55E",
+};
+
+export type SectionStatusSnapshot = {
+  id: string;
+  piece_id: string;
+  section_id: string;
+  old_status: SectionStatus;
+  new_status: SectionStatus;
+  snapshot_date: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type PieceSection = {

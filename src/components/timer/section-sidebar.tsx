@@ -168,7 +168,7 @@ function SectionRow({
       ? ((section.status + 8) % 9)
       : ((section.status + 1) % 9)) as SectionStatus;
     onStatusChange?.(section.id, next);
-    updateSectionStatus(section.id, next);
+    updateSectionStatus(section.id, next, { pieceId });
     window.dispatchEvent(new CustomEvent("section-status-changed", { detail: { sectionId: section.id, status: next } }));
     if (metronomeActive) {
       const newTempo = practiceTempo(next, effectiveTempo);

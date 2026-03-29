@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { BookOpenIcon, MusicIcon } from "lucide-react";
+import { ArrowRightIcon, BookOpenIcon, MusicIcon } from "lucide-react";
 import type { MentionWithSource } from "@/lib/types";
+import { SECTION_STATUS_COLORS } from "@/lib/types";
 
 export function MentionCard({ mention }: { mention: MentionWithSource }) {
   const isLesson = mention.source_label === "Lesson";
@@ -35,6 +36,27 @@ export function MentionCard({ mention }: { mention: MentionWithSource }) {
         <p className="text-sm text-foreground leading-relaxed">
           &ldquo;{mention.context_snippet}&rdquo;
         </p>
+      )}
+      {mention.statusChanges && mention.statusChanges.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+          {mention.statusChanges.map((change) => (
+            <span
+              key={change.sectionLabel}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+            >
+              <span className="font-medium text-foreground">
+                {change.sectionLabel}
+              </span>
+              <span
+                className={`inline-block size-2.5 rounded-sm ${SECTION_STATUS_COLORS[change.oldStatus]}`}
+              />
+              <ArrowRightIcon className="size-2.5" />
+              <span
+                className={`inline-block size-2.5 rounded-sm ${SECTION_STATUS_COLORS[change.newStatus]}`}
+              />
+            </span>
+          ))}
+        </div>
       )}
     </Link>
   );
