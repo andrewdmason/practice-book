@@ -1,16 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { EditorDemoClient } from "./editor-demo-client";
-import type { PieceSuggestion } from "@/lib/types";
 
 export default async function EditorDemoPage() {
   const supabase = await createClient();
-
-  // Fetch pieces for mention autocomplete
-  const { data: pieces } = await supabase
-    .from("pieces")
-    .select("id, name, composer")
-    .eq("status", "active")
-    .order("name");
 
   // Create or get a demo lesson entry for testing saves
   const today = new Date().toISOString().split("T")[0];
@@ -100,7 +92,6 @@ export default async function EditorDemoPage() {
 
   return (
     <EditorDemoClient
-      pieces={(pieces as PieceSuggestion[]) ?? []}
       lessonId={lessonSection!.id}
       lessonContent={lessonSection!.content}
       sectionId={sectionId}

@@ -4,10 +4,8 @@ import { useCallback } from "react";
 import type { JSONContent } from "@tiptap/core";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { saveEditorContent } from "@/app/(app)/editor/actions";
-import type { PieceSuggestion } from "@/lib/types";
 
 type EditorDemoClientProps = {
-  pieces: PieceSuggestion[];
   lessonId: string;
   lessonContent: JSONContent | null;
   sectionId: string;
@@ -15,7 +13,6 @@ type EditorDemoClientProps = {
 };
 
 export function EditorDemoClient({
-  pieces,
   lessonId,
   lessonContent,
   sectionId,
@@ -40,7 +37,7 @@ export function EditorDemoClient({
       <div>
         <h1 className="font-serif text-2xl font-bold">Editor Demo</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Test the rich text editor with mentions, tasks, and goals.
+          Test the rich text editor with tasks and metronome markings.
         </p>
       </div>
 
@@ -50,8 +47,7 @@ export function EditorDemoClient({
             Practice Notes (General)
           </h2>
           <p className="mb-3 text-xs text-muted-foreground">
-            Try: <code>@</code> for piece mentions, <code>@120</code> for
-            metronome, <code>[]</code> for tasks
+            Try: <code>@120</code> for metronome, <code>[]</code> for tasks
           </p>
           <div className="rounded-lg border bg-card p-4">
             <RichTextEditor
@@ -59,7 +55,6 @@ export function EditorDemoClient({
               sourceType="practice_entry"
               sourceId={sectionId}
               initialContent={sectionContent}
-              pieces={pieces}
               onSave={handleSaveSection}
               placeholder="Write your practice notes..."
             />
@@ -79,7 +74,6 @@ export function EditorDemoClient({
               sourceType="practice_entry"
               sourceId={lessonId}
               initialContent={lessonContent}
-              pieces={pieces}
               onSave={handleSaveLesson}
               placeholder="Write your lesson notes..."
             />

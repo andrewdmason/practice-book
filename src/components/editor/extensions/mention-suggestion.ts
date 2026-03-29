@@ -6,46 +6,39 @@ import {
   type SuggestionItem,
   type SuggestionListRef,
 } from "../suggestion-list";
-import type { PieceSuggestion } from "@/lib/types";
 
-export function createMentionSuggestion(
-  pieces: PieceSuggestion[]
-): Omit<SuggestionOptions<SuggestionItem>, "editor"> {
+export function createMentionSuggestion(): Omit<SuggestionOptions<SuggestionItem>, "editor"> {
   return {
     char: "@",
     allowSpaces: false,
 
     items: ({ query }) => {
-      const q = query.toLowerCase();
+      // Show hint when query is empty (just typed @)
+      if (query.length === 0) {
+        return [
+          {
+            id: "tempo-hint",
+            type: "hint" as const,
+            title: "Type a tempo, e.g. @120",
+          },
+        ];
+      }
 
-      // If query is purely numeric, suggest a metronome marking
-      if (/^\d+$/.test(query) && query.length > 0) {
+      // Metronome marking for numeric queries
+      if (/^\d+$/.test(query)) {
         return [
           {
             id: `tempo-${query}`,
             type: "metronome" as const,
             title: `♩=${query}`,
-            subtitle: "Set tempo",
+            subtitle: "Insert tempo marking",
             data: { bpm: parseInt(query, 10) },
           },
         ];
       }
 
-      // Otherwise, filter pieces
-      return pieces
-        .filter(
-          (p) =>
-            p.name.toLowerCase().includes(q) ||
-            (p.composer && p.composer.toLowerCase().includes(q))
-        )
-        .slice(0, 8)
-        .map((p) => ({
-          id: p.id,
-          type: "piece" as const,
-          title: p.name,
-          subtitle: p.composer,
-          data: { id: p.id, name: p.name, composer: p.composer },
-        }));
+      // Non-numeric text — dismiss the popup
+      return [];
     },
 
     render: () => {
@@ -104,31 +97,15 @@ export function createMentionSuggestion(
     },
 
     command: ({ editor, range, props: item }) => {
-      if (item.type === "metronome") {
-        editor
-          .chain()
-          .focus()
-          .deleteRange(range)
-          .insertContent({
-            type: "metronomeMarking",
-            attrs: { bpm: item.data?.bpm ?? 120 },
-          })
-          .run();
-      } else {
-        editor
-          .chain()
-          .focus()
-          .deleteRange(range)
-          .insertContent({
-            type: "pieceMention",
-            attrs: {
-              id: item.data?.id,
-              name: item.data?.name,
-              composer: item.data?.composer,
-            },
-          })
-          .run();
-      }
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertContent({
+          type: "metronomeMarking",
+          attrs: { bpm: item.data?.bpm ?? 120 },
+        })
+        .run();
     },
   };
 }

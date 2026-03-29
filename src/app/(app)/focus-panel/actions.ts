@@ -4,9 +4,6 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type {
   Task,
-  Mention,
-  MentionWithSource,
-  MentionPage,
   RepertoireOverviewItem,
 } from "@/lib/types";
 
@@ -38,42 +35,6 @@ export async function getPieceFocusData(pieceId: string): Promise<{
   };
 }
 
-async function resolveMentionSources(
-  rawMentions: Mention[]
-): Promise<MentionWithSource[]> {
-  if (rawMentions.length === 0) return [];
-
-  const supabase = await createClient();
-
-  const sectionIds = rawMentions.map((m) => m.source_id);
-
-  const sectionDates: Record<string, { date: string; type: string }> = {};
-
-  if (sectionIds.length > 0) {
-    const { data: sections } = await supabase
-      .from("practice_entry_sections")
-      .select("id, practice_entries(date, type)")
-      .in("id", sectionIds);
-    if (sections) {
-      for (const s of sections) {
-        const entry = s.practice_entries as unknown as { date: string; type: string } | null;
-        if (entry) {
-          sectionDates[s.id] = { date: entry.date, type: entry.type };
-        }
-      }
-    }
-  }
-
-  return rawMentions.map((m) => {
-    const info = sectionDates[m.source_id];
-    return {
-      ...m,
-      source_date: info?.date ?? m.created_at.slice(0, 10),
-      source_label: info?.type === "lesson" ? "Lesson" : "Practice",
-    };
-  });
-}
-
 export async function getCategoryFocusData(
   category: "technique" | "sight_reading"
 ): Promise<{ tasks: Task[] }> {
@@ -98,49 +59,6 @@ export async function getCategoryFocusData(
     .order("created_at", { ascending: false });
 
   return { tasks: (tasks ?? []) as Task[] };
-}
-
-export async function getPieceMentions(
-  pieceId: string,
-  cursor?: string,
-  limit = 20
-): Promise<MentionPage> {
-  const supabase = await createClient();
-
-  let query = supabase
-    .from("mentions")
-    .select("*")
-    .eq("piece_id", pieceId)
-    .order("created_at", { ascending: false })
-    .limit(limit + 1);
-
-  if (cursor) {
-    query = query.lt("created_at", cursor);
-  }
-
-  const { data: rawMentions } = await query;
-  const rows = rawMentions ?? [];
-  const hasMore = rows.length > limit;
-  const page = hasMore ? rows.slice(0, limit) : rows;
-  const items = await resolveMentionSources(page as Mention[]);
-
-  // Enrich with status changes for those dates
-  const { getStatusChangesForDates } = await import(
-    "@/app/(app)/repertoire/section-actions"
-  );
-  const dates = [...new Set(items.map((m) => m.source_date))];
-  const changesByDate = await getStatusChangesForDates(pieceId, dates);
-  for (const item of items) {
-    const changes = changesByDate[item.source_date];
-    if (changes && changes.length > 0) {
-      item.statusChanges = changes;
-    }
-  }
-
-  return {
-    items,
-    nextCursor: hasMore ? page[page.length - 1].created_at : null,
-  };
 }
 
 export async function updateTaskProgress(taskId: string, progress: number) {

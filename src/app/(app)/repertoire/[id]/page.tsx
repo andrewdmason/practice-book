@@ -17,11 +17,9 @@ const ProgressGrid = dynamic(() =>
     (m) => m.ProgressGrid
   )
 );
-import { MentionFeed } from "@/components/repertoire/mention-feed";
 import { Separator } from "@/components/ui/separator";
 import {
   getPieceFocusData,
-  getPieceMentions,
 } from "@/app/(app)/focus-panel/actions";
 import { getSections, getProgressSnapshots } from "@/app/(app)/repertoire/section-actions";
 import { getVideos, getTimestamps } from "@/app/(app)/repertoire/video-actions";
@@ -48,7 +46,7 @@ export default async function PieceDetailPage({
 
   const typedPiece = piece as Piece;
 
-  const [collection, focusData, mentionPage, cumulativeData, sections, videos, progressSnapshots] = await Promise.all([
+  const [collection, focusData, cumulativeData, sections, videos, progressSnapshots] = await Promise.all([
     typedPiece.collection_id
       ? supabase
           .from("collections")
@@ -58,7 +56,6 @@ export default async function PieceDetailPage({
           .then(({ data }) => data as Collection | null)
       : Promise.resolve(null),
     getPieceFocusData(id),
-    getPieceMentions(id),
     getPieceCumulativeData(id),
     getSections(id),
     getVideos(id),
@@ -68,11 +65,6 @@ export default async function PieceDetailPage({
   const videoTimestamps = videos[0]
     ? await getTimestamps(videos[0].id)
     : [];
-
-  async function loadMoreMentions(cursor: string) {
-    "use server";
-    return getPieceMentions(id, cursor);
-  }
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6">
@@ -106,10 +98,6 @@ export default async function PieceDetailPage({
         <Separator />
 
         <ProgressGrid sections={sections} snapshots={progressSnapshots} />
-
-        <Separator />
-
-        <MentionFeed initialData={mentionPage} loadMore={loadMoreMentions} />
       </div>
     </div>
   );
