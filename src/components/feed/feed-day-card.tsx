@@ -26,7 +26,7 @@ import { localDate } from "@/lib/date-utils";
 import { formatMinutes } from "@/lib/timer-utils";
 import { saveEditorContent } from "@/app/(app)/editor/actions";
 import { AddSectionButton } from "./add-section-button";
-import type { FeedDay, FeedPracticeEntry, LessonTimeSummary, PieceSuggestion, PracticeEntrySection, TimeSummaryEntry, TimerTarget } from "@/lib/types";
+import type { FeedDay, FeedPracticeEntry, LessonTimeSummary, PieceSuggestion, PracticeEntrySection, StatusChange, TimeSummaryEntry, TimerTarget } from "@/lib/types";
 
 function formatDateHeader(dateStr: string): string {
   const today = localDate();
@@ -186,6 +186,7 @@ function EntryCard({
   timeSummary,
   lessonTimeSummary,
   focusKey,
+  statusChangesByPiece,
 }: {
   entry: FeedPracticeEntry;
   isToday: boolean;
@@ -193,6 +194,7 @@ function EntryCard({
   timeSummary: TimeSummaryEntry[];
   lessonTimeSummary?: LessonTimeSummary;
   focusKey?: string | null;
+  statusChangesByPiece?: Record<string, StatusChange[]>;
 }) {
   const { isRunning, currentTarget, entryElapsedSeconds } = useTimer();
   const initialEntryElapsedRef = useRef(entryElapsedSeconds);
@@ -219,6 +221,10 @@ function EntryCard({
           ? Math.round(sinceLastLessonSeconds / lessonTimeSummary.dayCount)
           : undefined;
 
+        const sectionStatusChanges = section.category === "piece" && section.piece_id && statusChangesByPiece
+          ? statusChangesByPiece[section.piece_id]
+          : undefined;
+
         return (
           <FeedSection
             key={section.id}
@@ -231,6 +237,7 @@ function EntryCard({
             sinceLastLessonSeconds={sinceLastLessonSeconds}
             sinceLastLessonSecondsPerDay={sinceLastLessonSecondsPerDay}
             editorContext={isLesson ? "lesson" : "practice_entry"}
+            statusChanges={sectionStatusChanges}
           />
         );
       })}
@@ -421,6 +428,7 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
           pieces={pieces}
           timeSummary={day.timeSummary}
           focusKey={focusKey}
+          statusChangesByPiece={day.statusChangesByPiece}
         />
       )}
 

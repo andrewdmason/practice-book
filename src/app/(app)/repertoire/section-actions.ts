@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import type { PieceSection, PieceSectionWithChildren, SectionStatus } from "@/lib/types";
+import type {
+  PieceSection,
+  PieceSectionWithChildren,
+  SectionStatus,
+  SectionStatusSnapshot,
+  StatusChange,
+} from "@/lib/types";
 
 function revalidate(pieceId?: string) {
   revalidatePath("/");
@@ -83,9 +89,22 @@ export async function createSection(
 
 export async function updateSectionStatus(
   sectionId: string,
-  status: SectionStatus
+  status: SectionStatus,
+  options?: { pieceId?: string; skipSnapshot?: boolean }
 ) {
   const supabase = await createClient();
+
+  // Fetch current status and piece_id
+  const { data: current } = await supabase
+    .from("piece_sections")
+    .select("status, piece_id")
+    .eq("id", sectionId)
+    .single();
+
+  if (!current) return { error: "Section not found" };
+
+  const pieceId = options?.pieceId ?? current.piece_id;
+  const oldStatus = current.status as SectionStatus;
 
   const { error } = await supabase
     .from("piece_sections")
@@ -96,6 +115,17 @@ export async function updateSectionStatus(
     return { error: error.message };
   }
 
+  // Log snapshot if status actually changed
+  if (oldStatus !== status && !options?.skipSnapshot) {
+    await supabase.from("section_status_snapshots").insert({
+      piece_id: pieceId,
+      section_id: sectionId,
+      old_status: oldStatus,
+      new_status: status,
+    });
+  }
+
+  revalidate(pieceId);
   return { success: true };
 }
 
@@ -196,4 +226,80 @@ export async function updatePieceTargetTempo(
 
   revalidate(pieceId);
   return { success: true };
+}
+
+/** Get status changes for specific dates, grouped by date. Used by MentionFeed. */
+export async function getStatusChangesForDates(
+  pieceId: string,
+  dates: string[]
+): Promise<Record<string, StatusChange[]>> {
+  if (dates.length === 0) return {};
+
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("section_status_snapshots")
+    .select("section_id, old_status, new_status, snapshot_date")
+    .eq("piece_id", pieceId)
+    .in("snapshot_date", dates)
+    .order("created_at", { ascending: true });
+
+  if (!data || data.length === 0) return {};
+
+  // Get section labels for the sections that changed
+  const sectionIds = [...new Set(data.map((d) => d.section_id))];
+  const { data: sections } = await supabase
+    .from("piece_sections")
+    .select("id, label")
+    .in("id", sectionIds);
+
+  const labelMap = new Map(
+    (sections ?? []).map((s) => [s.id, s.label])
+  );
+
+  // Group by date, then collapse to net change per section per day
+  const result: Record<string, StatusChange[]> = {};
+
+  for (const row of data) {
+    const date = row.snapshot_date;
+    if (!result[date]) result[date] = [];
+
+    const existing = result[date].find(
+      (c) => c.sectionLabel === labelMap.get(row.section_id)
+    );
+    if (existing) {
+      // Update the newStatus to the latest
+      existing.newStatus = row.new_status as SectionStatus;
+    } else {
+      result[date].push({
+        sectionLabel: labelMap.get(row.section_id) ?? "?",
+        oldStatus: row.old_status as SectionStatus,
+        newStatus: row.new_status as SectionStatus,
+      });
+    }
+  }
+
+  // Filter out entries where net change is zero
+  for (const date of Object.keys(result)) {
+    result[date] = result[date].filter((c) => c.oldStatus !== c.newStatus);
+    if (result[date].length === 0) delete result[date];
+  }
+
+  return result;
+}
+
+/** Get all snapshots for a piece. Used by ProgressGrid. */
+export async function getProgressSnapshots(
+  pieceId: string
+): Promise<SectionStatusSnapshot[]> {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("section_status_snapshots")
+    .select("*")
+    .eq("piece_id", pieceId)
+    .order("snapshot_date", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  return (data ?? []) as SectionStatusSnapshot[];
 }

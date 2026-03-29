@@ -115,7 +115,7 @@ export function ScrubberBar() {
     setSections((prev) =>
       prev.map((s) => (s.id === sectionId ? { ...s, status: next } : s))
     );
-    updateSectionStatus(sectionId, next);
+    updateSectionStatus(sectionId, next, { pieceId: activePieceId! });
     window.dispatchEvent(new CustomEvent("section-status-changed", { detail: { sectionId, status: next } }));
     if (metronomeActive) {
       const effectiveTempo = section.target_tempo ?? activePiece?.target_tempo ?? null;

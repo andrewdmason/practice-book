@@ -11,6 +11,8 @@ import type {
   FeedPracticeEntry,
   EntrySectionCategory,
   PracticeEntryType,
+  SectionStatus,
+  StatusChange,
 } from "@/lib/types";
 
 /**
@@ -643,6 +645,56 @@ export async function getFeedPage(
     };
   }
 
+  // Batch-fetch status changes for all dates
+  const { data: allSnapshots } = await supabase
+    .from("section_status_snapshots")
+    .select("piece_id, section_id, old_status, new_status, snapshot_date")
+    .in("snapshot_date", allDates)
+    .order("created_at", { ascending: true });
+
+  // Get section labels for snapshots
+  const snapshotSectionIds = [...new Set((allSnapshots ?? []).map((s) => s.section_id))];
+  const sectionLabelMap = new Map<string, string>();
+  if (snapshotSectionIds.length > 0) {
+    const { data: sectionLabels } = await supabase
+      .from("piece_sections")
+      .select("id, label")
+      .in("id", snapshotSectionIds);
+    for (const s of sectionLabels ?? []) {
+      sectionLabelMap.set(s.id, s.label);
+    }
+  }
+
+  // Group by date → piece_id, collapsing to net change per section
+  const statusChangesByDatePiece = new Map<string, Record<string, StatusChange[]>>();
+  for (const snap of allSnapshots ?? []) {
+    const date = snap.snapshot_date;
+    if (!statusChangesByDatePiece.has(date)) statusChangesByDatePiece.set(date, {});
+    const byPiece = statusChangesByDatePiece.get(date)!;
+    if (!byPiece[snap.piece_id]) byPiece[snap.piece_id] = [];
+
+    const label = sectionLabelMap.get(snap.section_id) ?? "?";
+    const existing = byPiece[snap.piece_id].find((c) => c.sectionLabel === label);
+    if (existing) {
+      existing.newStatus = snap.new_status as SectionStatus;
+    } else {
+      byPiece[snap.piece_id].push({
+        sectionLabel: label,
+        oldStatus: snap.old_status as SectionStatus,
+        newStatus: snap.new_status as SectionStatus,
+      });
+    }
+  }
+
+  // Filter out net-zero changes
+  for (const [date, byPiece] of statusChangesByDatePiece) {
+    for (const pieceId of Object.keys(byPiece)) {
+      byPiece[pieceId] = byPiece[pieceId].filter((c) => c.oldStatus !== c.newStatus);
+      if (byPiece[pieceId].length === 0) delete byPiece[pieceId];
+    }
+    if (Object.keys(byPiece).length === 0) statusChangesByDatePiece.delete(date);
+  }
+
   // Build feed days
   const items: FeedDay[] = [];
 
@@ -652,12 +704,19 @@ export async function getFeedPage(
     const practiceEntry = forDate.find((e) => e.type === "practice");
     const lessonEntries = forDate.filter((e) => e.type === "lesson");
 
-    items.push({
+    const dayItem: FeedDay = {
       date,
       practiceEntry: practiceEntry ? buildFeedEntry(practiceEntry) : null,
       lessons: lessonEntries.map(buildFeedEntry),
       timeSummary,
-    });
+    };
+
+    const dayStatusChanges = statusChangesByDatePiece.get(date);
+    if (dayStatusChanges) {
+      dayItem.statusChangesByPiece = dayStatusChanges;
+    }
+
+    items.push(dayItem);
   }
 
   // Compute "practice since last lesson" summaries for each lesson on this page

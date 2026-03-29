@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { NotebookPenIcon, ClockIcon, MoreHorizontalIcon, Trash2Icon, MusicIcon, PencilIcon, EyeIcon } from "lucide-react";
+import { NotebookPenIcon, ClockIcon, MoreHorizontalIcon, Trash2Icon, MusicIcon, PencilIcon, EyeIcon, ArrowRightIcon } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { JSONContent } from "@tiptap/core";
 
@@ -16,7 +16,8 @@ import { saveEditorContent } from "@/app/(app)/editor/actions";
 import { deleteSection } from "@/app/(app)/feed/actions";
 import { formatMinutes } from "@/lib/timer-utils";
 import { SessionEntriesDialog } from "@/components/feed/session-entries-dialog";
-import type { PracticeEntrySection, PieceSuggestion, TimerCategory } from "@/lib/types";
+import type { PracticeEntrySection, PieceSuggestion, StatusChange, TimerCategory } from "@/lib/types";
+import { SECTION_STATUS_COLORS } from "@/lib/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,9 +65,10 @@ type FeedSectionProps = {
   sinceLastLessonSeconds?: number;
   sinceLastLessonSecondsPerDay?: number;
   editorContext?: "practice_entry" | "lesson";
+  statusChanges?: StatusChange[];
 };
 
-export function FeedSection({ section, date, isToday, isActive, pieces, timeSeconds, sinceLastLessonSeconds, sinceLastLessonSecondsPerDay, editorContext = "practice_entry" }: FeedSectionProps) {
+export function FeedSection({ section, date, isToday, isActive, pieces, timeSeconds, sinceLastLessonSeconds, sinceLastLessonSecondsPerDay, editorContext = "practice_entry", statusChanges }: FeedSectionProps) {
   const sectionHasContent = hasContent(section.content);
   const isLessonGeneral = section.category === "general" && editorContext === "lesson";
   const [isEditorVisible, setIsEditorVisible] = useState(sectionHasContent || isLessonGeneral);
@@ -202,6 +204,27 @@ export function FeedSection({ section, date, isToday, isActive, pieces, timeSeco
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
+      )}
+      {statusChanges && statusChanges.length > 0 && (
+        <div className="px-3 pb-1 flex flex-wrap gap-x-3 gap-y-1">
+          {statusChanges.map((change) => (
+            <span
+              key={change.sectionLabel}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+            >
+              <span className="font-medium text-foreground">
+                {change.sectionLabel}
+              </span>
+              <span
+                className={`inline-block size-2.5 rounded-sm ${SECTION_STATUS_COLORS[change.oldStatus]}`}
+              />
+              <ArrowRightIcon className="size-2.5" />
+              <span
+                className={`inline-block size-2.5 rounded-sm ${SECTION_STATUS_COLORS[change.newStatus]}`}
+              />
+            </span>
+          ))}
         </div>
       )}
       {section.category !== "general" && (

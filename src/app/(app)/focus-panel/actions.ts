@@ -124,6 +124,19 @@ export async function getPieceMentions(
   const page = hasMore ? rows.slice(0, limit) : rows;
   const items = await resolveMentionSources(page as Mention[]);
 
+  // Enrich with status changes for those dates
+  const { getStatusChangesForDates } = await import(
+    "@/app/(app)/repertoire/section-actions"
+  );
+  const dates = [...new Set(items.map((m) => m.source_date))];
+  const changesByDate = await getStatusChangesForDates(pieceId, dates);
+  for (const item of items) {
+    const changes = changesByDate[item.source_date];
+    if (changes && changes.length > 0) {
+      item.statusChanges = changes;
+    }
+  }
+
   return {
     items,
     nextCursor: hasMore ? page[page.length - 1].created_at : null,
