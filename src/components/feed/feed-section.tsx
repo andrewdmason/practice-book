@@ -16,7 +16,7 @@ import { saveEditorContent } from "@/app/(app)/editor/actions";
 import { deleteSection } from "@/app/(app)/feed/actions";
 import { formatMinutes } from "@/lib/timer-utils";
 import { SessionEntriesDialog } from "@/components/feed/session-entries-dialog";
-import type { PracticeEntrySection, PieceSuggestion, StatusChange, TimerCategory } from "@/lib/types";
+import type { PracticeEntrySection, StatusChange, TimerCategory } from "@/lib/types";
 import { SECTION_STATUS_COLORS } from "@/lib/types";
 import {
   DropdownMenu,
@@ -60,7 +60,6 @@ type FeedSectionProps = {
   date: string;
   isToday: boolean;
   isActive?: boolean;
-  pieces: PieceSuggestion[];
   timeSeconds?: number;
   sinceLastLessonSeconds?: number;
   sinceLastLessonSecondsPerDay?: number;
@@ -68,7 +67,7 @@ type FeedSectionProps = {
   statusChanges?: StatusChange[];
 };
 
-export function FeedSection({ section, date, isToday, isActive, pieces, timeSeconds, sinceLastLessonSeconds, sinceLastLessonSecondsPerDay, editorContext = "practice_entry", statusChanges }: FeedSectionProps) {
+export function FeedSection({ section, date, isToday, isActive, timeSeconds, sinceLastLessonSeconds, sinceLastLessonSecondsPerDay, editorContext = "practice_entry", statusChanges }: FeedSectionProps) {
   const sectionHasContent = hasContent(section.content);
   const isLessonGeneral = section.category === "general" && editorContext === "lesson";
   const [isEditorVisible, setIsEditorVisible] = useState(sectionHasContent || isLessonGeneral);
@@ -244,7 +243,6 @@ export function FeedSection({ section, date, isToday, isActive, pieces, timeSeco
             sourceType="practice_entry"
             sourceId={section.id}
             initialContent={section.content as JSONContent | null}
-            pieces={pieces}
             onSave={handleSave}
             onDismiss={() => setIsEditorVisible(false)}
             placeholder="Write your notes..."

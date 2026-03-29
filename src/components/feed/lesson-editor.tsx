@@ -103,7 +103,6 @@ export function LessonEditor({
               section={section}
               date={lessonDate}
               isToday={true}
-              pieces={pieces}
               editorContext="lesson"
             />
           ))}

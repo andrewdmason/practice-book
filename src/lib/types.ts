@@ -86,15 +86,6 @@ export type SourceType = "practice_entry";
 export type PracticeEntryType = "practice" | "lesson";
 export type EntrySectionCategory = "piece" | "technique" | "sight_reading" | "general";
 
-export type Mention = {
-  id: string;
-  piece_id: string;
-  source_type: SourceType;
-  source_id: string;
-  context_snippet: string | null;
-  created_at: string;
-};
-
 export type Task = {
   id: string;
   source_type: SourceType;
@@ -185,17 +176,6 @@ export type StatusChange = {
   sectionLabel: string;
   oldStatus: SectionStatus;
   newStatus: SectionStatus;
-};
-
-export type MentionWithSource = Mention & {
-  source_date: string;
-  source_label: string;
-  statusChanges?: StatusChange[];
-};
-
-export type MentionPage = {
-  items: MentionWithSource[];
-  nextCursor: string | null;
 };
 
 export type RepertoireOverviewItem = {

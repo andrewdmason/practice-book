@@ -16,19 +16,6 @@ function getTextContent(node: JSONContent): string {
   return node.content.map(getTextContent).join("");
 }
 
-function findPieceMentionId(node: JSONContent): string | null {
-  if (node.type === "pieceMention" && node.attrs?.id) {
-    return node.attrs.id as string;
-  }
-  if (node.content) {
-    for (const child of node.content) {
-      const id = findPieceMentionId(child);
-      if (id) return id;
-    }
-  }
-  return null;
-}
-
 /**
  * Walk a Tiptap JSON document and extract all task items.
  */
@@ -46,10 +33,9 @@ export function extractTasks(doc: JSONContent): ExtractedTask[] {
           : (node.attrs?.checked as boolean)
             ? 4
             : 0;
-      const pieceId = findPieceMentionId(node);
 
       if (text) {
-        tasks.push({ taskId, text, progress, pieceId });
+        tasks.push({ taskId, text, progress, pieceId: null });
       }
     }
 

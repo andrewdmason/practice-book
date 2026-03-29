@@ -228,7 +228,7 @@ export async function updatePieceTargetTempo(
   return { success: true };
 }
 
-/** Get status changes for specific dates, grouped by date. Used by MentionFeed. */
+/** Get status changes for specific dates, grouped by date. */
 export async function getStatusChangesForDates(
   pieceId: string,
   dates: string[]

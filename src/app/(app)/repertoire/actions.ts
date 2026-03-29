@@ -5,9 +5,6 @@ import { createClient } from "@/lib/supabase/server";
 import type {
   PieceStatus,
   Task,
-  Mention,
-  MentionPage,
-  MentionWithSource,
   Collection,
   Piece,
 } from "@/lib/types";
@@ -308,78 +305,3 @@ export async function getCollectionFocusData(
   };
 }
 
-export async function getCollectionMentions(
-  collectionId: string,
-  cursor?: string,
-  limit = 20
-): Promise<MentionPage> {
-  const supabase = await createClient();
-
-  const { data: pieces } = await supabase
-    .from("pieces")
-    .select("id")
-    .eq("collection_id", collectionId);
-
-  const pieceIds = (pieces ?? []).map((p) => p.id);
-  if (pieceIds.length === 0) {
-    return { items: [], nextCursor: null };
-  }
-
-  let query = supabase
-    .from("mentions")
-    .select("*")
-    .in("piece_id", pieceIds)
-    .order("created_at", { ascending: false })
-    .limit(limit + 1);
-
-  if (cursor) {
-    query = query.lt("created_at", cursor);
-  }
-
-  const { data: rawMentions } = await query;
-  const rows = rawMentions ?? [];
-  const hasMore = rows.length > limit;
-  const page = hasMore ? rows.slice(0, limit) : rows;
-  const items = await resolveMentionSources(page as Mention[]);
-
-  return {
-    items,
-    nextCursor: hasMore ? page[page.length - 1].created_at : null,
-  };
-}
-
-async function resolveMentionSources(
-  rawMentions: Mention[]
-): Promise<MentionWithSource[]> {
-  if (rawMentions.length === 0) return [];
-
-  const supabase = await createClient();
-
-  const sectionIds = rawMentions.map((m) => m.source_id);
-
-  const sectionDates: Record<string, { date: string; type: string }> = {};
-
-  if (sectionIds.length > 0) {
-    const { data: sections } = await supabase
-      .from("practice_entry_sections")
-      .select("id, practice_entries(date, type)")
-      .in("id", sectionIds);
-    if (sections) {
-      for (const s of sections) {
-        const entry = s.practice_entries as unknown as { date: string; type: string } | null;
-        if (entry) {
-          sectionDates[s.id] = { date: entry.date, type: entry.type };
-        }
-      }
-    }
-  }
-
-  return rawMentions.map((m) => {
-    const info = sectionDates[m.source_id];
-    return {
-      ...m,
-      source_date: info?.date ?? m.created_at.slice(0, 10),
-      source_label: info?.type === "lesson" ? "Lesson" : "Practice",
-    };
-  });
-}

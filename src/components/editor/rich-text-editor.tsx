@@ -8,11 +8,10 @@ import Suggestion from "@tiptap/suggestion";
 import { Extension, textblockTypeInputRule, type JSONContent } from "@tiptap/core";
 import { PluginKey } from "@tiptap/pm/state";
 import { BubbleToolbar } from "./bubble-toolbar";
-import { PieceMention } from "./extensions/piece-mention";
 import { MetronomeMarking } from "./extensions/metronome-marking";
 import { TaskListExtension, TaskItemExtension } from "./extensions/inline-task";
 import { createMentionSuggestion } from "./extensions/mention-suggestion";
-import type { PieceSuggestion, SourceType } from "@/lib/types";
+import type { SourceType } from "@/lib/types";
 
 type EditorContext = "practice_entry" | "lesson";
 
@@ -21,7 +20,6 @@ type RichTextEditorProps = {
   sourceType: SourceType;
   sourceId: string;
   initialContent?: JSONContent | null;
-  pieces: PieceSuggestion[];
   onSave?: (content: JSONContent) => Promise<void>;
   onDismiss?: () => void;
   placeholder?: string;
@@ -42,8 +40,8 @@ const HeadingShortcuts = Extension.create({
 });
 
 // Create the mention suggestion as a standalone extension wrapping the Suggestion plugin
-function createMentionExtension(pieces: PieceSuggestion[]) {
-  const suggestion = createMentionSuggestion(pieces);
+function createMentionExtension() {
+  const suggestion = createMentionSuggestion();
 
   return Extension.create({
     name: "mentionSuggestion",
@@ -64,7 +62,6 @@ export function RichTextEditor({
   sourceType,
   sourceId,
   initialContent,
-  pieces,
   onSave,
   onDismiss,
   placeholder: placeholderText = "Start typing...",
@@ -81,11 +78,10 @@ export function RichTextEditor({
     Placeholder.configure({
       placeholder: placeholderText,
     }),
-    PieceMention,
     MetronomeMarking,
     TaskListExtension,
     TaskItemExtension.configure({ nested: false }),
-    createMentionExtension(pieces),
+    createMentionExtension(),
     HeadingShortcuts,
   ];
 

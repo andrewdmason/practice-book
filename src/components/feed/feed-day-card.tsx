@@ -133,10 +133,8 @@ function hasContent(content: unknown): boolean {
 
 function DayNotes({
   section,
-  pieces,
 }: {
   section: PracticeEntrySection;
-  pieces: PieceSuggestion[];
 }) {
   const sectionHasContent = hasContent(section.content);
   const [isEditing, setIsEditing] = useState(sectionHasContent);
@@ -156,7 +154,6 @@ function DayNotes({
           sourceType="practice_entry"
           sourceId={section.id}
           initialContent={section.content as JSONContent | null}
-          pieces={pieces}
           onSave={handleSave}
           onDismiss={sectionHasContent ? undefined : () => setIsEditing(false)}
           placeholder="Notes for the day..."
@@ -182,7 +179,6 @@ function DayNotes({
 function EntryCard({
   entry,
   isToday,
-  pieces,
   timeSummary,
   lessonTimeSummary,
   focusKey,
@@ -190,7 +186,6 @@ function EntryCard({
 }: {
   entry: FeedPracticeEntry;
   isToday: boolean;
-  pieces: PieceSuggestion[];
   timeSummary: TimeSummaryEntry[];
   lessonTimeSummary?: LessonTimeSummary;
   focusKey?: string | null;
@@ -232,7 +227,6 @@ function EntryCard({
             date={entry.date}
             isToday={isToday}
             isActive={isActiveSection}
-            pieces={pieces}
             timeSeconds={isLesson ? undefined : (isActiveSection ? serverTime + liveDelta : serverTime)}
             sinceLastLessonSeconds={sinceLastLessonSeconds}
             sinceLastLessonSecondsPerDay={sinceLastLessonSecondsPerDay}
@@ -383,7 +377,6 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
           <EntryCard
             entry={lesson}
             isToday={isToday}
-            pieces={pieces}
             timeSummary={[]}
             lessonTimeSummary={lessonSummary}
             focusKey={focusKey}
@@ -417,7 +410,7 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
 
       {/* Day-level general notes */}
       {!focusKey && generalSection && (
-        <DayNotes section={generalSection} pieces={pieces} />
+        <DayNotes section={generalSection} />
       )}
 
       {/* Practice entry sections */}
@@ -425,7 +418,6 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
         <EntryCard
           entry={mergedPracticeEntry}
           isToday={isToday}
-          pieces={pieces}
           timeSummary={day.timeSummary}
           focusKey={focusKey}
           statusChangesByPiece={day.statusChangesByPiece}
