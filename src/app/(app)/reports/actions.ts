@@ -13,13 +13,14 @@ import type {
 } from "@/lib/types";
 
 /**
- * Get the Monday of the week for a given date string (YYYY-MM-DD).
+ * Get the start of the week for a given date string (YYYY-MM-DD).
+ * @param weekStartDay 0=Sun, 1=Mon, ... 6=Sat (default 1=Monday)
  */
-function getMonday(dateStr: string): string {
+function getWeekStart(dateStr: string, weekStartDay: number = 1): string {
   const d = new Date(dateStr + "T12:00:00"); // noon to avoid DST edge cases
   const day = d.getDay(); // 0=Sun, 1=Mon, ...
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
+  const diff = ((day - weekStartDay + 7) % 7);
+  d.setDate(d.getDate() - diff);
   return localDate(d);
 }
 
@@ -34,7 +35,7 @@ function weekLabel(dateStr: string): string {
 /**
  * Last 13 weeks of total practice time per week.
  */
-export async function getWeeklyPracticeData(): Promise<WeeklyPracticeData[]> {
+export async function getWeeklyPracticeData(weekStartDay: number = 1): Promise<WeeklyPracticeData[]> {
   const supabase = await createClient();
 
   const now = new Date();
@@ -53,19 +54,19 @@ export async function getWeeklyPracticeData(): Promise<WeeklyPracticeData[]> {
 
   for (const entry of entries ?? []) {
     const session = entry.practice_sessions as unknown as { date: string };
-    const monday = getMonday(session.date);
+    const ws = getWeekStart(session.date, weekStartDay);
     const start = new Date(entry.started_at).getTime();
     const end = new Date(entry.ended_at!).getTime();
     const seconds = Math.floor((end - start) / 1000);
-    weekMap.set(monday, (weekMap.get(monday) ?? 0) + seconds);
+    weekMap.set(ws, (weekMap.get(ws) ?? 0) + seconds);
   }
 
   // Fill in all 13 weeks
   const result: WeeklyPracticeData[] = [];
-  const todayMonday = getMonday(localDate(now));
+  const currentWeekStart = getWeekStart(localDate(now), weekStartDay);
 
   for (let i = 12; i >= 0; i--) {
-    const d = new Date(todayMonday + "T00:00:00");
+    const d = new Date(currentWeekStart + "T00:00:00");
     d.setDate(d.getDate() - i * 7);
     const ws = localDate(d);
     result.push({
@@ -196,7 +197,7 @@ export async function getStreakData(): Promise<StreakData> {
   }
 
   // This week days (Mon-Sun)
-  const monday = getMonday(todayStr);
+  const monday = getWeekStart(todayStr);
   const thisWeekDays: boolean[] = [];
   let daysPracticedThisWeek = 0;
 
@@ -261,7 +262,7 @@ export async function getPieceCumulativeData(
 
   for (const entry of entries) {
     const session = entry.practice_sessions as unknown as { date: string };
-    const monday = getMonday(session.date);
+    const monday = getWeekStart(session.date);
     const start = new Date(entry.started_at).getTime();
     const end = new Date(entry.ended_at!).getTime();
     const seconds = Math.floor((end - start) / 1000);
@@ -274,7 +275,7 @@ export async function getPieceCumulativeData(
   // Fill in gaps between first and last week
   const firstMonday = sortedWeeks[0];
   const now = new Date();
-  const lastMonday = getMonday(localDate(now));
+  const lastMonday = getWeekStart(localDate(now));
 
   const allWeeks: string[] = [];
   const d = new Date(firstMonday + "T00:00:00");
@@ -329,7 +330,7 @@ export async function getCompletedTasksForPiece(
 
   for (const task of tasks) {
     const completedDate = task.completed_at!.slice(0, 10);
-    const monday = getMonday(completedDate);
+    const monday = getWeekStart(completedDate);
     const group = weekGroups.get(monday) ?? [];
     group.push({
       id: task.id,
