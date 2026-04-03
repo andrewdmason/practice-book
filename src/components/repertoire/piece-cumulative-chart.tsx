@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ResponsiveContainer,
-  AreaChart,
+  ComposedChart,
   Area,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -17,7 +18,7 @@ import type { PieceWeeklyCumulativeData } from "@/lib/types";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
-  const item = payload[0].payload as PieceWeeklyCumulativeData;
+  const item = payload[0].payload as PieceWeeklyCumulativeData & { cumulativeHours: number; completionPct?: number };
   return (
     <div className="rounded-md border bg-background px-3 py-2 text-sm shadow-sm">
       <p className="font-medium">Week of {label}</p>
@@ -27,6 +28,11 @@ function CustomTooltip({ active, payload, label }: any) {
       <p className="text-muted-foreground">
         Total: {formatMinutes(item.cumulativeSeconds)}
       </p>
+      {item.completionPct != null && (
+        <p className="text-muted-foreground">
+          Completion: {item.completionPct}%
+        </p>
+      )}
     </div>
   );
 }
@@ -38,16 +44,21 @@ type PieceCumulativeChartProps = {
 export function PieceCumulativeChart({ data }: PieceCumulativeChartProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [chartColor, setChartColor] = useState("oklch(0.45 0.08 35)");
+  const [completionColor, setCompletionColor] = useState("oklch(0.55 0.15 145)");
 
   useEffect(() => {
     if (ref.current) {
       const style = getComputedStyle(ref.current);
       const color = style.getPropertyValue("--chart-2").trim();
       if (color) setChartColor(color);
+      const color4 = style.getPropertyValue("--chart-4").trim();
+      if (color4) setCompletionColor(color4);
     }
   }, []);
 
   if (data.length === 0) return null;
+
+  const hasCompletion = data.some((d) => d.completionPct != null && d.completionPct > 0);
 
   const chartData = data.map((d) => ({
     ...d,
@@ -61,7 +72,7 @@ export function PieceCumulativeChart({ data }: PieceCumulativeChartProps) {
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={280}>
-          <AreaChart data={chartData}>
+          <ComposedChart data={chartData}>
             <defs>
               <linearGradient id="pieceCumulativeFill" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={chartColor} stopOpacity={0.3} />
@@ -80,24 +91,48 @@ export function PieceCumulativeChart({ data }: PieceCumulativeChartProps) {
               axisLine={false}
             />
             <YAxis
+              yAxisId="hours"
               tick={{ fontSize: 12 }}
               tickLine={false}
               axisLine={false}
               tickFormatter={(v) => `${v}h`}
               width={40}
             />
+            {hasCompletion && (
+              <YAxis
+                yAxisId="pct"
+                orientation="right"
+                tick={{ fontSize: 12 }}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v) => `${v}%`}
+                domain={[0, 100]}
+                width={45}
+              />
+            )}
             <Tooltip
               content={CustomTooltip}
               cursor={{ stroke: "var(--color-muted-foreground)", strokeWidth: 1 }}
             />
             <Area
+              yAxisId="hours"
               type="monotone"
               dataKey="cumulativeHours"
               stroke={chartColor}
               strokeWidth={2}
               fill="url(#pieceCumulativeFill)"
             />
-          </AreaChart>
+            {hasCompletion && (
+              <Line
+                yAxisId="pct"
+                type="monotone"
+                dataKey="completionPct"
+                stroke={completionColor}
+                strokeWidth={2}
+                dot={false}
+              />
+            )}
+          </ComposedChart>
         </ResponsiveContainer>
       </CardContent>
     </Card>

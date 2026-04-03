@@ -10,7 +10,10 @@ import type {
   PieceWeeklyCumulativeData,
   PieceOption,
   CompletedTaskMarker,
+  SectionStatus,
+  SectionStatusSnapshot,
 } from "@/lib/types";
+import { SECTION_STATUS_PERCENTAGE } from "@/lib/types";
 
 /**
  * Get the start of the week for a given date string (YYYY-MM-DD).
@@ -295,6 +298,89 @@ export async function getPieceCumulativeData(
       cumulativeSeconds: cumulative,
     };
   });
+}
+
+/**
+ * Compute section completion % for each week, using current section statuses
+ * and replaying snapshots backward to reconstruct past state.
+ * Returns a map from weekStart (YYYY-MM-DD) to completion percentage (0-100).
+ */
+export async function getPieceCompletionByWeek(
+  pieceId: string,
+  weeks: string[]
+): Promise<Map<string, number>> {
+  if (weeks.length === 0) return new Map();
+
+  const supabase = await createClient();
+
+  // Get all leaf sections (no children) for the piece
+  const { data: allSections } = await supabase
+    .from("piece_sections")
+    .select("id, parent_id, status")
+    .eq("piece_id", pieceId);
+
+  if (!allSections || allSections.length === 0) return new Map();
+
+  // Find leaf sections (sections that are not parents of other sections)
+  const parentIds = new Set(
+    allSections.filter((s) => s.parent_id).map((s) => s.parent_id!)
+  );
+  const leafSections = allSections.filter((s) => !parentIds.has(s.id));
+
+  if (leafSections.length === 0) return new Map();
+
+  // Get all snapshots for this piece, ordered newest first
+  const { data: snapshots } = await supabase
+    .from("section_status_snapshots")
+    .select("*")
+    .eq("piece_id", pieceId)
+    .order("snapshot_date", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  const allSnapshots = (snapshots ?? []) as SectionStatusSnapshot[];
+
+  // Build current status map from leaf sections
+  const currentStatus = new Map<string, SectionStatus>(
+    leafSections.map((s) => [s.id, s.status as SectionStatus])
+  );
+  const leafIds = new Set(leafSections.map((s) => s.id));
+  const totalSlots = leafSections.length;
+
+  // Compute completion % for a given status map
+  function computePct(statusMap: Map<string, SectionStatus>): number {
+    let sum = 0;
+    for (const status of statusMap.values()) {
+      sum += SECTION_STATUS_PERCENTAGE[status] ?? 0;
+    }
+    return Math.round((sum / totalSlots) * 1000) / 10;
+  }
+
+  // Sort weeks descending to replay snapshots backward
+  const sortedWeeks = [...weeks].sort().reverse();
+  const result = new Map<string, number>();
+
+  // Clone current status for mutation
+  const statusAtPoint = new Map(currentStatus);
+  let snapshotIdx = 0;
+
+  for (const weekStart of sortedWeeks) {
+    // The week ends on the next Sunday (7 days after Monday start)
+    // Un-apply any snapshots that occurred after this week's start
+    // (i.e., snapshots dated > weekStart should be reversed)
+    while (
+      snapshotIdx < allSnapshots.length &&
+      allSnapshots[snapshotIdx].snapshot_date > weekStart
+    ) {
+      const snap = allSnapshots[snapshotIdx];
+      if (leafIds.has(snap.section_id)) {
+        statusAtPoint.set(snap.section_id, snap.old_status);
+      }
+      snapshotIdx++;
+    }
+    result.set(weekStart, computePct(statusAtPoint));
+  }
+
+  return result;
 }
 
 /**

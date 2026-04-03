@@ -23,7 +23,7 @@ import {
 } from "@/app/(app)/focus-panel/actions";
 import { getSections, getProgressSnapshots } from "@/app/(app)/repertoire/section-actions";
 import { getVideos, getTimestamps } from "@/app/(app)/repertoire/video-actions";
-import { getPieceCumulativeData } from "@/app/(app)/reports/actions";
+import { getPieceCumulativeData, getPieceCompletionByWeek } from "@/app/(app)/reports/actions";
 import type { Piece, Collection } from "@/lib/types";
 
 export default async function PieceDetailPage({
@@ -62,9 +62,15 @@ export default async function PieceDetailPage({
     getProgressSnapshots(id),
   ]);
 
-  const videoTimestamps = videos[0]
-    ? await getTimestamps(videos[0].id)
-    : [];
+  const [videoTimestamps, completionByWeek] = await Promise.all([
+    videos[0] ? getTimestamps(videos[0].id) : Promise.resolve([]),
+    getPieceCompletionByWeek(id, cumulativeData.map((d) => d.weekStart)),
+  ]);
+
+  const chartData = cumulativeData.map((d) => ({
+    ...d,
+    completionPct: completionByWeek.get(d.weekStart) ?? 0,
+  }));
 
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6">
@@ -93,7 +99,7 @@ export default async function PieceDetailPage({
 
         <Separator />
 
-        <PieceCumulativeChart data={cumulativeData} />
+        <PieceCumulativeChart data={chartData} />
 
         <Separator />
 
