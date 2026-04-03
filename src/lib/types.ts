@@ -130,6 +130,7 @@ export type PieceWeeklyCumulativeData = {
   weekLabel: string; // "Mar 10"
   weekSeconds: number;
   cumulativeSeconds: number;
+  completionPct?: number; // 0-100, % of sections fully complete
 };
 
 export type PieceOption = {
