@@ -339,14 +339,15 @@ export async function getPieceCompletionByWeek(
 
   const allSnapshots = (snapshots ?? []) as SectionStatusSnapshot[];
 
-  // Build current status map from leaf sections
-  const currentStatus = new Map<string, SectionStatus>(
-    leafSections.map((s) => [s.id, s.status as SectionStatus])
-  );
   const leafIds = new Set(leafSections.map((s) => s.id));
   const totalSlots = leafSections.length;
 
-  // Compute completion % for a given status map
+  // Build current status map from leaf sections
+  const statusAtPoint = new Map<string, SectionStatus>(
+    leafSections.map((s) => [s.id, s.status as SectionStatus])
+  );
+
+  // Average completion % from a status map
   function computePct(statusMap: Map<string, SectionStatus>): number {
     let sum = 0;
     for (const status of statusMap.values()) {
@@ -355,21 +356,21 @@ export async function getPieceCompletionByWeek(
     return Math.round((sum / totalSlots) * 1000) / 10;
   }
 
-  // Sort weeks descending to replay snapshots backward
+  // Walk weeks newest-first, replaying snapshots backward to reconstruct
+  // each week's end-of-week status.
   const sortedWeeks = [...weeks].sort().reverse();
   const result = new Map<string, number>();
-
-  // Clone current status for mutation
-  const statusAtPoint = new Map(currentStatus);
   let snapshotIdx = 0;
 
   for (const weekStart of sortedWeeks) {
-    // The week ends on the next Sunday (7 days after Monday start)
-    // Un-apply any snapshots that occurred after this week's start
-    // (i.e., snapshots dated > weekStart should be reversed)
+    // Un-apply snapshots that occurred after this week ended (next Monday).
+    const nextMonday = new Date(weekStart + "T00:00:00");
+    nextMonday.setDate(nextMonday.getDate() + 7);
+    const nextMondayStr = nextMonday.toISOString().slice(0, 10);
+
     while (
       snapshotIdx < allSnapshots.length &&
-      allSnapshots[snapshotIdx].snapshot_date > weekStart
+      allSnapshots[snapshotIdx].snapshot_date >= nextMondayStr
     ) {
       const snap = allSnapshots[snapshotIdx];
       if (leafIds.has(snap.section_id)) {
