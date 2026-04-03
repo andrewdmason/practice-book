@@ -192,12 +192,15 @@ export async function ensureTodayEntry(): Promise<string> {
   const today = localDate(new Date(), tz);
 
   // Get or create today's practice entry
-  // Use .limit(1) instead of .single() to avoid errors when duplicate rows exist
+  // Use .limit(1) instead of .single() to avoid errors when duplicate rows exist.
+  // Order by created_at so we always pick the same (oldest) entry when duplicates exist —
+  // getFeedPage must use the same ordering to display the entry that has sections.
   const { data: entries } = await supabase
     .from("practice_entries")
     .select("id")
     .eq("date", today)
     .eq("type", "practice")
+    .order("created_at")
     .limit(1);
 
   let entry = entries?.[0] ?? null;
@@ -226,6 +229,33 @@ export async function ensureTodayEntry(): Promise<string> {
 
   // Create sections for pieces that have timer data but no section yet
   await ensurePieceSectionsFromTimerData(entry.id, today);
+
+  // Clean up duplicate sections that can arise from concurrent requests.
+  // Keep the oldest section for each category+piece_id pair.
+  const { data: allSections } = await supabase
+    .from("practice_entry_sections")
+    .select("id, category, piece_id")
+    .eq("practice_entry_id", entry.id)
+    .order("created_at");
+
+  if (allSections) {
+    const seen = new Set<string>();
+    const dupeIds: string[] = [];
+    for (const s of allSections) {
+      const key = `${s.category}:${s.piece_id ?? ""}`;
+      if (seen.has(key)) {
+        dupeIds.push(s.id);
+      } else {
+        seen.add(key);
+      }
+    }
+    if (dupeIds.length > 0) {
+      await supabase
+        .from("practice_entry_sections")
+        .delete()
+        .in("id", dupeIds);
+    }
+  }
 
   return entry.id;
 }
@@ -568,7 +598,8 @@ export async function getFeedPage(
     .from("practice_entries")
     .select("id, date, type")
     .in("date", allDates)
-    .order("date", { ascending: false });
+    .order("date", { ascending: false })
+    .order("created_at");
 
   if (typeFilter) {
     entriesQuery = entriesQuery.eq("type", typeFilter);
