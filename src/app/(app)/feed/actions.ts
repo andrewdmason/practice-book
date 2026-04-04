@@ -75,22 +75,30 @@ async function ensurePieceSectionsFromTimerData(
 ): Promise<void> {
   const supabase = await createClient();
 
-  // Get today's sessions
+  // Get piece IDs from timer entries
   const { data: sessions } = await supabase
     .from("practice_sessions")
     .select("id")
     .eq("date", date);
 
-  if (!sessions || sessions.length === 0) return;
+  let timerPieceIds: string[] = [];
+  if (sessions && sessions.length > 0) {
+    const { data: timerEntries } = await supabase
+      .from("timer_entries")
+      .select("piece_id")
+      .in("session_id", sessions.map((s) => s.id))
+      .not("piece_id", "is", null);
+    timerPieceIds = (timerEntries ?? []).map((e) => e.piece_id!);
+  }
 
-  // Get piece IDs from timer entries
-  const { data: timerEntries } = await supabase
-    .from("timer_entries")
+  // Get piece IDs from practice tasks for this date
+  const { data: taskPieces } = await supabase
+    .from("practice_tasks")
     .select("piece_id")
-    .in("session_id", sessions.map((s) => s.id))
-    .not("piece_id", "is", null);
+    .eq("date", date);
+  const taskPieceIds = (taskPieces ?? []).map((t) => t.piece_id);
 
-  const timedPieceIds = [...new Set((timerEntries ?? []).map((e) => e.piece_id!))];
+  const timedPieceIds = [...new Set([...timerPieceIds, ...taskPieceIds])];
   if (timedPieceIds.length === 0) return;
 
   // Get existing piece sections

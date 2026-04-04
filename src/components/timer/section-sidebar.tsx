@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Play, Pause } from "lucide-react";
+import { Play, Pause, PlusIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useTimer } from "@/components/timer/timer-context";
 import { useMetronome } from "@/components/metronome/metronome-context";
@@ -31,6 +31,7 @@ export function SectionSidebar({
   composer,
   onSectionsChanged,
   onStatusChange,
+  onAddTask,
 }: {
   sections: PieceSectionWithChildren[];
   pieceTargetTempo: number | null;
@@ -39,6 +40,7 @@ export function SectionSidebar({
   composer: string | null;
   onSectionsChanged: () => void;
   onStatusChange?: (sectionId: string, status: SectionStatus) => void;
+  onAddTask?: (sectionId: string, metronomeSpeed: number | null) => void;
 }) {
   const allSections = flattenSections(sections);
   const video = useVideo();
@@ -76,6 +78,7 @@ export function SectionSidebar({
             composer={composer}
             onSectionsChanged={onSectionsChanged}
             onStatusChange={onStatusChange}
+            onAddTask={onAddTask}
             isFirst={i === 0}
             isLast={i === allSections.length - 1}
             playingSectionId={playingSectionId}
@@ -94,6 +97,7 @@ function SectionRow({
   composer,
   onSectionsChanged,
   onStatusChange,
+  onAddTask,
   isFirst,
   isLast,
   playingSectionId,
@@ -105,6 +109,7 @@ function SectionRow({
   composer: string | null;
   onSectionsChanged: () => void;
   onStatusChange?: (sectionId: string, status: SectionStatus) => void;
+  onAddTask?: (sectionId: string, metronomeSpeed: number | null) => void;
   isFirst: boolean;
   isLast: boolean;
   playingSectionId: string | null;
@@ -197,7 +202,7 @@ function SectionRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-0 transition-colors rounded-sm",
+        "group/row flex items-center gap-0 transition-colors rounded-sm",
         isActiveSection && "bg-primary/10"
       )}
     >
@@ -214,6 +219,17 @@ function SectionRow({
       >
         {section.label}
       </button>
+
+      {/* Add task button — visible on hover, next to label */}
+      {onAddTask && (
+        <button
+          onClick={() => onAddTask(section.id, tempo)}
+          className="shrink-0 opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-foreground transition-opacity mr-1"
+          title="Add task for this section"
+        >
+          <PlusIcon className="size-3" />
+        </button>
+      )}
 
       {/* Play/pause video toggle */}
       {(() => {
@@ -320,6 +336,7 @@ function SectionRow({
           </button>
         )}
       </div>
+
     </div>
   );
 }

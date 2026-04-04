@@ -2,7 +2,7 @@
 -- Generated from practice-sessions CSV export
 
 -- Clear existing data (order matters for FK constraints)
-TRUNCATE section_status_snapshots, piece_section_timestamps, piece_videos, piece_sections, timer_entries, practice_sessions, assignments, practice_entry_sections, practice_entries, pieces, collections CASCADE;
+TRUNCATE practice_tasks, section_status_snapshots, piece_section_timestamps, piece_videos, piece_sections, timer_entries, practice_sessions, assignments, practice_entry_sections, practice_entries, pieces, collections CASCADE;
 
 -- Collections
 INSERT INTO collections (id, name, composer, notes, created_at, updated_at) VALUES
@@ -1005,3 +1005,13 @@ INSERT INTO section_status_snapshots (id, piece_id, section_id, old_status, new_
   ('55000001-0048-4001-8001-000000000001', 'e07a9e85-307a-4af9-8966-d1e824ec9ddb', 'ba000001-0012-4001-8001-000000000001', 3, 5, '2026-03-24', '2026-03-24 15:00:00+00'),
   ('55000001-0049-4001-8001-000000000001', 'e07a9e85-307a-4af9-8966-d1e824ec9ddb', 'ba000001-0013-4001-8001-000000000001', 1, 3, '2026-03-24', '2026-03-24 15:10:00+00'),
   ('55000001-004a-4001-8001-000000000001', 'e07a9e85-307a-4af9-8966-d1e824ec9ddb', 'ba000001-0014-4001-8001-000000000001', 0, 2, '2026-03-24', '2026-03-24 15:20:00+00');
+
+-- Practice tasks (short-term timer-based focus items)
+INSERT INTO practice_tasks (id, piece_id, section_id, date, text, metronome_speed, timer_seconds, timer_remaining_seconds, completed, completed_at, sort_order, created_at, updated_at) VALUES
+  -- Ballade 4 tasks
+  ('ca000001-0001-4001-8001-000000000001', 'e07a9e85-307a-4af9-8966-d1e824ec9ddb', 'ba000001-0013-4001-8001-000000000001', '2026-04-04', 'S - LH octaves slow practice, isolate thumb line', 66, 900, 900, false, NULL, 0, '2026-04-04 10:00:00+00', '2026-04-04 10:00:00+00'),
+  ('ca000001-0002-4001-8001-000000000002', 'e07a9e85-307a-4af9-8966-d1e824ec9ddb', 'ba000001-0014-4001-8001-000000000001', '2026-04-04', 'T - RH runs in groups of 4, accent downbeats', 55, 900, 900, false, NULL, 1, '2026-04-04 10:01:00+00', '2026-04-04 10:01:00+00'),
+  ('ca000001-0003-4001-8001-000000000003', 'e07a9e85-307a-4af9-8966-d1e824ec9ddb', 'ba000001-00d1-4001-8001-000000000001', '2026-04-04', 'M1 - bring out inner voice melody', 99, 600, 600, false, NULL, 2, '2026-04-04 10:02:00+00', '2026-04-04 10:02:00+00'),
+  -- Trio tasks
+  ('ca000001-0004-4001-8001-000000000004', '671174b8-96df-46b9-bc39-2ceb999a22da', 'aa000001-0008-4001-8001-000000000008', '2026-04-04', 'C1 - balance piano/violin, practice piano part alone', 39, 900, 900, false, NULL, 0, '2026-04-04 10:03:00+00', '2026-04-04 10:03:00+00'),
+  ('ca000001-0005-4001-8001-000000000005', '671174b8-96df-46b9-bc39-2ceb999a22da', 'aa000001-0012-4001-8001-000000000012', '2026-04-04', 'D2 - practice cello melody handoff transitions', 39, 900, 900, false, NULL, 1, '2026-04-04 10:04:00+00', '2026-04-04 10:04:00+00');

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { PlayIcon, SquareIcon, MusicIcon, BookOpenIcon, XIcon } from "lucide-react";
+import { ClockIcon, SquareIcon, MusicIcon, BookOpenIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -208,7 +208,7 @@ export function FooterBar() {
           {isRunning ? (
             <SquareIcon className="size-4" />
           ) : (
-            <PlayIcon className="size-4" />
+            <ClockIcon className="size-4" />
           )}
         </Button>
 
