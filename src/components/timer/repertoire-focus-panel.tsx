@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -27,6 +27,7 @@ import {
 } from "@/app/(app)/focus-panel/actions";
 import type { AssignmentWithPiece } from "@/app/(app)/focus-panel/actions";
 import { getSections } from "@/app/(app)/repertoire/section-actions";
+import { addTaskOptimistic } from "@/components/timer/task-panel";
 import { getNextBounceProgress } from "@/lib/progress-bounce";
 import { createClient } from "@/lib/supabase/client";
 import { useMetronome } from "@/components/metronome/metronome-context";
@@ -42,6 +43,7 @@ import type {
   TimerTarget,
   TimeSummaryEntry,
 } from "@/lib/types";
+import { localDate } from "@/lib/date-utils";
 
 // Client-side caches so re-selecting a piece shows data instantly
 const sectionsCache = new Map<string, PieceSectionWithChildren[]>();
@@ -272,8 +274,9 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
 
   return (
     <div className="space-y-4">
+      {/* Piece header card */}
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-0">
           <div className="flex items-center gap-2">
             <CardTitle className="text-base flex-1 min-w-0">
               <span className="truncate">{piece.name}</span>
@@ -295,9 +298,12 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Sections */}
-          {sections.length > 0 && (
+      </Card>
+
+      {/* Sections card */}
+      {sections.length > 0 && (
+        <Card>
+          <CardContent className="pt-4">
             <SectionSidebar
               sections={sections}
               pieceTargetTempo={piece.target_tempo}
@@ -320,12 +326,15 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
                   return next;
                 });
               }}
+              onAddTask={(sectionId, metronomeSpeed) => {
+                addTaskOptimistic(pieceId, localDate(), sectionId, metronomeSpeed);
+              }}
             />
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Assignments in separate card */}
+      {/* Assignments card */}
       {hasAssignments && (
         <Card>
           <CardContent className="pt-4 space-y-4">

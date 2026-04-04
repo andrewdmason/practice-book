@@ -183,6 +183,7 @@ function EntryCard({
   lessonTimeSummary,
   focusKey,
   statusChangesByPiece,
+  onTaskTimeChange,
 }: {
   entry: FeedPracticeEntry;
   isToday: boolean;
@@ -190,6 +191,7 @@ function EntryCard({
   lessonTimeSummary?: LessonTimeSummary;
   focusKey?: string | null;
   statusChangesByPiece?: Record<string, StatusChange[]>;
+  onTaskTimeChange?: (pieceId: string, seconds: number) => void;
 }) {
   const { isRunning, currentTarget, entryElapsedSeconds } = useTimer();
   const initialEntryElapsedRef = useRef(entryElapsedSeconds);
@@ -232,6 +234,7 @@ function EntryCard({
             sinceLastLessonSecondsPerDay={sinceLastLessonSecondsPerDay}
             editorContext={isLesson ? "lesson" : "practice_entry"}
             statusChanges={sectionStatusChanges}
+            onTaskTimeChange={onTaskTimeChange}
           />
         );
       })}
@@ -249,6 +252,16 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
   const [optimisticSections, setOptimisticSections] = useState<
     Record<string, PracticeEntrySection[]>
   >({});
+
+  // Track aggregate task time remaining across all pieces
+  const taskTimeByPiece = useRef<Record<string, number>>({});
+  const [dayTaskTimeRemaining, setDayTaskTimeRemaining] = useState(0);
+
+  const handleTaskTimeChange = useCallback((pieceId: string, seconds: number) => {
+    taskTimeByPiece.current[pieceId] = seconds;
+    const total = Object.values(taskTimeByPiece.current).reduce((sum, s) => sum + s, 0);
+    setDayTaskTimeRemaining(total);
+  }, []);
 
   const addOptimisticSection = useCallback(
     (entryId: string, section: PracticeEntrySection) => {
@@ -397,6 +410,11 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
               {formatMinutes(dayTotal)}
             </span>
           )}
+          {dayTaskTimeRemaining > 0 && (
+            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums font-medium text-muted-foreground">
+              {formatMinutes(dayTaskTimeRemaining)} left
+            </span>
+          )}
           {mergedPracticeEntry && (
             <AddSectionButton
               entryId={mergedPracticeEntry.id}
@@ -421,6 +439,7 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
           timeSummary={day.timeSummary}
           focusKey={focusKey}
           statusChangesByPiece={day.statusChangesByPiece}
+          onTaskTimeChange={handleTaskTimeChange}
         />
       )}
 

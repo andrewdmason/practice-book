@@ -31,7 +31,7 @@ export function TwoColumnLayout({
 
       {/* Shared content: visible on lg+ always, on mobile only when open */}
       <div
-        className={`lg:block lg:w-80 xl:w-96 lg:shrink-0 ${mobileOpen ? "block" : "hidden lg:block"}`}
+        className={`lg:block lg:w-96 xl:w-[28rem] lg:shrink-0 ${mobileOpen ? "block" : "hidden lg:block"}`}
       >
         <div className="lg:sticky lg:top-[6.5rem] lg:max-h-[calc(100vh-6.5rem-1.5rem)] lg:overflow-y-auto">{right}</div>
       </div>

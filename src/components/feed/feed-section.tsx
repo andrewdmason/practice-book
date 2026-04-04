@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { InlineTaskList, AddTaskButton } from "@/components/timer/task-panel";
 import { cn } from "@/lib/utils";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -65,14 +66,22 @@ type FeedSectionProps = {
   sinceLastLessonSecondsPerDay?: number;
   editorContext?: "practice_entry" | "lesson";
   statusChanges?: StatusChange[];
+  sectionLabels?: Map<string, string>;
+  onTaskTimeChange?: (pieceId: string, seconds: number) => void;
 };
 
-export function FeedSection({ section, date, isToday, isActive, timeSeconds, sinceLastLessonSeconds, sinceLastLessonSecondsPerDay, editorContext = "practice_entry", statusChanges }: FeedSectionProps) {
+export function FeedSection({ section, date, isToday, isActive, timeSeconds, sinceLastLessonSeconds, sinceLastLessonSecondsPerDay, editorContext = "practice_entry", statusChanges, sectionLabels, onTaskTimeChange }: FeedSectionProps) {
   const sectionHasContent = hasContent(section.content);
   const isLessonGeneral = section.category === "general" && editorContext === "lesson";
   const [isEditorVisible, setIsEditorVisible] = useState(sectionHasContent || isLessonGeneral);
   const [isTimeDialogOpen, setIsTimeDialogOpen] = useState(false);
   const [isDeleted, setIsDeleted] = useState(false);
+  const [taskTimeRemaining, setTaskTimeRemaining] = useState(0);
+
+  const handleTaskTimeChange = useCallback((seconds: number) => {
+    setTaskTimeRemaining(seconds);
+    if (section.piece_id) onTaskTimeChange?.(section.piece_id, seconds);
+  }, [section.piece_id, onTaskTimeChange]);
 
   const displayTime = timeSeconds;
 
@@ -168,9 +177,14 @@ export function FeedSection({ section, date, isToday, isActive, timeSeconds, sin
               <ClockIcon className="size-3 shrink-0" />
               {formatMinutes(displayTime)}
             </span>
-          ) : !sectionHasContent ? (
+          ) : !sectionHasContent && taskTimeRemaining <= 0 ? (
             <span className="shrink-0 text-xs text-muted-foreground/50">empty</span>
           ) : null}
+          {taskTimeRemaining > 0 && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted text-muted-foreground px-2 py-0.5 text-xs tabular-nums font-medium whitespace-nowrap">
+              {formatMinutes(taskTimeRemaining)} left
+            </span>
+          )}
           {!isEditorVisible && (
             <button
               type="button"
@@ -180,6 +194,9 @@ export function FeedSection({ section, date, isToday, isActive, timeSeconds, sin
             >
               <NotebookPenIcon className="size-3.5" />
             </button>
+          )}
+          {section.category === "piece" && section.piece_id && isToday && editorContext === "practice_entry" && (
+            <AddTaskButton pieceId={section.piece_id} date={date} />
           )}
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -228,6 +245,17 @@ export function FeedSection({ section, date, isToday, isActive, timeSeconds, sin
             );
           })}
         </div>
+      )}
+      {section.category === "piece" && section.piece_id && editorContext === "practice_entry" && (
+        <InlineTaskList
+          pieceId={section.piece_id}
+          pieceName={section.piece_name ?? "Unknown Piece"}
+          composer={section.composer ?? null}
+          date={date}
+          sectionLabels={sectionLabels}
+          isToday={isToday}
+          onTotalRemainingChange={handleTaskTimeChange}
+        />
       )}
       {section.category !== "general" && (
         <SessionEntriesDialog

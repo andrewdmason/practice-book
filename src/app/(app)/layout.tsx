@@ -3,6 +3,7 @@ import { FooterBar } from "@/components/layout/footer-bar";
 import { ScrubberBar } from "@/components/layout/scrubber-bar";
 import { TimerProvider } from "@/components/timer/timer-context";
 import { MetronomeProvider } from "@/components/metronome/metronome-context";
+import { TaskTimerProvider } from "@/components/timer/task-timer-context";
 import { VideoProvider } from "@/components/video/video-context";
 import { SearchProvider } from "@/components/search/search-provider";
 import { TimezoneProvider } from "@/components/timezone-provider";
@@ -32,9 +33,11 @@ export default async function AppLayout({
             <Header />
             <VideoProvider>
               <TimerProvider activePieces={(activePieces as Piece[]) ?? []}>
-                <FooterBar />
-                <ScrubberBar />
-                <div className="flex flex-1 flex-col">{children}</div>
+                <TaskTimerProvider>
+                  <FooterBar />
+                  <ScrubberBar />
+                  <div className="flex flex-1 flex-col">{children}</div>
+                </TaskTimerProvider>
               </TimerProvider>
             </VideoProvider>
           </div>

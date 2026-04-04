@@ -99,6 +99,22 @@ export type Assignment = {
   updated_at: string;
 };
 
+export type PracticeTask = {
+  id: string;
+  piece_id: string;
+  section_id: string | null;
+  date: string;
+  text: string;
+  metronome_speed: number | null;
+  timer_seconds: number;
+  timer_remaining_seconds: number;
+  completed: boolean;
+  completed_at: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type PieceSuggestion = {
   id: string;
   name: string;
