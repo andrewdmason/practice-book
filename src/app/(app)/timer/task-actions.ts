@@ -68,6 +68,42 @@ export async function createTask(
 ): Promise<{ id: string }> {
   const supabase = await createClient();
 
+  // If a future date is provided, ensure the practice entry and piece section exist
+  if (date) {
+    const { localDate, getUserTimezone } = await import("@/lib/date-utils");
+    const tz = await getUserTimezone();
+    const today = localDate(new Date(), tz);
+    if (date > today) {
+      const { ensureTomorrowEntry } = await import("@/app/(app)/feed/actions");
+      const entryId = await ensureTomorrowEntry();
+
+      const { data: existingSection } = await supabase
+        .from("practice_entry_sections")
+        .select("id")
+        .eq("practice_entry_id", entryId)
+        .eq("category", "piece")
+        .eq("piece_id", pieceId)
+        .limit(1);
+
+      if (!existingSection || existingSection.length === 0) {
+        const { data: maxRow } = await supabase
+          .from("practice_entry_sections")
+          .select("sort_order")
+          .eq("practice_entry_id", entryId)
+          .order("sort_order", { ascending: false })
+          .limit(1)
+          .single();
+
+        await supabase.from("practice_entry_sections").insert({
+          practice_entry_id: entryId,
+          piece_id: pieceId,
+          category: "piece",
+          sort_order: (maxRow?.sort_order ?? 0) + 1,
+        });
+      }
+    }
+  }
+
   // Get next sort_order
   const { data: maxRow } = await supabase
     .from("practice_tasks")
