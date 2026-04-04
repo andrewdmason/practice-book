@@ -2,7 +2,7 @@
 -- Generated from practice-sessions CSV export
 
 -- Clear existing data (order matters for FK constraints)
-TRUNCATE section_status_snapshots, piece_section_timestamps, piece_videos, piece_sections, timer_entries, practice_sessions, tasks, practice_entry_sections, practice_entries, pieces, collections CASCADE;
+TRUNCATE section_status_snapshots, piece_section_timestamps, piece_videos, piece_sections, timer_entries, practice_sessions, assignments, practice_entry_sections, practice_entries, pieces, collections CASCADE;
 
 -- Collections
 INSERT INTO collections (id, name, composer, notes, created_at, updated_at) VALUES
@@ -71,8 +71,8 @@ INSERT INTO practice_entry_sections (id, practice_entry_id, piece_id, category, 
    '{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Scherzo No. 1"},{"type":"text","text":" "},{"type":"metronomeMarking","attrs":{"bpm":84}},{"type":"text","text":" - still can''t do it!"}]},{"type":"paragraph"}]}'::jsonb,
    '2026-03-13 18:00:00+00', '2026-03-13 18:00:00+00');
 
--- Tasks
-INSERT INTO tasks (id, source_type, source_id, piece_id, text, progress, completed_at, note, created_at, updated_at) VALUES
+-- Assignments
+INSERT INTO assignments (id, source_type, source_id, piece_id, text, progress, completed_at, note, created_at, updated_at) VALUES
   ('d1000001-0001-4001-8001-000000000001', 'practice_entry', '51a10001-0001-4001-8001-000000000001', NULL, 'Scales - C major & C# major', 4, '2025-10-26 18:00:00+00', NULL, '2025-10-26 18:00:00+00', '2025-10-26 18:00:00+00'),
   ('d1000001-0002-4001-8001-000000000002', 'practice_entry', '51a10001-0001-4001-8001-000000000001', NULL, 'Grand staff treble & bass clef positions', 4, '2025-10-26 18:00:00+00', NULL, '2025-10-26 18:00:00+00', '2025-10-26 18:00:00+00'),
   ('d1000001-0003-4001-8001-000000000003', 'practice_entry', '51a10001-0001-4001-8001-000000000001', 'b1a2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d', 'Work on Bruch Quintet', 4, '2025-10-26 18:00:00+00', NULL, '2025-10-26 18:00:00+00', '2025-10-26 18:00:00+00'),

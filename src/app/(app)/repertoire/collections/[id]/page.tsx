@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { TaskList } from "@/components/repertoire/task-list";
+import { AssignmentList } from "@/components/repertoire/assignment-list";
 import { Separator } from "@/components/ui/separator";
 import {
   getCollectionFocusData,
@@ -89,9 +89,9 @@ export default async function CollectionDetailPage({
           </div>
         )}
 
-        {focusData.tasks.length > 0 && <Separator />}
+        {focusData.assignments.length > 0 && <Separator />}
 
-        <TaskList initialTasks={focusData.tasks} />
+        <AssignmentList initialAssignments={focusData.assignments} />
       </div>
     </div>
   );

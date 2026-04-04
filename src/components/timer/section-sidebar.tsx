@@ -226,6 +226,7 @@ function SectionRow({
               if (isThisSectionPlaying) {
                 video.pause();
               } else {
+                if (!video.showVideo) video.setShowVideo(true);
                 video.seekTo(ts.start_seconds);
                 video.play();
               }

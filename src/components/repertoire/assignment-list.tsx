@@ -3,22 +3,22 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2Icon, PencilIcon } from "lucide-react";
 import { ProgressCircle } from "@/components/ui/progress-circle";
-import { updateTaskProgress, updateTaskNote } from "@/app/(app)/focus-panel/actions";
+import { updateAssignmentProgress, updateAssignmentNote } from "@/app/(app)/focus-panel/actions";
 import { getNextBounceProgress } from "@/lib/progress-bounce";
-import type { Task } from "@/lib/types";
+import type { Assignment } from "@/lib/types";
 
-export function TaskList({ initialTasks }: { initialTasks: Task[] }) {
-  const [tasks, setTasks] = useState(initialTasks);
+export function AssignmentList({ initialAssignments }: { initialAssignments: Assignment[] }) {
+  const [assignments, setAssignments] = useState(initialAssignments);
 
-  if (tasks.length === 0) return null;
+  if (assignments.length === 0) return null;
 
-  const openCount = tasks.filter((t) => t.progress < 4).length;
+  const openCount = assignments.filter((t) => t.progress < 4).length;
 
   return (
     <div>
       <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
         <CheckCircle2Icon className="size-3.5" />
-        Tasks
+        Assignments
         {openCount > 0 && (
           <span className="ml-auto text-[10px] font-normal bg-muted text-muted-foreground rounded-full px-1.5 py-0.5">
             {openCount}
@@ -26,18 +26,18 @@ export function TaskList({ initialTasks }: { initialTasks: Task[] }) {
         )}
       </h3>
       <div className="space-y-2">
-        {tasks.map((task) => (
-          <TaskRow
-            key={task.id}
-            task={task}
+        {assignments.map((assignment) => (
+          <AssignmentRow
+            key={assignment.id}
+            assignment={assignment}
             onProgressChange={(progress) =>
-              setTasks((prev) =>
-                prev.map((t) => (t.id === task.id ? { ...t, progress } : t))
+              setAssignments((prev) =>
+                prev.map((t) => (t.id === assignment.id ? { ...t, progress } : t))
               )
             }
             onNoteChange={(note) =>
-              setTasks((prev) =>
-                prev.map((t) => (t.id === task.id ? { ...t, note } : t))
+              setAssignments((prev) =>
+                prev.map((t) => (t.id === assignment.id ? { ...t, note } : t))
               )
             }
           />
@@ -47,48 +47,48 @@ export function TaskList({ initialTasks }: { initialTasks: Task[] }) {
   );
 }
 
-function TaskRow({
-  task,
+function AssignmentRow({
+  assignment,
   onProgressChange,
   onNoteChange,
 }: {
-  task: Task;
+  assignment: Assignment;
   onProgressChange: (progress: number) => void;
   onNoteChange: (note: string | null) => void;
 }) {
   const [editingNote, setEditingNote] = useState(false);
-  const [noteValue, setNoteValue] = useState(task.note ?? "");
+  const [noteValue, setNoteValue] = useState(assignment.note ?? "");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleClick = (e: React.MouseEvent) => {
     let newProgress: number;
     if (e.altKey) {
-      newProgress = (task.progress + 1) % 5;
+      newProgress = (assignment.progress + 1) % 5;
     } else {
-      newProgress = task.progress === 4 ? 0 : 4;
+      newProgress = assignment.progress === 4 ? 0 : 4;
     }
     onProgressChange(newProgress);
-    updateTaskProgress(task.id, newProgress);
+    updateAssignmentProgress(assignment.id, newProgress);
   };
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    const newProgress = getNextBounceProgress(task.id, task.progress);
+    const newProgress = getNextBounceProgress(assignment.id, assignment.progress);
     onProgressChange(newProgress);
-    updateTaskProgress(task.id, newProgress);
+    updateAssignmentProgress(assignment.id, newProgress);
   };
 
   const handleNoteSave = () => {
     setEditingNote(false);
     const trimmed = noteValue.trim() || null;
-    if (trimmed !== task.note) {
+    if (trimmed !== assignment.note) {
       onNoteChange(trimmed);
       window.dispatchEvent(
-        new CustomEvent("task-note-updated", {
-          detail: { taskId: task.id, note: trimmed },
+        new CustomEvent("assignment-note-updated", {
+          detail: { taskId: assignment.id, note: trimmed },
         })
       );
-      updateTaskNote(task.id, trimmed);
+      updateAssignmentNote(assignment.id, trimmed);
     }
   };
 
@@ -107,14 +107,14 @@ function TaskRow({
           onContextMenu={handleContextMenu}
           className="mt-0.5 shrink-0 text-primary"
         >
-          <ProgressCircle progress={task.progress} size={16} />
+          <ProgressCircle progress={assignment.progress} size={16} />
         </button>
         <span
-          className={`flex-1 ${task.progress === 4 ? "line-through text-muted-foreground" : ""}`}
+          className={`flex-1 ${assignment.progress === 4 ? "line-through text-muted-foreground" : ""}`}
         >
-          {task.text}
+          {assignment.text}
         </span>
-        {!editingNote && !task.note && (
+        {!editingNote && !assignment.note && (
           <button
             type="button"
             onClick={() => setEditingNote(true)}
@@ -125,15 +125,15 @@ function TaskRow({
         )}
       </div>
       {/* Existing note display */}
-      {task.note && !editingNote && (
+      {assignment.note && !editingNote && (
         <p
           className="ml-6 mt-0.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
           onClick={() => {
-            setNoteValue(task.note ?? "");
+            setNoteValue(assignment.note ?? "");
             setEditingNote(true);
           }}
         >
-          {task.note}
+          {assignment.note}
         </p>
       )}
       {/* Note editing */}
@@ -150,7 +150,7 @@ function TaskRow({
             }
             if (e.key === "Escape") {
               setEditingNote(false);
-              setNoteValue(task.note ?? "");
+              setNoteValue(assignment.note ?? "");
             }
           }}
           className="ml-6 mt-1 w-[calc(100%-1.5rem)] rounded border bg-background px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-ring"

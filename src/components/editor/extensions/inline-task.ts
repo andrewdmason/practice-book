@@ -3,14 +3,14 @@ import TaskItem from "@tiptap/extension-task-item";
 import { InputRule } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { ReactNodeViewRenderer } from "@tiptap/react";
-import { TaskItemView } from "../task-item-view";
+import { AssignmentItemView } from "../assignment-item-view";
 
 /**
  * Extended TaskItem that uses a numeric progress attribute (0-4) instead of
  * the built-in boolean checked. Renders via a custom React NodeView that
  * shows a ProgressCircle and handles click / option-click.
  */
-export const CustomTaskItem = TaskItem.extend({
+export const CustomAssignmentItem = TaskItem.extend({
   addAttributes() {
     return {
       taskId: {
@@ -111,14 +111,14 @@ export const CustomTaskItem = TaskItem.extend({
   },
 
   addNodeView() {
-    return ReactNodeViewRenderer(TaskItemView);
+    return ReactNodeViewRenderer(AssignmentItemView);
   },
 });
 
-export const CustomTaskList = TaskList.configure({
+export const CustomAssignmentList = TaskList.configure({
   HTMLAttributes: {
-    class: "task-list",
+    class: "assignment-list",
   },
 });
 
-export { CustomTaskItem as TaskItemExtension, CustomTaskList as TaskListExtension };
+export { CustomAssignmentItem as AssignmentItemExtension, CustomAssignmentList as AssignmentListExtension };

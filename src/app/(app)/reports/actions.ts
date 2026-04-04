@@ -9,7 +9,7 @@ import type {
   TimerCategory,
   PieceWeeklyCumulativeData,
   PieceOption,
-  CompletedTaskMarker,
+  CompletedAssignmentMarker,
   SectionStatus,
   SectionStatusSnapshot,
 } from "@/lib/types";
@@ -385,21 +385,21 @@ export async function getPieceCompletionByWeek(
 }
 
 /**
- * Get completed tasks for a piece, grouped by week for chart markers.
+ * Get completed assignments for a piece, grouped by week for chart markers.
  */
-export async function getCompletedTasksForPiece(
+export async function getCompletedAssignmentsForPiece(
   pieceId: string,
   cumulativeData: PieceWeeklyCumulativeData[]
-): Promise<CompletedTaskMarker[]> {
+): Promise<CompletedAssignmentMarker[]> {
   const supabase = await createClient();
 
-  const { data: tasks } = await supabase
-    .from("tasks")
+  const { data: assignments } = await supabase
+    .from("assignments")
     .select("id, text, completed_at")
     .eq("piece_id", pieceId)
     .not("completed_at", "is", null);
 
-  if (!tasks || tasks.length === 0) return [];
+  if (!assignments || assignments.length === 0) return [];
 
   // Build a map from weekStart to cumulative hours
   const cumulativeMap = new Map(
@@ -409,30 +409,30 @@ export async function getCompletedTasksForPiece(
     ])
   );
 
-  // Group tasks by week
+  // Group assignments by week
   const weekGroups = new Map<
     string,
     { id: string; text: string; completedAt: string }[]
   >();
 
-  for (const task of tasks) {
-    const completedDate = task.completed_at!.slice(0, 10);
+  for (const assignment of assignments) {
+    const completedDate = assignment.completed_at!.slice(0, 10);
     const monday = getWeekStart(completedDate);
     const group = weekGroups.get(monday) ?? [];
     group.push({
-      id: task.id,
-      text: task.text,
-      completedAt: task.completed_at!,
+      id: assignment.id,
+      text: assignment.text,
+      completedAt: assignment.completed_at!,
     });
     weekGroups.set(monday, group);
   }
 
   return [...weekGroups.entries()]
-    .map(([ws, groupTasks]) => ({
+    .map(([ws, groupAssignments]) => ({
       weekStart: ws,
       weekLabel: weekLabel(ws),
       cumulativeHours: cumulativeMap.get(ws) ?? 0,
-      tasks: groupTasks,
+      assignments: groupAssignments,
     }))
     .filter((m) => cumulativeMap.has(m.weekStart));
 }

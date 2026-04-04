@@ -86,7 +86,7 @@ export type SourceType = "practice_entry";
 export type PracticeEntryType = "practice" | "lesson";
 export type EntrySectionCategory = "piece" | "technique" | "sight_reading" | "general";
 
-export type Task = {
+export type Assignment = {
   id: string;
   source_type: SourceType;
   source_id: string;
@@ -139,11 +139,11 @@ export type PieceOption = {
   composer: string | null;
 };
 
-export type CompletedTaskMarker = {
+export type CompletedAssignmentMarker = {
   weekStart: string;
   weekLabel: string;
   cumulativeHours: number;
-  tasks: { id: string; text: string; completedAt: string }[];
+  assignments: { id: string; text: string; completedAt: string }[];
 };
 
 // Search types
@@ -184,7 +184,7 @@ export type RepertoireOverviewItem = {
   name: string;
   composer: string | null;
   last_played: string | null;
-  open_tasks: number;
+  open_assignments: number;
 };
 
 // Feed types

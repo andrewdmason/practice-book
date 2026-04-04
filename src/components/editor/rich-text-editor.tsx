@@ -9,7 +9,7 @@ import { Extension, textblockTypeInputRule, type JSONContent } from "@tiptap/cor
 import { PluginKey } from "@tiptap/pm/state";
 import { BubbleToolbar } from "./bubble-toolbar";
 import { MetronomeMarking } from "./extensions/metronome-marking";
-import { TaskListExtension, TaskItemExtension } from "./extensions/inline-task";
+import { AssignmentListExtension, AssignmentItemExtension } from "./extensions/inline-task";
 import { createMentionSuggestion } from "./extensions/mention-suggestion";
 import type { SourceType } from "@/lib/types";
 
@@ -79,8 +79,8 @@ export function RichTextEditor({
       placeholder: placeholderText,
     }),
     MetronomeMarking,
-    TaskListExtension,
-    TaskItemExtension.configure({ nested: false }),
+    AssignmentListExtension,
+    AssignmentItemExtension.configure({ nested: false }),
     createMentionExtension(),
     HeadingShortcuts,
   ];
