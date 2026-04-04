@@ -41,6 +41,10 @@ import type {
   TimeSummaryEntry,
 } from "@/lib/types";
 
+// Client-side caches so re-selecting a piece shows data instantly
+const sectionsCache = new Map<string, PieceSectionWithChildren[]>();
+const tasksCache = new Map<string, { openTasks: Task[]; completedTasks: Task[] }>();
+
 export function RepertoireFocusPanel() {
   const router = useRouter();
   const { isRunning, currentTarget, focusedTarget, setFocusedTarget, activePieces } = useTimer();
@@ -101,16 +105,19 @@ export function RepertoireFocusPanel() {
 // ---------------------------------------------------------------------------
 
 function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Piece | null }) {
+  const cached = tasksCache.get(pieceId);
   const [piece, setPiece] = useState<{
     name: string;
     composer: string | null;
     target_tempo: number | null;
   } | null>(knownPiece ? { name: knownPiece.name, composer: knownPiece.composer, target_tempo: knownPiece.target_tempo } : null);
-  const [openTasks, setOpenTasks] = useState<Task[]>([]);
-  const [completedTasks, setCompletedTasks] = useState<Task[]>([]);
-  const [sections, setSections] = useState<PieceSectionWithChildren[]>([]);
+  const [openTasks, setOpenTasks] = useState<Task[]>(cached?.openTasks ?? []);
+  const [completedTasks, setCompletedTasks] = useState<Task[]>(cached?.completedTasks ?? []);
+  const [sections, setSections] = useState<PieceSectionWithChildren[]>(
+    () => sectionsCache.get(pieceId) ?? []
+  );
   const [showCompleted, setShowCompleted] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(!!cached);
 
   // Update piece immediately when knownPiece changes (no network needed)
   useEffect(() => {
@@ -121,6 +128,7 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
 
   const refreshTasks = useCallback(() => {
     getPieceFocusData(pieceId).then((data) => {
+      tasksCache.set(pieceId, data);
       setOpenTasks(data.openTasks);
       setCompletedTasks(data.completedTasks);
       setLoaded(true);
@@ -128,12 +136,28 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
   }, [pieceId]);
 
   const refreshSections = useCallback(() => {
-    getSections(pieceId).then(setSections);
+    getSections(pieceId).then((data) => {
+      sectionsCache.set(pieceId, data);
+      setSections(data);
+    }).catch(() => {
+      // Retry once on failure
+      getSections(pieceId).then((data) => {
+        sectionsCache.set(pieceId, data);
+        setSections(data);
+      }).catch(() => {});
+    });
   }, [pieceId]);
 
   useEffect(() => {
-    // Don't reset loaded if we already have tasks — keep stale data visible while refreshing
-    if (openTasks.length === 0 && completedTasks.length === 0) {
+    // Load from cache immediately when pieceId changes
+    const cachedSections = sectionsCache.get(pieceId);
+    if (cachedSections) setSections(cachedSections);
+    const cachedTasks = tasksCache.get(pieceId);
+    if (cachedTasks) {
+      setOpenTasks(cachedTasks.openTasks);
+      setCompletedTasks(cachedTasks.completedTasks);
+      setLoaded(true);
+    } else {
       setLoaded(false);
     }
 
@@ -154,8 +178,7 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
 
     refreshTasks();
     refreshSections();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pieceId, refreshTasks]);
+  }, [pieceId, refreshTasks, refreshSections, knownPiece]);
 
   useEffect(() => {
     const handler = () => refreshTasks();
@@ -173,8 +196,8 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
   useEffect(() => {
     const handler = (e: Event) => {
       const { sectionId, status } = (e as CustomEvent).detail;
-      setSections((prev) =>
-        prev.map((s) => {
+      setSections((prev) => {
+        const next = prev.map((s) => {
           if (s.id === sectionId) return { ...s, status };
           return {
             ...s,
@@ -182,8 +205,10 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
               c.id === sectionId ? { ...c, status } : c
             ),
           };
-        })
-      );
+        });
+        sectionsCache.set(pieceId, next);
+        return next;
+      });
     };
     window.addEventListener("section-status-changed", handler);
     return () => window.removeEventListener("section-status-changed", handler);
@@ -318,8 +343,8 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
             composer={piece.composer}
             onSectionsChanged={refreshSections}
             onStatusChange={(sectionId, status) => {
-              setSections((prev) =>
-                prev.map((s) => {
+              setSections((prev) => {
+                const next = prev.map((s) => {
                   if (s.id === sectionId) return { ...s, status };
                   return {
                     ...s,
@@ -327,8 +352,10 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
                       c.id === sectionId ? { ...c, status } : c
                     ),
                   };
-                })
-              );
+                });
+                sectionsCache.set(pieceId, next);
+                return next;
+              });
             }}
           />
         )}
