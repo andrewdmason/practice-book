@@ -39,6 +39,9 @@ const tasksCache = new Map<string, PracticeTask[]>();
 // Cache section labels so we don't re-fetch
 const sectionLabelsCache = new Map<string, Map<string, string>>();
 
+// Stable React keys so rows don't re-mount when optimistic ID → real ID
+const stableKeysCache = new Map<string, Map<string, string>>();
+
 /**
  * Inline task list for a piece within a feed card.
  * Fetches its own data for the given piece + date.
@@ -73,6 +76,11 @@ export function InlineTaskList({
   );
   const [autoFocusTaskId, setAutoFocusTaskId] = useState<string | null>(null);
   const [autoSelectTaskId, setAutoSelectTaskId] = useState<string | null>(null);
+  // Stable React keys so component doesn't re-mount when optimistic ID → real ID
+  if (!stableKeysCache.has(cacheKey)) {
+    stableKeysCache.set(cacheKey, new Map());
+  }
+  const stableKeys = stableKeysCache.get(cacheKey)!;
   const { activeTaskId, remainingSeconds } = useTaskTimer();
 
   const refresh = useCallback(() => {
@@ -118,6 +126,7 @@ export function InlineTaskList({
     const handleAdded = (e: Event) => {
       const task = (e as CustomEvent).detail as PracticeTask;
       if (task.piece_id !== pieceId || task.date !== date) return;
+      stableKeys.set(task.id, task.id);
       setAutoFocusTaskId(task.id);
       updateAndCache((prev) => [...prev, task]);
     };
@@ -127,6 +136,12 @@ export function InlineTaskList({
     };
     const handleResolved = (e: Event) => {
       const { optimisticId, realId } = (e as CustomEvent).detail;
+      // Keep the optimistic ID as the stable React key so the row doesn't re-mount
+      const stableKey = stableKeys.get(optimisticId);
+      if (stableKey) {
+        stableKeys.delete(optimisticId);
+        stableKeys.set(realId, stableKey);
+      }
       setAutoFocusTaskId((prev) => (prev === optimisticId ? realId : prev));
       updateAndCache((prev) =>
         prev.map((t) => (t.id === optimisticId ? { ...t, id: realId } : t))
@@ -172,7 +187,7 @@ export function InlineTaskList({
     <div className="px-3 pb-2">
       {tasks.map((task) => (
         <InlineTaskRow
-          key={task.id}
+          key={stableKeys.get(task.id) ?? task.id}
           task={task}
           pieceId={pieceId}
           pieceName={pieceName}
@@ -555,13 +570,13 @@ const handleDelete = () => {
             }}
             className={cn(
               "text-xs text-left w-full truncate transition-colors",
-              task.text
+              textValue
                 ? "text-foreground hover:text-foreground/80"
                 : "text-muted-foreground/50 italic hover:text-foreground",
               localCompleted && "line-through text-muted-foreground"
             )}
           >
-            {task.text || "describe..."}
+            {textValue || "describe..."}
           </button>
         )}
       </div>

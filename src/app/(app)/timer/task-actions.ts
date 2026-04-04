@@ -130,7 +130,6 @@ export async function createTask(
 
   if (error || !data) throw new Error(error?.message ?? "Failed to create task");
 
-  revalidatePath("/");
   return { id: data.id };
 }
 
