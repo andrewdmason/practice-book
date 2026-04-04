@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useTimer } from "@/components/timer/timer-context";
+import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { useZenMode } from "@/components/layout/zen-mode-context";
 import { MetronomeControl } from "@/components/metronome/metronome-control";
 import { useMetronome } from "@/components/metronome/metronome-context";
@@ -47,6 +48,7 @@ export function FooterBar() {
     stopTimer,
   } = useTimer();
   const { stop: stopMetronome } = useMetronome();
+  const { pauseTaskTimer } = useTaskTimer();
 
   // The visually active target: current (when running) or focused (when stopped)
   const activeTarget = isRunning ? currentTarget : focusedTarget;
@@ -153,6 +155,7 @@ export function FooterBar() {
   const handleStopClick = async () => {
     const target = currentTarget;
     stopMetronome();
+    pauseTaskTimer();
     await stopTimer();
     if (target) {
       setFocusUrl(targetKey(target));
