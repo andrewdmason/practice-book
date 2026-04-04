@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { NotebookPenIcon, ClockIcon, MoreHorizontalIcon, Trash2Icon, MusicIcon, PencilIcon, EyeIcon, ArrowRightIcon } from "lucide-react";
+import { NotebookPenIcon, ClockIcon, MoreHorizontalIcon, Trash2Icon, MusicIcon, PencilIcon, EyeIcon } from "lucide-react";
 import dynamic from "next/dynamic";
 import type { JSONContent } from "@tiptap/core";
 
@@ -17,7 +17,7 @@ import { deleteSection } from "@/app/(app)/feed/actions";
 import { formatMinutes } from "@/lib/timer-utils";
 import { SessionEntriesDialog } from "@/components/feed/session-entries-dialog";
 import type { PracticeEntrySection, StatusChange, TimerCategory } from "@/lib/types";
-import { SECTION_STATUS_COLORS } from "@/lib/types";
+import { SECTION_STATUS_COLORS, SECTION_STATUS_PERCENTAGE } from "@/lib/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -207,23 +207,26 @@ export function FeedSection({ section, date, isToday, isActive, timeSeconds, sin
       )}
       {statusChanges && statusChanges.length > 0 && (
         <div className="px-3 pb-1 flex flex-wrap gap-x-3 gap-y-1">
-          {statusChanges.map((change) => (
-            <span
-              key={change.sectionLabel}
-              className="inline-flex items-center gap-1 text-xs text-muted-foreground"
-            >
-              <span className="font-medium text-foreground">
-                {change.sectionLabel}
+          {statusChanges.map((change) => {
+            const pct = Math.round(SECTION_STATUS_PERCENTAGE[change.newStatus] * 100);
+            const diff = change.newStatus - change.oldStatus;
+            return (
+              <span
+                key={change.sectionLabel}
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+              >
+                <span
+                  className={`inline-block size-2.5 rounded-sm ${SECTION_STATUS_COLORS[change.newStatus]}`}
+                />
+                <span className="font-medium text-foreground">
+                  {change.sectionLabel}:
+                </span>
+                <span>
+                  {pct}%{diff !== 0 && ` (${diff > 0 ? "+" : ""}${diff})`}
+                </span>
               </span>
-              <span
-                className={`inline-block size-2.5 rounded-sm ${SECTION_STATUS_COLORS[change.oldStatus]}`}
-              />
-              <ArrowRightIcon className="size-2.5" />
-              <span
-                className={`inline-block size-2.5 rounded-sm ${SECTION_STATUS_COLORS[change.newStatus]}`}
-              />
-            </span>
-          ))}
+            );
+          })}
         </div>
       )}
       {section.category !== "general" && (
