@@ -409,7 +409,8 @@ const handleDelete = () => {
     onChanged();
   };
 
-  const handleMetronomeClick = () => {
+  const handleMetronomeClick = (e: React.MouseEvent) => {
+    if (e.altKey) return; // alt-click handled by parent for editing
     if (task.metronome_speed) {
       startMetronome(task.metronome_speed);
     }
@@ -464,7 +465,16 @@ const handleDelete = () => {
       </div>
 
       {/* Metronome pill — fixed width so columns align */}
-      <div className="shrink-0 w-12">
+      <div
+        className="shrink-0 w-12 min-h-5"
+        onClick={(e) => {
+          if (editingTempo) return;
+          if (!e.altKey) return;
+          e.stopPropagation();
+          setTempoValue(String(task.metronome_speed ?? ""));
+          setEditingTempo(true);
+        }}
+      >
         {editingTempo ? (
           <Input
             type="number"
@@ -488,13 +498,8 @@ const handleDelete = () => {
           <button
             type="button"
             onClick={handleMetronomeClick}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setTempoValue(String(task.metronome_speed ?? ""));
-              setEditingTempo(true);
-            }}
             className="inline-flex items-center rounded-md bg-secondary px-1 py-0.5 font-mono text-[10px] text-secondary-foreground cursor-pointer hover:bg-secondary/80 transition-colors"
-            title="Click to play, right-click to edit"
+            title="Click to play, option-click to edit"
           >
             ♩={task.metronome_speed}
           </button>
