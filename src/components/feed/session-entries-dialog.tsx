@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { PlusIcon, Trash2Icon } from "lucide-react";
+import { PlusIcon, SquareIcon, Trash2Icon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -127,6 +127,23 @@ export function SessionEntriesDialog({
     updateTimerEntryDuration(entryId, newSeconds);
   };
 
+  const handleStop = (entry: TimerEntryRow) => {
+    const elapsed = Math.max(
+      0,
+      Math.round(
+        (Date.now() - new Date(entry.started_at).getTime()) / 1000
+      )
+    );
+    setEntries((prev) =>
+      prev.map((e) =>
+        e.id === entry.id
+          ? { ...e, ended_at: new Date().toISOString(), duration_seconds: elapsed }
+          : e
+      )
+    );
+    updateTimerEntryDuration(entry.id, elapsed);
+  };
+
   const handleDelete = (entryId: string) => {
     setEntries((prev) => prev.filter((e) => e.id !== entryId));
     deleteTimerEntry(entryId);
@@ -180,9 +197,14 @@ export function SessionEntriesDialog({
                     {formatTime(entry.started_at)}
                   </span>
                   {isActive ? (
-                    <span className="text-xs font-medium text-destructive">
-                      Recording...
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleStop(entry)}
+                      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-destructive hover:bg-destructive/10"
+                    >
+                      <SquareIcon className="size-3 fill-current" />
+                      Stop
+                    </button>
                   ) : (
                     <DurationInput
                       value={entry.duration_seconds}
@@ -193,8 +215,7 @@ export function SessionEntriesDialog({
                   <button
                     type="button"
                     onClick={() => handleDelete(entry.id)}
-                    disabled={isActive}
-                    className="ml-auto shrink-0 rounded p-1 text-muted-foreground/50 hover:text-destructive disabled:opacity-30 disabled:hover:text-muted-foreground/50"
+                    className="ml-auto shrink-0 rounded p-1 text-muted-foreground/50 hover:text-destructive"
                   >
                     <Trash2Icon className="size-3.5" />
                   </button>
