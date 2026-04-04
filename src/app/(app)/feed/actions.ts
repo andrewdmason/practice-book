@@ -534,6 +534,102 @@ async function getTimeSummaryForDateRange(
 }
 
 /**
+ * Ensure tomorrow's practice entry exists and has piece sections
+ * for any pieces that already have tasks scheduled for tomorrow.
+ */
+export async function ensureTomorrowEntry(): Promise<string> {
+  const supabase = await createClient();
+  const tz = await getUserTimezone();
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowDate = localDate(tomorrow, tz);
+
+  // Get or create tomorrow's practice entry
+  const { data: entries } = await supabase
+    .from("practice_entries")
+    .select("id")
+    .eq("date", tomorrowDate)
+    .eq("type", "practice")
+    .order("created_at")
+    .limit(1);
+
+  let entry = entries?.[0] ?? null;
+
+  if (!entry) {
+    const { data: newEntry } = await supabase
+      .from("practice_entries")
+      .insert({ date: tomorrowDate, type: "practice" })
+      .select("id")
+      .single();
+    entry = newEntry;
+  }
+
+  if (!entry) throw new Error("Failed to create tomorrow's practice entry");
+
+  await ensureSections(entry.id);
+  await ensurePieceSectionsFromTimerData(entry.id, tomorrowDate);
+
+  return entry.id;
+}
+
+/**
+ * Fetch tomorrow as a FeedDay for display in the feed.
+ */
+export async function getTomorrowFeedDay(): Promise<FeedDay> {
+  const supabase = await createClient();
+  const tz = await getUserTimezone();
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowDate = localDate(tomorrow, tz);
+
+  // Ensure entry exists
+  await ensureTomorrowEntry();
+
+  // Fetch entries
+  const { data: entries } = await supabase
+    .from("practice_entries")
+    .select("id, date, type")
+    .eq("date", tomorrowDate)
+    .eq("type", "practice")
+    .order("created_at")
+    .limit(1);
+
+  const practiceEntry = entries?.[0] ?? null;
+
+  let feedEntry: FeedPracticeEntry | null = null;
+  if (practiceEntry) {
+    const { data: sections } = await supabase
+      .from("practice_entry_sections")
+      .select("id, practice_entry_id, piece_id, category, content, sort_order, pieces(name, composer)")
+      .eq("practice_entry_id", practiceEntry.id)
+      .order("sort_order");
+
+    feedEntry = {
+      id: practiceEntry.id,
+      date: practiceEntry.date,
+      type: practiceEntry.type as PracticeEntryType,
+      sections: (sections ?? []).map((s) => ({
+        id: s.id,
+        practice_entry_id: s.practice_entry_id,
+        piece_id: s.piece_id,
+        category: s.category as EntrySectionCategory,
+        content: s.content,
+        sort_order: s.sort_order,
+        piece_name: (s.pieces as unknown as { name: string; composer: string | null } | null)?.name ?? null,
+        composer: (s.pieces as unknown as { name: string; composer: string | null } | null)?.composer ?? null,
+      })),
+    };
+  }
+
+  return {
+    date: tomorrowDate,
+    practiceEntry: feedEntry,
+    lessons: [],
+    timeSummary: [],
+  };
+}
+
+/**
  * Fetch a page of feed data, cursor-based by date descending.
  */
 export async function getFeedPage(
