@@ -102,22 +102,29 @@ export function InlineTaskList({
 
   // Optimistically add tasks from external sources (header +, sidebar +)
   useEffect(() => {
+    const updateAndCache = (updater: (prev: PracticeTask[]) => PracticeTask[]) => {
+      setTasks((prev) => {
+        const next = updater(prev);
+        tasksCache.set(cacheKey, next);
+        return next;
+      });
+    };
     const handleAdded = (e: Event) => {
       const task = (e as CustomEvent).detail as PracticeTask;
       if (task.piece_id !== pieceId || task.date !== date) return;
       setAutoFocusTaskId(task.id);
-      setTasks((prev) => [...prev, task]);
+      updateAndCache((prev) => [...prev, task]);
     };
     const handleResolved = (e: Event) => {
       const { optimisticId, realId } = (e as CustomEvent).detail;
       setAutoFocusTaskId((prev) => (prev === optimisticId ? realId : prev));
-      setTasks((prev) =>
+      updateAndCache((prev) =>
         prev.map((t) => (t.id === optimisticId ? { ...t, id: realId } : t))
       );
     };
     const handlePaused = (e: Event) => {
       const { taskId, remainingSeconds: remaining } = (e as CustomEvent).detail;
-      setTasks((prev) =>
+      updateAndCache((prev) =>
         prev.map((t) =>
           t.id === taskId ? { ...t, timer_remaining_seconds: remaining } : t
         )
@@ -131,7 +138,7 @@ export function InlineTaskList({
       window.removeEventListener("task-id-resolved", handleResolved);
       window.removeEventListener("task-timer-paused", handlePaused);
     };
-  }, [pieceId, date]);
+  }, [pieceId, date, cacheKey]);
 
   const openTasks = tasks.filter((t) => !t.completed);
 
