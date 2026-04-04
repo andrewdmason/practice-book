@@ -154,6 +154,90 @@ export async function deleteTask(taskId: string) {
   revalidatePath("/");
 }
 
+export async function duplicateTaskToTomorrow(
+  taskId: string
+): Promise<{ id: string; date: string }> {
+  const supabase = await createClient();
+
+  // Fetch the source task
+  const { data: source } = await supabase
+    .from("practice_tasks")
+    .select("*")
+    .eq("id", taskId)
+    .single();
+
+  if (!source) throw new Error("Task not found");
+
+  // Compute tomorrow's date from the source task's date
+  const srcDate = new Date(source.date + "T12:00:00");
+  srcDate.setDate(srcDate.getDate() + 1);
+  const tomorrowDate = srcDate.toISOString().slice(0, 10);
+
+  // Ensure tomorrow's practice entry and piece section exist
+  const { ensureTomorrowEntry } = await import("@/app/(app)/feed/actions");
+  const entryId = await ensureTomorrowEntry();
+
+  // Ensure a piece section exists for this piece in tomorrow's entry
+  const { data: existingSection } = await supabase
+    .from("practice_entry_sections")
+    .select("id")
+    .eq("practice_entry_id", entryId)
+    .eq("category", "piece")
+    .eq("piece_id", source.piece_id)
+    .limit(1);
+
+  if (!existingSection || existingSection.length === 0) {
+    const { data: maxRow } = await supabase
+      .from("practice_entry_sections")
+      .select("sort_order")
+      .eq("practice_entry_id", entryId)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .single();
+
+    await supabase.from("practice_entry_sections").insert({
+      practice_entry_id: entryId,
+      piece_id: source.piece_id,
+      category: "piece",
+      sort_order: (maxRow?.sort_order ?? 0) + 1,
+    });
+  }
+
+  // Get next sort_order for tomorrow's tasks
+  const { data: maxTask } = await supabase
+    .from("practice_tasks")
+    .select("sort_order")
+    .eq("piece_id", source.piece_id)
+    .eq("date", tomorrowDate)
+    .eq("completed", false)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .single();
+
+  const nextOrder = (maxTask?.sort_order ?? -1) + 1;
+
+  // Create the duplicate task for tomorrow
+  const { data: newTask, error } = await supabase
+    .from("practice_tasks")
+    .insert({
+      piece_id: source.piece_id,
+      section_id: source.section_id,
+      date: tomorrowDate,
+      text: source.text,
+      metronome_speed: source.metronome_speed,
+      timer_seconds: source.timer_seconds,
+      timer_remaining_seconds: source.timer_seconds, // Reset timer
+      sort_order: nextOrder,
+    })
+    .select("id")
+    .single();
+
+  if (error || !newTask) throw new Error(error?.message ?? "Failed to duplicate task");
+
+  revalidatePath("/");
+  return { id: newTask.id, date: tomorrowDate };
+}
+
 export async function updateTaskRemaining(taskId: string, remainingSeconds: number) {
   const supabase = await createClient();
 

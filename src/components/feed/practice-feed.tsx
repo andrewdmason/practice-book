@@ -13,6 +13,7 @@ import type { FeedDay, FeedPracticeEntry, PieceSuggestion, PracticeEntryType, Ti
 
 type PracticeFeedProps = {
   initialData: { items: FeedDay[]; nextCursor: string | null };
+  tomorrowData: FeedDay;
   pieces: PieceSuggestion[];
   typeFilter?: PracticeEntryType;
 };
@@ -28,7 +29,7 @@ function focusKeyFromTarget(target: TimerTarget | null): string | null {
   return target.category === "piece" ? target.pieceId : target.category;
 }
 
-export function PracticeFeed({ initialData, pieces, typeFilter }: PracticeFeedProps) {
+export function PracticeFeed({ initialData, tomorrowData, pieces, typeFilter }: PracticeFeedProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isRunning, currentTarget, focusedTarget } = useTimer();
@@ -195,9 +196,20 @@ export function PracticeFeed({ initialData, pieces, typeFilter }: PracticeFeedPr
               : "No entries yet. Start the timer or add a lesson!"}
         </p>
       ) : (
-        filteredDays.map((day) => (
-          <FeedDayCard key={day.date} day={day} pieces={pieces} focusKey={focusKey} />
-        ))
+        filteredDays.map((day, i) => {
+          const isToday = day.date === localDate();
+          return (
+            <div key={day.date}>
+              <FeedDayCard day={day} pieces={pieces} focusKey={focusKey} />
+              {/* Render Tomorrow section right after Today */}
+              {isToday && (!optimisticTypeFilter || optimisticTypeFilter === "practice") && (
+                <div className="mt-6">
+                  <FeedDayCard day={tomorrowData} pieces={pieces} focusKey={focusKey} isTomorrow />
+                </div>
+              )}
+            </div>
+          );
+        })
       )}
 
       {/* Infinite scroll sentinel */}

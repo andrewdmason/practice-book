@@ -1,7 +1,7 @@
 import { TwoColumnLayout } from "@/components/layout/two-column-layout";
 import { RepertoireFocusPanel } from "@/components/timer/repertoire-focus-panel";
 import { PracticeFeed } from "@/components/feed/practice-feed";
-import { ensureTodayEntry, getFeedPage } from "@/app/(app)/feed/actions";
+import { ensureTodayEntry, getFeedPage, getTomorrowFeedDay } from "@/app/(app)/feed/actions";
 import { createClient } from "@/lib/supabase/server";
 import type { PieceSuggestion, PracticeEntryType } from "@/lib/types";
 
@@ -18,8 +18,9 @@ export default async function FeedPage({
   await ensureTodayEntry();
 
   // Always fetch all types — client filters instantly
-  const [initialData, supabase] = await Promise.all([
+  const [initialData, tomorrowData, supabase] = await Promise.all([
     getFeedPage(undefined, 7),
+    getTomorrowFeedDay(),
     createClient(),
   ]);
 
@@ -35,6 +36,7 @@ export default async function FeedPage({
       left={
         <PracticeFeed
           initialData={initialData}
+          tomorrowData={tomorrowData}
           pieces={(pieces as PieceSuggestion[]) ?? []}
           typeFilter={typeFilter}
         />

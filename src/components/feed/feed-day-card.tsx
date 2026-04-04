@@ -32,6 +32,10 @@ function formatDateHeader(dateStr: string): string {
   const today = localDate();
   if (dateStr === today) return "Today";
 
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (dateStr === localDate(tomorrow)) return "Tomorrow";
+
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   if (dateStr === localDate(yesterday)) return "Yesterday";
@@ -68,6 +72,7 @@ type FeedDayCardProps = {
   day: FeedDay;
   pieces: PieceSuggestion[];
   focusKey?: string | null;
+  isTomorrow?: boolean;
 };
 
 function filterAndSortSections(
@@ -179,6 +184,7 @@ function DayNotes({
 function EntryCard({
   entry,
   isToday,
+  allowTasks,
   timeSummary,
   lessonTimeSummary,
   focusKey,
@@ -187,6 +193,7 @@ function EntryCard({
 }: {
   entry: FeedPracticeEntry;
   isToday: boolean;
+  allowTasks: boolean;
   timeSummary: TimeSummaryEntry[];
   lessonTimeSummary?: LessonTimeSummary;
   focusKey?: string | null;
@@ -228,6 +235,7 @@ function EntryCard({
             section={section}
             date={entry.date}
             isToday={isToday}
+            allowTasks={allowTasks}
             isActive={isActiveSection}
             timeSeconds={isLesson ? undefined : (isActiveSection ? serverTime + liveDelta : serverTime)}
             sinceLastLessonSeconds={sinceLastLessonSeconds}
@@ -242,9 +250,10 @@ function EntryCard({
   );
 }
 
-export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
+export function FeedDayCard({ day, pieces, focusKey, isTomorrow }: FeedDayCardProps) {
   const today = localDate();
   const isToday = day.date === today;
+  const allowTasks = isToday || !!isTomorrow;
   const { isRunning, entryElapsedSeconds } = useTimer();
   const initialEntryElapsedRef = useRef(entryElapsedSeconds);
 
@@ -310,7 +319,8 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
     : [];
   const hasPracticeSections =
     mergedPracticeEntry != null &&
-    (filteredPracticeSections.length > 0 ||
+    (isTomorrow ||
+      filteredPracticeSections.length > 0 ||
       (!focusKey && day.timeSummary.length > 0) ||
       (!focusKey && mergedPracticeEntry.sections.some((s) => s.category === "general" && hasContent(s.content))));
   const visibleLessons = mergedLessons.filter(
@@ -390,6 +400,7 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
           <EntryCard
             entry={lesson}
             isToday={isToday}
+            allowTasks={allowTasks}
             timeSummary={[]}
             lessonTimeSummary={lessonSummary}
             focusKey={focusKey}
@@ -436,6 +447,7 @@ export function FeedDayCard({ day, pieces, focusKey }: FeedDayCardProps) {
         <EntryCard
           entry={mergedPracticeEntry}
           isToday={isToday}
+          allowTasks={allowTasks}
           timeSummary={day.timeSummary}
           focusKey={focusKey}
           statusChangesByPiece={day.statusChangesByPiece}

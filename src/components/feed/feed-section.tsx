@@ -60,6 +60,7 @@ type FeedSectionProps = {
   section: PracticeEntrySection;
   date: string;
   isToday: boolean;
+  allowTasks?: boolean;
   isActive?: boolean;
   timeSeconds?: number;
   sinceLastLessonSeconds?: number;
@@ -70,7 +71,8 @@ type FeedSectionProps = {
   onTaskTimeChange?: (pieceId: string, seconds: number) => void;
 };
 
-export function FeedSection({ section, date, isToday, isActive, timeSeconds, sinceLastLessonSeconds, sinceLastLessonSecondsPerDay, editorContext = "practice_entry", statusChanges, sectionLabels, onTaskTimeChange }: FeedSectionProps) {
+export function FeedSection({ section, date, isToday, allowTasks, isActive, timeSeconds, sinceLastLessonSeconds, sinceLastLessonSecondsPerDay, editorContext = "practice_entry", statusChanges, sectionLabels, onTaskTimeChange }: FeedSectionProps) {
+  const showTasks = allowTasks ?? isToday;
   const sectionHasContent = hasContent(section.content);
   const isLessonGeneral = section.category === "general" && editorContext === "lesson";
   const [isEditorVisible, setIsEditorVisible] = useState(sectionHasContent || isLessonGeneral);
@@ -122,7 +124,7 @@ export function FeedSection({ section, date, isToday, isActive, timeSeconds, sin
   // Lesson sections are always shown — they're manually added via the + button.
   if (
     editorContext !== "lesson" &&
-    isToday &&
+    (isToday || showTasks) &&
     (section.category === "technique" || section.category === "sight_reading") &&
     !sectionHasContent &&
     (displayTime == null || displayTime <= 0) &&
@@ -195,7 +197,7 @@ export function FeedSection({ section, date, isToday, isActive, timeSeconds, sin
               <NotebookPenIcon className="size-3.5" />
             </button>
           )}
-          {section.category === "piece" && section.piece_id && isToday && editorContext === "practice_entry" && (
+          {section.category === "piece" && section.piece_id && showTasks && editorContext === "practice_entry" && (
             <AddTaskButton pieceId={section.piece_id} date={date} />
           )}
           <DropdownMenu>
@@ -254,6 +256,7 @@ export function FeedSection({ section, date, isToday, isActive, timeSeconds, sin
           date={date}
           sectionLabels={sectionLabels}
           isToday={isToday}
+          allowTasks={showTasks}
           onTotalRemainingChange={handleTaskTimeChange}
         />
       )}

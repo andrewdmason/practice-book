@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ClockIcon,
+  CopyPlusIcon,
   PlusIcon,
   SquareIcon,
   TrashIcon,
@@ -19,6 +20,7 @@ import {
   uncompleteTask,
   updateTaskField,
   deleteTask,
+  duplicateTaskToTomorrow,
 } from "@/app/(app)/timer/task-actions";
 import { getSections } from "@/app/(app)/repertoire/section-actions";
 import { flattenSections } from "@/lib/section-utils";
@@ -48,6 +50,7 @@ export function InlineTaskList({
   date,
   sectionLabels: externalLabels,
   isToday,
+  allowTasks,
   onTotalRemainingChange,
 }: {
   pieceId: string;
@@ -56,8 +59,10 @@ export function InlineTaskList({
   date: string;
   sectionLabels?: Map<string, string>;
   isToday: boolean;
+  allowTasks?: boolean;
   onTotalRemainingChange?: (seconds: number) => void;
 }) {
+  const showTasks = allowTasks ?? isToday;
   const cacheKey = `${pieceId}:${date}`;
   const [tasks, setTasks] = useState<PracticeTask[]>(
     () => tasksCache.get(cacheKey) ?? []
@@ -67,6 +72,7 @@ export function InlineTaskList({
     () => externalLabels ?? sectionLabelsCache.get(pieceId) ?? new Map()
   );
   const [autoFocusTaskId, setAutoFocusTaskId] = useState<string | null>(null);
+  const [autoSelectTaskId, setAutoSelectTaskId] = useState<string | null>(null);
   const { activeTaskId, remainingSeconds } = useTaskTimer();
 
   const refresh = useCallback(() => {
@@ -115,6 +121,10 @@ export function InlineTaskList({
       setAutoFocusTaskId(task.id);
       updateAndCache((prev) => [...prev, task]);
     };
+    const handleDuplicated = (e: Event) => {
+      const { taskId } = (e as CustomEvent).detail;
+      setAutoSelectTaskId(taskId);
+    };
     const handleResolved = (e: Event) => {
       const { optimisticId, realId } = (e as CustomEvent).detail;
       setAutoFocusTaskId((prev) => (prev === optimisticId ? realId : prev));
@@ -133,10 +143,12 @@ export function InlineTaskList({
     window.addEventListener("task-added", handleAdded);
     window.addEventListener("task-id-resolved", handleResolved);
     window.addEventListener("task-timer-paused", handlePaused);
+    window.addEventListener("task-duplicated-to-tomorrow", handleDuplicated);
     return () => {
       window.removeEventListener("task-added", handleAdded);
       window.removeEventListener("task-id-resolved", handleResolved);
       window.removeEventListener("task-timer-paused", handlePaused);
+      window.removeEventListener("task-duplicated-to-tomorrow", handleDuplicated);
     };
   }, [pieceId, date, cacheKey]);
 
@@ -154,7 +166,7 @@ export function InlineTaskList({
   }, [totalRemaining, onTotalRemainingChange]);
 
   if (!loaded && tasks.length === 0) return null;
-  if (tasks.length === 0 && !isToday) return null;
+  if (tasks.length === 0 && !showTasks) return null;
 
   return (
     <div className="px-3 pb-2">
@@ -172,6 +184,8 @@ export function InlineTaskList({
           }
           onChanged={refresh}
           autoFocusText={task.id === autoFocusTaskId}
+          autoSelectText={task.id === autoSelectTaskId}
+          showDuplicateToTomorrow={isToday}
         />
       ))}
     </div>
@@ -254,6 +268,8 @@ function InlineTaskRow({
   sectionLabel,
   onChanged,
   autoFocusText,
+  autoSelectText,
+  showDuplicateToTomorrow,
 }: {
   task: PracticeTask;
   pieceId: string;
@@ -262,6 +278,8 @@ function InlineTaskRow({
   sectionLabel: string | null;
   onChanged: () => void;
   autoFocusText?: boolean;
+  autoSelectText?: boolean;
+  showDuplicateToTomorrow?: boolean;
 }) {
   const { start: startMetronome } = useMetronome();
   const { isRunning, startTimer, switchTarget } = useTimer();
@@ -285,8 +303,11 @@ function InlineTaskRow({
   useEffect(() => {
     if (autoFocusText && textInputRef.current) {
       textInputRef.current.focus();
+      if (autoSelectText && textInputRef.current.value) {
+        textInputRef.current.select();
+      }
     }
-  }, [autoFocusText]);
+  }, [autoFocusText, autoSelectText]);
 
   const isActive = activeTaskId === task.id;
   const displaySeconds = isActive
@@ -377,6 +398,28 @@ const handleDelete = () => {
     if (task.metronome_speed) {
       startMetronome(task.metronome_speed);
     }
+  };
+
+  const handleDuplicateToTomorrow = () => {
+    duplicateTaskToTomorrow(task.id).then(({ id, date }) => {
+      const optimisticTask: PracticeTask = {
+        ...task,
+        id,
+        date,
+        completed: false,
+        completed_at: null,
+        timer_remaining_seconds: task.timer_seconds,
+        sort_order: 999,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      window.dispatchEvent(
+        new CustomEvent("task-added", { detail: optimisticTask })
+      );
+      window.dispatchEvent(
+        new CustomEvent("task-duplicated-to-tomorrow", { detail: { taskId: id } })
+      );
+    });
   };
 
   return (
@@ -522,6 +565,18 @@ const handleDelete = () => {
           </button>
         )}
       </div>
+
+      {/* Duplicate to tomorrow */}
+      {showDuplicateToTomorrow && (
+        <button
+          type="button"
+          onClick={handleDuplicateToTomorrow}
+          className="shrink-0 opacity-0 group-hover/task:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+          title="Duplicate to tomorrow"
+        >
+          <CopyPlusIcon className="size-3" />
+        </button>
+      )}
 
       {/* Delete */}
       <button
