@@ -326,8 +326,11 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
                   return next;
                 });
               }}
-              onAddTask={(sectionId, metronomeSpeed) => {
-                addTaskOptimistic(pieceId, localDate(), sectionId, metronomeSpeed);
+              onAddTask={(sectionId, metronomeSpeed, tomorrow) => {
+                const date = tomorrow
+                  ? localDate(new Date(Date.now() + 86_400_000))
+                  : localDate();
+                addTaskOptimistic(pieceId, date, sectionId, metronomeSpeed);
               }}
             />
           </CardContent>
