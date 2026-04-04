@@ -1,6 +1,6 @@
 import type { JSONContent } from "@tiptap/core";
 
-export type ExtractedTask = {
+export type ExtractedAssignment = {
   taskId: string;
   text: string;
   progress: number;
@@ -17,10 +17,10 @@ function getTextContent(node: JSONContent): string {
 }
 
 /**
- * Walk a Tiptap JSON document and extract all task items.
+ * Walk a Tiptap JSON document and extract all assignment items.
  */
-export function extractTasks(doc: JSONContent): ExtractedTask[] {
-  const tasks: ExtractedTask[] = [];
+export function extractAssignments(doc: JSONContent): ExtractedAssignment[] {
+  const assignments: ExtractedAssignment[] = [];
 
   function walk(node: JSONContent) {
     if (node.type === "taskItem") {
@@ -35,7 +35,7 @@ export function extractTasks(doc: JSONContent): ExtractedTask[] {
             : 0;
 
       if (text) {
-        tasks.push({ taskId, text, progress, pieceId: null });
+        assignments.push({ taskId, text, progress, pieceId: null });
       }
     }
 
@@ -47,5 +47,5 @@ export function extractTasks(doc: JSONContent): ExtractedTask[] {
   }
 
   walk(doc);
-  return tasks;
+  return assignments;
 }

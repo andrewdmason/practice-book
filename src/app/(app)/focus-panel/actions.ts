@@ -3,41 +3,41 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type {
-  Task,
+  Assignment,
   RepertoireOverviewItem,
 } from "@/lib/types";
 
 export async function getPieceFocusData(pieceId: string): Promise<{
-  openTasks: Task[];
-  completedTasks: Task[];
+  openAssignments: Assignment[];
+  completedAssignments: Assignment[];
 }> {
   const supabase = await createClient();
 
-  // Fetch open tasks for this piece
-  const { data: openTasks } = await supabase
-    .from("tasks")
+  // Fetch open assignments for this piece
+  const { data: openAssignments } = await supabase
+    .from("assignments")
     .select("*")
     .eq("piece_id", pieceId)
     .lt("progress", 4)
     .order("created_at", { ascending: false });
 
-  // Fetch completed tasks for this piece
-  const { data: completedTasks } = await supabase
-    .from("tasks")
+  // Fetch completed assignments for this piece
+  const { data: completedAssignments } = await supabase
+    .from("assignments")
     .select("*")
     .eq("piece_id", pieceId)
     .eq("progress", 4)
     .order("completed_at", { ascending: false });
 
   return {
-    openTasks: (openTasks ?? []) as Task[],
-    completedTasks: (completedTasks ?? []) as Task[],
+    openAssignments: (openAssignments ?? []) as Assignment[],
+    completedAssignments: (completedAssignments ?? []) as Assignment[],
   };
 }
 
 export async function getCategoryFocusData(
   category: "technique" | "sight_reading"
-): Promise<{ tasks: Task[] }> {
+): Promise<{ assignments: Assignment[] }> {
   const supabase = await createClient();
 
   // Find all section IDs for this category
@@ -46,34 +46,34 @@ export async function getCategoryFocusData(
     .select("id")
     .eq("category", category);
 
-  if (!sections || sections.length === 0) return { tasks: [] };
+  if (!sections || sections.length === 0) return { assignments: [] };
 
   const sectionIds = sections.map((s) => s.id);
 
-  // Fetch open tasks from those sections
-  const { data: tasks } = await supabase
-    .from("tasks")
+  // Fetch open assignments from those sections
+  const { data: assignments } = await supabase
+    .from("assignments")
     .select("*")
     .in("source_id", sectionIds)
     .lt("progress", 4)
     .order("created_at", { ascending: false });
 
-  return { tasks: (tasks ?? []) as Task[] };
+  return { assignments: (assignments ?? []) as Assignment[] };
 }
 
-export async function updateTaskProgress(taskId: string, progress: number) {
+export async function updateAssignmentProgress(assignmentId: string, progress: number) {
   const supabase = await createClient();
   const now = new Date().toISOString();
 
-  // 1. Update the tasks table
-  const { data: task, error } = await supabase
-    .from("tasks")
+  // 1. Update the assignments table
+  const { data: assignment, error } = await supabase
+    .from("assignments")
     .update({
       progress,
       completed_at: progress === 4 ? now : null,
       updated_at: now,
     })
-    .eq("id", taskId)
+    .eq("id", assignmentId)
     .select("source_type, source_id")
     .single();
 
@@ -82,20 +82,20 @@ export async function updateTaskProgress(taskId: string, progress: number) {
   }
 
   // 2. Sync the progress back into the editor JSON content
-  if (task) {
+  if (assignment) {
     const { data: section } = await supabase
       .from("practice_entry_sections")
       .select("content")
-      .eq("id", task.source_id)
+      .eq("id", assignment.source_id)
       .single();
 
     if (section?.content) {
-      const updated = updateTaskProgressInJson(section.content, taskId, progress);
+      const updated = updateAssignmentProgressInJson(section.content, assignmentId, progress);
       if (updated) {
         await supabase
           .from("practice_entry_sections")
           .update({ content: updated })
-          .eq("id", task.source_id);
+          .eq("id", assignment.source_id);
       }
     }
   }
@@ -103,17 +103,17 @@ export async function updateTaskProgress(taskId: string, progress: number) {
   revalidatePath("/");
 }
 
-// Walk TipTap JSON and update the progress attribute for a task
-function updateTaskProgressInJson(
+// Walk TipTap JSON and update the progress attribute for an assignment
+function updateAssignmentProgressInJson(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   node: any,
-  taskId: string,
+  assignmentId: string,
   progress: number
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
   if (!node) return node;
 
-  if (node.type === "taskItem" && node.attrs?.taskId === taskId) {
+  if (node.type === "taskItem" && node.attrs?.taskId === assignmentId) {
     return {
       ...node,
       attrs: { ...node.attrs, progress },
@@ -125,7 +125,7 @@ function updateTaskProgressInJson(
       ...node,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       content: node.content.map((child: any) =>
-        updateTaskProgressInJson(child, taskId, progress)
+        updateAssignmentProgressInJson(child, assignmentId, progress)
       ),
     };
   }
@@ -133,13 +133,13 @@ function updateTaskProgressInJson(
   return node;
 }
 
-export async function updateTaskNote(taskId: string, note: string | null) {
+export async function updateAssignmentNote(assignmentId: string, note: string | null) {
   const supabase = await createClient();
 
-  const { data: task, error } = await supabase
-    .from("tasks")
+  const { data: assignment, error } = await supabase
+    .from("assignments")
     .update({ note, updated_at: new Date().toISOString() })
-    .eq("id", taskId)
+    .eq("id", assignmentId)
     .select("source_type, source_id")
     .single();
 
@@ -148,20 +148,20 @@ export async function updateTaskNote(taskId: string, note: string | null) {
   }
 
   // Sync the note back into the editor JSON content
-  if (task) {
+  if (assignment) {
     const { data: section } = await supabase
       .from("practice_entry_sections")
       .select("content")
-      .eq("id", task.source_id)
+      .eq("id", assignment.source_id)
       .single();
 
     if (section?.content) {
-      const updated = updateTaskNoteInJson(section.content, taskId, note);
+      const updated = updateAssignmentNoteInJson(section.content, assignmentId, note);
       if (updated) {
         await supabase
           .from("practice_entry_sections")
           .update({ content: updated })
-          .eq("id", task.source_id);
+          .eq("id", assignment.source_id);
       }
     }
   }
@@ -169,17 +169,17 @@ export async function updateTaskNote(taskId: string, note: string | null) {
   revalidatePath("/");
 }
 
-// Walk TipTap JSON and update the note attribute for a task
-function updateTaskNoteInJson(
+// Walk TipTap JSON and update the note attribute for an assignment
+function updateAssignmentNoteInJson(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   node: any,
-  taskId: string,
+  assignmentId: string,
   note: string | null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
   if (!node) return node;
 
-  if (node.type === "taskItem" && node.attrs?.taskId === taskId) {
+  if (node.type === "taskItem" && node.attrs?.taskId === assignmentId) {
     return {
       ...node,
       attrs: { ...node.attrs, note },
@@ -191,7 +191,7 @@ function updateTaskNoteInJson(
       ...node,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       content: node.content.map((child: any) =>
-        updateTaskNoteInJson(child, taskId, note)
+        updateAssignmentNoteInJson(child, assignmentId, note)
       ),
     };
   }
@@ -199,25 +199,25 @@ function updateTaskNoteInJson(
   return node;
 }
 
-export type TaskWithPiece = Task & {
+export type AssignmentWithPiece = Assignment & {
   piece_name: string | null;
   piece_composer: string | null;
   section_category: string | null;
 };
 
-export async function getAllOpenTasks(): Promise<TaskWithPiece[]> {
+export async function getAllOpenAssignments(): Promise<AssignmentWithPiece[]> {
   const supabase = await createClient();
 
-  const { data: tasks } = await supabase
-    .from("tasks")
+  const { data: assignments } = await supabase
+    .from("assignments")
     .select("*, pieces(name, composer)")
     .lt("progress", 4)
     .order("created_at", { ascending: false });
 
-  if (!tasks) return [];
+  if (!assignments) return [];
 
-  // For non-piece tasks, resolve section categories
-  const nonPieceSectionIds = tasks
+  // For non-piece assignments, resolve section categories
+  const nonPieceSectionIds = assignments
     .filter((t) => !t.piece_id)
     .map((t) => t.source_id);
 
@@ -234,7 +234,7 @@ export async function getAllOpenTasks(): Promise<TaskWithPiece[]> {
     }
   }
 
-  return tasks.map((t) => {
+  return assignments.map((t) => {
     const piece = t.pieces as unknown as { name: string; composer: string | null } | null;
     return {
       id: t.id,
@@ -250,7 +250,7 @@ export async function getAllOpenTasks(): Promise<TaskWithPiece[]> {
       piece_name: piece?.name ?? null,
       piece_composer: piece?.composer ?? null,
       section_category: t.piece_id ? "piece" : (categoryMap.get(t.source_id) ?? null),
-    } as TaskWithPiece;
+    } as AssignmentWithPiece;
   });
 }
 
@@ -270,18 +270,18 @@ export async function getRepertoireOverview(): Promise<RepertoireOverviewItem[]>
 
   const pieceIds = pieces.map((p) => p.id);
 
-  // Get open task counts per piece
-  const { data: taskRows } = await supabase
-    .from("tasks")
+  // Get open assignment counts per piece
+  const { data: assignmentRows } = await supabase
+    .from("assignments")
     .select("piece_id")
     .in("piece_id", pieceIds)
     .lt("progress", 4);
 
-  const taskCounts = new Map<string, number>();
-  if (taskRows) {
-    for (const t of taskRows) {
+  const assignmentCounts = new Map<string, number>();
+  if (assignmentRows) {
+    for (const t of assignmentRows) {
       if (t.piece_id) {
-        taskCounts.set(t.piece_id, (taskCounts.get(t.piece_id) ?? 0) + 1);
+        assignmentCounts.set(t.piece_id, (assignmentCounts.get(t.piece_id) ?? 0) + 1);
       }
     }
   }
@@ -307,6 +307,6 @@ export async function getRepertoireOverview(): Promise<RepertoireOverviewItem[]>
     name: p.name,
     composer: p.composer,
     last_played: lastPlayedMap.get(p.id) ?? null,
-    open_tasks: taskCounts.get(p.id) ?? 0,
+    open_assignments: assignmentCounts.get(p.id) ?? 0,
   }));
 }

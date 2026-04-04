@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import type {
   PieceStatus,
-  Task,
+  Assignment,
   Collection,
   Piece,
 } from "@/lib/types";
@@ -280,7 +280,7 @@ export async function deleteCollection(id: string) {
 
 export async function getCollectionFocusData(
   collectionId: string
-): Promise<{ tasks: Task[] }> {
+): Promise<{ assignments: Assignment[] }> {
   const supabase = await createClient();
 
   const { data: pieces } = await supabase
@@ -290,18 +290,17 @@ export async function getCollectionFocusData(
 
   const pieceIds = (pieces ?? []).map((p) => p.id);
   if (pieceIds.length === 0) {
-    return { tasks: [] };
+    return { assignments: [] };
   }
 
-  const { data: tasks } = await supabase
-    .from("tasks")
+  const { data: assignments } = await supabase
+    .from("assignments")
     .select("*")
     .in("piece_id", pieceIds)
     .eq("completed", false)
     .order("created_at", { ascending: false });
 
   return {
-    tasks: (tasks ?? []) as Task[],
+    assignments: (assignments ?? []) as Assignment[],
   };
 }
-

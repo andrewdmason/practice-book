@@ -6,7 +6,7 @@ import type { NodeViewProps } from "@tiptap/react";
 import { ProgressCircle } from "@/components/ui/progress-circle";
 import { getNextBounceProgress } from "@/lib/progress-bounce";
 
-export function TaskItemView({ node, updateAttributes }: NodeViewProps) {
+export function AssignmentItemView({ node, updateAttributes }: NodeViewProps) {
   const progress: number = node.attrs.progress ?? 0;
   const taskId: string | null = node.attrs.taskId ?? null;
   const [displayNote, setDisplayNote] = useState<string | null>(node.attrs.note ?? null);
@@ -23,8 +23,8 @@ export function TaskItemView({ node, updateAttributes }: NodeViewProps) {
       }
     };
 
-    window.addEventListener("task-note-updated", handler);
-    return () => window.removeEventListener("task-note-updated", handler);
+    window.addEventListener("assignment-note-updated", handler);
+    return () => window.removeEventListener("assignment-note-updated", handler);
   }, [taskId, updateAttributes]);
 
   // Sync when node attrs change externally
@@ -49,25 +49,25 @@ export function TaskItemView({ node, updateAttributes }: NodeViewProps) {
   return (
     <NodeViewWrapper
       as="li"
-      className="task-item-node"
+      className="assignment-item-node"
       data-task-id={taskId}
       data-progress={String(progress)}
       data-checked={progress === 4 ? "true" : "false"}
     >
-      <label contentEditable={false} className="task-item-checkbox">
+      <label contentEditable={false} className="assignment-item-checkbox">
         <button
           type="button"
           onClick={handleClick}
           onContextMenu={handleContextMenu}
-          className="task-progress-btn"
+          className="assignment-progress-btn"
         >
           <ProgressCircle progress={progress} size={16} />
         </button>
       </label>
-      <div className="task-item-content">
+      <div className="assignment-item-content">
         <NodeViewContent as="div" />
         {displayNote && (
-          <p contentEditable={false} className="task-note-display">
+          <p contentEditable={false} className="assignment-note-display">
             {displayNote}
           </p>
         )}

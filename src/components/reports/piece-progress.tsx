@@ -24,12 +24,12 @@ import { Loader2Icon } from "lucide-react";
 import { formatMinutes } from "@/lib/timer-utils";
 import {
   getPieceCumulativeData,
-  getCompletedTasksForPiece,
+  getCompletedAssignmentsForPiece,
 } from "@/app/(app)/reports/actions";
 import type {
   PieceWeeklyCumulativeData,
   PieceOption,
-  CompletedTaskMarker,
+  CompletedAssignmentMarker,
 } from "@/lib/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,8 +49,8 @@ function CustomTooltip({ active, payload, label }: any) {
   );
 }
 
-function MarkerDot({ cx, cy, marker }: { cx: number; cy: number; marker: CompletedTaskMarker }) {
-  const count = marker.tasks.length;
+function MarkerDot({ cx, cy, marker }: { cx: number; cy: number; marker: CompletedAssignmentMarker }) {
+  const count = marker.assignments.length;
   return (
     <g>
       <circle cx={cx} cy={cy} r={6} fill="var(--color-primary)" opacity={0.9} />
@@ -85,12 +85,12 @@ function MarkerDot({ cx, cy, marker }: { cx: number; cy: number; marker: Complet
 function MarkerTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   // Check if payload has marker data
-  const marker = payload[0]?.payload?._marker as CompletedTaskMarker | undefined;
+  const marker = payload[0]?.payload?._marker as CompletedAssignmentMarker | undefined;
   if (!marker) return null;
   return (
     <div className="rounded-md border bg-background px-3 py-2 text-sm shadow-sm max-w-[200px]">
-      <p className="font-medium mb-1">Completed Tasks</p>
-      {marker.tasks.map((t) => (
+      <p className="font-medium mb-1">Completed Assignments</p>
+      {marker.assignments.map((t) => (
         <p key={t.id} className="text-muted-foreground text-xs truncate">
           {t.text}
         </p>
@@ -117,7 +117,7 @@ export function PieceProgress({
     initialPieceId
   );
   const [data, setData] = useState(initialData);
-  const [markers, setMarkers] = useState<CompletedTaskMarker[]>([]);
+  const [markers, setMarkers] = useState<CompletedAssignmentMarker[]>([]);
   const [isPending, startTransition] = useTransition();
   const [chartColor, setChartColor] = useState("oklch(0.45 0.08 35)");
 
@@ -134,8 +134,8 @@ export function PieceProgress({
       startTransition(async () => {
         const result = await getPieceCumulativeData(pieceId);
         setData(result);
-        const taskMarkers = await getCompletedTasksForPiece(pieceId, result);
-        setMarkers(taskMarkers);
+        const assignmentMarkers = await getCompletedAssignmentsForPiece(pieceId, result);
+        setMarkers(assignmentMarkers);
       });
     },
     []

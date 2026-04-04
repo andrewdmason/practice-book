@@ -4,7 +4,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { PieceDetailHeader } from "@/components/repertoire/piece-detail-header";
 import { SectionEditor } from "@/components/repertoire/section-editor";
-import { TaskList } from "@/components/repertoire/task-list";
+import { AssignmentList } from "@/components/repertoire/assignment-list";
 import dynamic from "next/dynamic";
 
 const PieceCumulativeChart = dynamic(() =>
@@ -93,9 +93,9 @@ export default async function PieceDetailPage({
           initialTimestamps={videoTimestamps}
         />
 
-        {(focusData.openTasks.length > 0 || focusData.completedTasks.length > 0) && <Separator />}
+        {(focusData.openAssignments.length > 0 || focusData.completedAssignments.length > 0) && <Separator />}
 
-        <TaskList initialTasks={[...focusData.openTasks, ...focusData.completedTasks]} />
+        <AssignmentList initialAssignments={[...focusData.openAssignments, ...focusData.completedAssignments]} />
 
         <Separator />
 

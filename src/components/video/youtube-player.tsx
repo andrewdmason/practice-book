@@ -40,7 +40,7 @@ function loadYouTubeApi(): Promise<void> {
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function YouTubePlayer() {
+export function YouTubePlayer({ bare = false }: { bare?: boolean } = {}) {
   const videoCtx = useVideo();
   const { videoId, videoStart, videoEnd, playerRef } = videoCtx;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -105,6 +105,7 @@ export function YouTubePlayer() {
           playerRef.current = player;
           creatingRef.current = false;
           setReady(true);
+          videoCtx.notifyPlayerReady();
         },
         onStateChange: (event: { data: number }) => {
           if (event.data === YT_PLAYING) {
@@ -136,6 +137,19 @@ export function YouTubePlayer() {
   }, []);
 
   if (!videoId) return null;
+
+  if (bare) {
+    return (
+      <div className="absolute inset-0">
+        <div ref={containerRef} className="absolute inset-0" />
+        {!ready && (
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
+            Loading video...
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div>

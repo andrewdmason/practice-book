@@ -47,7 +47,7 @@ export function EditorDemoClient({
             Practice Notes (General)
           </h2>
           <p className="mb-3 text-xs text-muted-foreground">
-            Try: <code>@120</code> for metronome, <code>[]</code> for tasks
+            Try: <code>@120</code> for metronome, <code>[]</code> for assignments
           </p>
           <div className="rounded-lg border bg-card p-4">
             <RichTextEditor

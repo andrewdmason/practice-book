@@ -70,6 +70,12 @@ interface VideoContextValue {
   timestamps: PieceSectionTimestamp[];
   /** The piece ID whose video is loaded */
   videoPieceId: string | null;
+  /** Whether the video player is visible */
+  showVideo: boolean;
+  /** Toggle video player visibility */
+  setShowVideo: (show: boolean) => void;
+  /** Called by the player component when the YT player is ready */
+  notifyPlayerReady: () => void;
 }
 
 const VideoContext = createContext<VideoContextValue | null>(null);
@@ -98,9 +104,11 @@ export function VideoProvider({ children }: { children: ReactNode }) {
   const [activeVideo, setActiveVideo] = useState<PieceVideo | null>(null);
   const [timestamps, setTimestamps] = useState<PieceSectionTimestamp[]>([]);
   const [videoPieceId, setVideoPieceId] = useState<string | null>(null);
+  const [showVideo, setShowVideo] = useState(false);
 
   const playerRef = useRef<YTPlayer | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pendingActionRef = useRef<{ seekTo: number; play: boolean } | null>(null);
 
   // Poll current time when playing
   useEffect(() => {
@@ -140,7 +148,12 @@ export function VideoProvider({ children }: { children: ReactNode }) {
   const seekTo = useCallback(
     (seconds: number) => {
       const player = playerRef.current;
-      if (!player) return;
+      if (!player) {
+        // Queue for when player mounts
+        pendingActionRef.current = { seekTo: seconds, play: pendingActionRef.current?.play ?? false };
+        setCurrentTime(seconds);
+        return;
+      }
       const end = videoEnd ?? duration;
       const clamped = Math.max(videoStart, Math.min(seconds, end || seconds));
       player.seekTo(clamped, true);
@@ -151,7 +164,11 @@ export function VideoProvider({ children }: { children: ReactNode }) {
 
   const play = useCallback(() => {
     const player = playerRef.current;
-    if (!player) return;
+    if (!player) {
+      // Queue for when player mounts
+      pendingActionRef.current = { seekTo: pendingActionRef.current?.seekTo ?? 0, play: true };
+      return;
+    }
     player.playVideo();
     setIsPlaying(true);
   }, []);
@@ -216,6 +233,22 @@ export function VideoProvider({ children }: { children: ReactNode }) {
     setIsPlaying(state === YT_PLAYING);
   }, []);
 
+  const notifyPlayerReady = useCallback(() => {
+    const pending = pendingActionRef.current;
+    if (!pending) return;
+    pendingActionRef.current = null;
+    const player = playerRef.current;
+    if (!player) return;
+    if (pending.seekTo > 0) {
+      player.seekTo(pending.seekTo, true);
+      setCurrentTime(pending.seekTo);
+    }
+    if (pending.play) {
+      player.playVideo();
+      setIsPlaying(true);
+    }
+  }, []);
+
   return (
     <VideoContext.Provider
       value={{
@@ -235,6 +268,9 @@ export function VideoProvider({ children }: { children: ReactNode }) {
         activeVideo,
         timestamps,
         videoPieceId,
+        showVideo,
+        setShowVideo,
+        notifyPlayerReady,
       }}
     >
       {children}

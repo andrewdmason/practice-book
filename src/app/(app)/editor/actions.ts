@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { extractTasks } from "@/components/editor/lib/extract-tasks";
+import { extractAssignments } from "@/components/editor/lib/extract-assignments";
 import type { JSONContent } from "@tiptap/core";
 import type { SourceType } from "@/lib/types";
 
@@ -22,10 +22,10 @@ export async function saveEditorContent(
     if (error) return { error: error.message };
   }
 
-  // 2. Extract and sync tasks (preserve progress/completion state from DB)
-  const tasks = extractTasks(content);
+  // 2. Extract and sync assignments (preserve progress/completion state from DB)
+  const assignments = extractAssignments(content);
 
-  // Look up the section's piece_id as fallback for task piece association
+  // Look up the section's piece_id as fallback for assignment piece association
   let sectionPieceId: string | null = null;
   {
     const { data: section } = await supabase
@@ -36,27 +36,27 @@ export async function saveEditorContent(
     sectionPieceId = section?.piece_id ?? null;
   }
 
-  const { data: existingTasks } = await supabase
-    .from("tasks")
+  const { data: existingAssignments } = await supabase
+    .from("assignments")
     .select("id, progress, completed_at, note")
     .eq("source_type", sourceType)
     .eq("source_id", sourceId);
 
-  const existingTaskMap = new Map(
-    existingTasks?.map((t) => [t.id, t]) ?? []
+  const existingAssignmentMap = new Map(
+    existingAssignments?.map((t) => [t.id, t]) ?? []
   );
 
   await supabase
-    .from("tasks")
+    .from("assignments")
     .delete()
     .eq("source_type", sourceType)
     .eq("source_id", sourceId);
 
-  if (tasks.length > 0) {
+  if (assignments.length > 0) {
     const now = new Date().toISOString();
-    const { error } = await supabase.from("tasks").insert(
-      tasks.map((t) => {
-        const existing = existingTaskMap.get(t.taskId);
+    const { error } = await supabase.from("assignments").insert(
+      assignments.map((t) => {
+        const existing = existingAssignmentMap.get(t.taskId);
         const progress = existing?.progress ?? t.progress;
         const completedAt =
           progress === 4
@@ -74,7 +74,7 @@ export async function saveEditorContent(
         };
       })
     );
-    if (error) console.error("Failed to insert tasks:", error.message);
+    if (error) console.error("Failed to insert assignments:", error.message);
   }
 
   revalidatePath("/");
