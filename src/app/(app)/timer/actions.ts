@@ -169,44 +169,51 @@ export async function getTodaySummary(): Promise<TimeSummaryEntry[]> {
   const tz = await getUserTimezone();
   const today = localDate(new Date(), tz);
 
-  const { data: sessions } = await supabase
-    .from("practice_sessions")
-    .select("id")
-    .eq("date", today);
+  // Fetch sessions and practice tasks in parallel
+  const [sessionsResult, tasksResult] = await Promise.all([
+    supabase.from("practice_sessions").select("id").eq("date", today),
+    supabase
+      .from("practice_tasks")
+      .select("piece_id, timer_seconds, timer_remaining_seconds")
+      .eq("date", today),
+  ]);
 
-  if (!sessions || sessions.length === 0) {
-    return [];
-  }
-
+  const sessions = sessionsResult.data ?? [];
+  const tasks = tasksResult.data ?? [];
   const sessionIds = sessions.map((s) => s.id);
 
-  const { data: entries } = await supabase
-    .from("timer_entries")
-    .select("piece_id, category, started_at, ended_at")
-    .in("session_id", sessionIds);
+  const { data: entries } = sessionIds.length > 0
+    ? await supabase
+        .from("timer_entries")
+        .select("piece_id, category, started_at, ended_at")
+        .in("session_id", sessionIds)
+    : { data: [] as { piece_id: string | null; category: string; started_at: string; ended_at: string | null }[] };
 
-  if (!entries || entries.length === 0) {
+  if ((!entries || entries.length === 0) && tasks.length === 0) {
     return [];
   }
 
-  // Get piece names for entries with piece_id
-  const pieceIds = [...new Set(entries.filter((e) => e.piece_id).map((e) => e.piece_id!))];
+  // Get piece names for all pieces referenced
+  const allPieceIds = new Set<string>();
+  for (const e of entries ?? []) { if (e.piece_id) allPieceIds.add(e.piece_id); }
+  for (const t of tasks) { if (t.piece_id) allPieceIds.add(t.piece_id); }
+
   let pieceNames: Record<string, string> = {};
-  if (pieceIds.length > 0) {
+  if (allPieceIds.size > 0) {
     const { data: pieces } = await supabase
       .from("pieces")
       .select("id, name")
-      .in("id", pieceIds);
+      .in("id", [...allPieceIds]);
     if (pieces) {
       pieceNames = Object.fromEntries(pieces.map((p) => [p.id, p.name]));
     }
   }
 
-  // Group and sum durations
+  // Group and sum durations from timer entries
   const groups = new Map<string, TimeSummaryEntry>();
   const now = Date.now();
 
-  for (const entry of entries) {
+  for (const entry of entries ?? []) {
     const key = entry.piece_id ?? entry.category;
     const start = new Date(entry.started_at).getTime();
     const end = entry.ended_at ? new Date(entry.ended_at).getTime() : now;
@@ -221,6 +228,25 @@ export async function getTodaySummary(): Promise<TimeSummaryEntry[]> {
         piece_id: entry.piece_id,
         piece_name: entry.piece_id ? (pieceNames[entry.piece_id] ?? null) : null,
         total_seconds: seconds,
+      });
+    }
+  }
+
+  // Add elapsed time from practice tasks
+  for (const task of tasks) {
+    const elapsed = task.timer_seconds - task.timer_remaining_seconds;
+    if (elapsed <= 0) continue;
+
+    const key = task.piece_id;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.total_seconds += elapsed;
+    } else {
+      groups.set(key, {
+        category: "piece" as TimerCategory,
+        piece_id: task.piece_id,
+        piece_name: pieceNames[task.piece_id] ?? null,
+        total_seconds: elapsed,
       });
     }
   }

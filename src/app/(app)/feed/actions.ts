@@ -362,36 +362,43 @@ async function getTimeSummariesForDates(
     .select("id, date")
     .in("date", dates);
 
-  if (!sessions || sessions.length === 0) {
-    for (const d of dates) result.set(d, []);
-    return result;
-  }
-
-  const sessionIds = sessions.map((s) => s.id);
+  const sessionIds = (sessions ?? []).map((s) => s.id);
   const sessionDateMap = new Map<string, string>();
-  for (const s of sessions) sessionDateMap.set(s.id, s.date);
+  for (const s of sessions ?? []) sessionDateMap.set(s.id, s.date);
 
-  // 2. Fetch all timer entries for those sessions at once
-  const { data: entries } = await supabase
-    .from("timer_entries")
-    .select("session_id, piece_id, category, started_at, ended_at")
-    .in("session_id", sessionIds);
+  // 2. Fetch timer entries and practice tasks in parallel
+  const [timerResult, taskResult] = await Promise.all([
+    sessionIds.length > 0
+      ? supabase
+          .from("timer_entries")
+          .select("session_id, piece_id, category, started_at, ended_at")
+          .in("session_id", sessionIds)
+      : Promise.resolve({ data: [] as { session_id: string; piece_id: string | null; category: string; started_at: string; ended_at: string | null }[] }),
+    supabase
+      .from("practice_tasks")
+      .select("piece_id, date, timer_seconds, timer_remaining_seconds")
+      .in("date", dates),
+  ]);
 
-  if (!entries || entries.length === 0) {
+  const entries = timerResult.data ?? [];
+  const tasks = taskResult.data ?? [];
+
+  if (entries.length === 0 && tasks.length === 0) {
     for (const d of dates) result.set(d, []);
     return result;
   }
 
-  // 3. Fetch all piece names at once
-  const pieceIds = [
-    ...new Set(entries.filter((e) => e.piece_id).map((e) => e.piece_id!)),
-  ];
+  // 3. Collect all piece IDs from both sources and fetch names
+  const allPieceIds = new Set<string>();
+  for (const e of entries) { if (e.piece_id) allPieceIds.add(e.piece_id); }
+  for (const t of tasks) { if (t.piece_id) allPieceIds.add(t.piece_id); }
+
   let pieceNames: Record<string, string> = {};
-  if (pieceIds.length > 0) {
+  if (allPieceIds.size > 0) {
     const { data: pieces } = await supabase
       .from("pieces")
       .select("id, name")
-      .in("id", pieceIds);
+      .in("id", [...allPieceIds]);
     if (pieces) {
       pieceNames = Object.fromEntries(pieces.map((p) => [p.id, p.name]));
     }
@@ -428,6 +435,28 @@ async function getTimeSummariesForDates(
     }
   }
 
+  // Add elapsed time from practice tasks (timer_seconds - timer_remaining_seconds)
+  for (const task of tasks) {
+    const elapsed = task.timer_seconds - task.timer_remaining_seconds;
+    if (elapsed <= 0) continue;
+
+    if (!dateGroups.has(task.date)) dateGroups.set(task.date, new Map());
+    const groups = dateGroups.get(task.date)!;
+
+    const key = task.piece_id;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.total_seconds += elapsed;
+    } else {
+      groups.set(key, {
+        category: "piece" as TimerCategory,
+        piece_id: task.piece_id,
+        piece_name: pieceNames[task.piece_id] ?? null,
+        total_seconds: elapsed,
+      });
+    }
+  }
+
   for (const date of dates) {
     const groups = dateGroups.get(date);
     if (!groups) {
@@ -460,37 +489,51 @@ async function getTimeSummaryForDateRange(
   const endMs = new Date(endDate + "T12:00:00").getTime();
   const calendarDays = Math.max(1, Math.round((endMs - startMs) / 86400000) + 1);
 
-  const { data: sessions } = await supabase
-    .from("practice_sessions")
-    .select("id, date")
-    .gte("date", startDate)
-    .lte("date", endDate);
+  // Fetch sessions and practice tasks in parallel
+  const [sessionsResult, tasksResult] = await Promise.all([
+    supabase
+      .from("practice_sessions")
+      .select("id, date")
+      .gte("date", startDate)
+      .lte("date", endDate),
+    supabase
+      .from("practice_tasks")
+      .select("piece_id, date, timer_seconds, timer_remaining_seconds")
+      .gte("date", startDate)
+      .lte("date", endDate),
+  ]);
 
-  if (!sessions || sessions.length === 0) {
+  const sessions = sessionsResult.data ?? [];
+  const tasks = tasksResult.data ?? [];
+
+  if (sessions.length === 0 && tasks.length === 0) {
     return { entries: [], totalSeconds: 0, dayCount: 0, calendarDays };
   }
 
   const sessionIds = sessions.map((s) => s.id);
-  const distinctDates = new Set(sessions.map((s) => s.date));
+  const distinctDates = new Set([
+    ...sessions.map((s) => s.date),
+    ...tasks.filter((t) => t.timer_seconds - t.timer_remaining_seconds > 0).map((t) => t.date),
+  ]);
 
-  const { data: entries } = await supabase
-    .from("timer_entries")
-    .select("session_id, piece_id, category, started_at, ended_at")
-    .in("session_id", sessionIds);
+  const { data: entries } = sessionIds.length > 0
+    ? await supabase
+        .from("timer_entries")
+        .select("session_id, piece_id, category, started_at, ended_at")
+        .in("session_id", sessionIds)
+    : { data: [] as { session_id: string; piece_id: string | null; category: string; started_at: string; ended_at: string | null }[] };
 
-  if (!entries || entries.length === 0) {
-    return { entries: [], totalSeconds: 0, dayCount: distinctDates.size, calendarDays };
-  }
+  // Collect all piece IDs from both sources
+  const allPieceIds = new Set<string>();
+  for (const e of entries ?? []) { if (e.piece_id) allPieceIds.add(e.piece_id); }
+  for (const t of tasks) { if (t.piece_id) allPieceIds.add(t.piece_id); }
 
-  const pieceIds = [
-    ...new Set(entries.filter((e) => e.piece_id).map((e) => e.piece_id!)),
-  ];
   let pieceNames: Record<string, string> = {};
-  if (pieceIds.length > 0) {
+  if (allPieceIds.size > 0) {
     const { data: pieces } = await supabase
       .from("pieces")
       .select("id, name")
-      .in("id", pieceIds);
+      .in("id", [...allPieceIds]);
     if (pieces) {
       pieceNames = Object.fromEntries(pieces.map((p) => [p.id, p.name]));
     }
@@ -499,7 +542,7 @@ async function getTimeSummaryForDateRange(
   const now = Date.now();
   const groups = new Map<string, TimeSummaryEntry>();
 
-  for (const entry of entries) {
+  for (const entry of entries ?? []) {
     const key = entry.piece_id ?? entry.category;
     const start = new Date(entry.started_at).getTime();
     const end = entry.ended_at ? new Date(entry.ended_at).getTime() : now;
@@ -516,6 +559,25 @@ async function getTimeSummaryForDateRange(
           ? (pieceNames[entry.piece_id] ?? null)
           : null,
         total_seconds: seconds,
+      });
+    }
+  }
+
+  // Add elapsed time from practice tasks
+  for (const task of tasks) {
+    const elapsed = task.timer_seconds - task.timer_remaining_seconds;
+    if (elapsed <= 0) continue;
+
+    const key = task.piece_id;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.total_seconds += elapsed;
+    } else {
+      groups.set(key, {
+        category: "piece" as TimerCategory,
+        piece_id: task.piece_id,
+        piece_name: pieceNames[task.piece_id] ?? null,
+        total_seconds: elapsed,
       });
     }
   }
