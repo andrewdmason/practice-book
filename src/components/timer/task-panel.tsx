@@ -11,7 +11,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useMetronome } from "@/components/metronome/metronome-context";
-import { useTimer } from "@/components/timer/timer-context";
+import { useTimerState } from "@/components/timer/timer-context";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import {
   getTasksForPieceAndDate,
@@ -297,7 +297,7 @@ function InlineTaskRow({
   showDuplicateToTomorrow?: boolean;
 }) {
   const { start: startMetronome } = useMetronome();
-  const { isRunning, startTimer, switchTarget } = useTimer();
+  const { isRunning, startTimer, switchTarget } = useTimerState();
   const {
     activeTaskId,
     remainingSeconds,

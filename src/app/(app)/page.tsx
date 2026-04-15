@@ -14,11 +14,9 @@ export default async function FeedPage({
   const typeFilter: PracticeEntryType | undefined =
     typeParam === "practice" || typeParam === "lesson" ? typeParam : undefined;
 
-  // Ensure today's entry and sections exist
-  await ensureTodayEntry();
-
-  // Always fetch all types — client filters instantly
-  const [initialData, tomorrowData, supabase] = await Promise.all([
+  // Ensure today's entry exists (in parallel with data fetches — doesn't block rendering)
+  const [, initialData, tomorrowData, supabase] = await Promise.all([
+    ensureTodayEntry(),
     getFeedPage(undefined, 7),
     getTomorrowFeedDay(),
     createClient(),

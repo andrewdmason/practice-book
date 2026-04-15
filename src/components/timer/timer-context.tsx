@@ -30,27 +30,54 @@ type PersistedState = {
   entryStartedAt: string;
 };
 
-type TimerContextValue = {
+// Stable state that changes infrequently (start/stop/switch)
+type TimerStateContextValue = {
   isRunning: boolean;
   currentTarget: TimerTarget | null;
   focusedTarget: TimerTarget | null;
   setFocusedTarget: (target: TimerTarget | null) => void;
-  sessionElapsedSeconds: number;
-  entryElapsedSeconds: number;
   activePieces: Piece[];
   startTimer: (target: TimerTarget) => void;
   switchTarget: (target: TimerTarget) => void;
   stopTimer: () => void;
 };
 
-const TimerContext = createContext<TimerContextValue | null>(null);
+// Tick-frequency state that updates every second
+type TimerTickContextValue = {
+  sessionElapsedSeconds: number;
+  entryElapsedSeconds: number;
+};
 
-export function useTimer() {
-  const ctx = useContext(TimerContext);
+// Combined type for useTimer() (backwards-compatible)
+type TimerContextValue = TimerStateContextValue & TimerTickContextValue;
+
+const TimerStateContext = createContext<TimerStateContextValue | null>(null);
+const TimerTickContext = createContext<TimerTickContextValue | null>(null);
+
+/**
+ * Use this hook when you only need stable timer state (isRunning, currentTarget, etc.).
+ * Does NOT re-render on every timer tick.
+ */
+export function useTimerState() {
+  const ctx = useContext(TimerStateContext);
   if (!ctx) {
-    throw new Error("useTimer must be used within a TimerProvider");
+    throw new Error("useTimerState must be used within a TimerProvider");
   }
   return ctx;
+}
+
+/**
+ * Use this hook when you need elapsed time values.
+ * Re-renders every second while the timer is running.
+ * Includes all fields from useTimerState() for convenience.
+ */
+export function useTimer(): TimerContextValue {
+  const stateCtx = useContext(TimerStateContext);
+  const tickCtx = useContext(TimerTickContext);
+  if (!stateCtx || !tickCtx) {
+    throw new Error("useTimer must be used within a TimerProvider");
+  }
+  return { ...stateCtx, ...tickCtx };
 }
 
 export function TimerProvider({
@@ -244,22 +271,27 @@ export function TimerProvider({
     });
   }, [currentTarget]);
 
+  const stateValue: TimerStateContextValue = {
+    isRunning,
+    currentTarget,
+    focusedTarget,
+    setFocusedTarget,
+    activePieces,
+    startTimer,
+    switchTarget: switchTargetFn,
+    stopTimer: stopTimerFn,
+  };
+
+  const tickValue: TimerTickContextValue = {
+    sessionElapsedSeconds,
+    entryElapsedSeconds,
+  };
+
   return (
-    <TimerContext.Provider
-      value={{
-        isRunning,
-        currentTarget,
-        focusedTarget,
-        setFocusedTarget,
-        sessionElapsedSeconds,
-        entryElapsedSeconds,
-        activePieces,
-        startTimer,
-        switchTarget: switchTargetFn,
-        stopTimer: stopTimerFn,
-      }}
-    >
-      {children}
-    </TimerContext.Provider>
+    <TimerStateContext.Provider value={stateValue}>
+      <TimerTickContext.Provider value={tickValue}>
+        {children}
+      </TimerTickContext.Provider>
+    </TimerStateContext.Provider>
   );
 }

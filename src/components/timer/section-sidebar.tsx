@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Play, Pause, PlusIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useTimer } from "@/components/timer/timer-context";
+import { useTimerState } from "@/components/timer/timer-context";
 import { useMetronome } from "@/components/metronome/metronome-context";
 import { useVideo } from "@/components/video/video-context";
 import {
@@ -114,7 +114,7 @@ function SectionRow({
   isLast: boolean;
   playingSectionId: string | null;
 }) {
-  const { isRunning, currentTarget, focusedTarget, setFocusedTarget, startTimer, switchTarget, stopTimer } = useTimer();
+  const { isRunning, currentTarget, focusedTarget, setFocusedTarget, startTimer, switchTarget, stopTimer } = useTimerState();
   const { start: startMetronome, isActive: metronomeActive } = useMetronome();
   const video = useVideo();
   const [editingTempo, setEditingTempo] = useState(false);

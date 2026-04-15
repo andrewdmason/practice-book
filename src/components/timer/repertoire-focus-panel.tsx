@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProgressCircle } from "@/components/ui/progress-circle";
-import { useTimer } from "@/components/timer/timer-context";
+import { useTimerState } from "@/components/timer/timer-context";
 import { TimeSummary } from "@/components/timer/time-summary";
 import { getTodaySummary } from "@/app/(app)/timer/actions";
 import {
@@ -51,7 +51,7 @@ const assignmentsCache = new Map<string, { openAssignments: Assignment[]; comple
 
 export function RepertoireFocusPanel() {
   const router = useRouter();
-  const { isRunning, currentTarget, focusedTarget, setFocusedTarget, activePieces } = useTimer();
+  const { isRunning, currentTarget, focusedTarget, setFocusedTarget, activePieces } = useTimerState();
 
   // Determine active target: timer target when running, focused target from pills otherwise
   const activeTarget = isRunning ? currentTarget : focusedTarget;

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { useTimer } from "@/components/timer/timer-context";
+import { useTimerState } from "@/components/timer/timer-context";
 import { useZenMode } from "@/components/layout/zen-mode-context";
 import { useVideo } from "@/components/video/video-context";
 import { SectionScrubber } from "@/components/layout/section-scrubber";
@@ -21,7 +21,7 @@ export function ScrubberBar() {
     setFocusedTarget,
     activePieces,
     switchTarget,
-  } = useTimer();
+  } = useTimerState();
   const video = useVideo();
   const { start: startMetronome, isActive: metronomeActive } = useMetronome();
 
