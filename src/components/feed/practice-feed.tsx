@@ -6,7 +6,7 @@ import { PlusIcon, Loader2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FeedDayCard } from "./feed-day-card";
 import { getFeedPage, createLesson } from "@/app/(app)/feed/actions";
-import { useTimer } from "@/components/timer/timer-context";
+import { useTimerState } from "@/components/timer/timer-context";
 import { cn } from "@/lib/utils";
 import { localDate } from "@/lib/date-utils";
 import type { FeedDay, FeedPracticeEntry, PieceSuggestion, PracticeEntryType, TimerTarget } from "@/lib/types";
@@ -32,7 +32,7 @@ function focusKeyFromTarget(target: TimerTarget | null): string | null {
 export function PracticeFeed({ initialData, tomorrowData, pieces, typeFilter }: PracticeFeedProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isRunning, currentTarget, focusedTarget } = useTimer();
+  const { isRunning, currentTarget, focusedTarget } = useTimerState();
 
   // Derive focusKey from timer context (instant) instead of URL params (slow)
   const focusKey = focusKeyFromTarget(isRunning ? currentTarget : focusedTarget);

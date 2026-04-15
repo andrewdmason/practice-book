@@ -19,7 +19,7 @@ export default async function AppLayout({
   const supabase = await createClient();
   const { data: activePieces } = await supabase
     .from("pieces")
-    .select("*")
+    .select("id, collection_id, name, composer, status, sort_order, notes, target_tempo, created_at, updated_at")
     .eq("status", "active")
     .order("sort_order")
     .order("name");

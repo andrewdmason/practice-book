@@ -205,45 +205,63 @@ export async function ensureTodayEntry(): Promise<string> {
   // getFeedPage must use the same ordering to display the entry that has sections.
   const { data: entries } = await supabase
     .from("practice_entries")
-    .select("id")
+    .select("id, practice_entry_sections(category)")
     .eq("date", today)
     .eq("type", "practice")
     .order("created_at")
     .limit(1);
 
-  let entry = entries?.[0] ?? null;
+  const existing = entries?.[0] ?? null;
 
-  if (!entry) {
+  if (existing) {
+    // Short-circuit: if the entry already has the 3 fixed-category sections, skip setup.
+    // Piece sections are created on-demand and don't need to block page load.
+    const existingCategories = new Set(
+      (existing.practice_entry_sections ?? []).map(
+        (s: { category: string }) => s.category
+      )
+    );
+    const hasAllFixed =
+      existingCategories.has("technique") &&
+      existingCategories.has("sight_reading") &&
+      existingCategories.has("general");
+    if (hasAllFixed) return existing.id;
+  }
+
+  let entryId: string;
+
+  if (existing) {
+    entryId = existing.id;
+  } else {
     const { data: newEntry } = await supabase
       .from("practice_entries")
       .insert({ date: today, type: "practice" })
       .select("id")
       .single();
-    entry = newEntry;
+    if (!newEntry) throw new Error("Failed to create practice entry");
+    entryId = newEntry.id;
   }
-
-  if (!entry) throw new Error("Failed to create practice entry");
 
   // Remove stale empty piece sections left by the old ensureSections behavior.
   // Sections for pieces with timer data will be recreated below.
   await supabase
     .from("practice_entry_sections")
     .delete()
-    .eq("practice_entry_id", entry.id)
+    .eq("practice_entry_id", entryId)
     .eq("category", "piece")
     .is("content", null);
 
-  await ensureSections(entry.id);
+  await ensureSections(entryId);
 
   // Create sections for pieces that have timer data but no section yet
-  await ensurePieceSectionsFromTimerData(entry.id, today);
+  await ensurePieceSectionsFromTimerData(entryId, today);
 
   // Clean up duplicate sections that can arise from concurrent requests.
   // Keep the oldest section for each category+piece_id pair.
   const { data: allSections } = await supabase
     .from("practice_entry_sections")
     .select("id, category, piece_id")
-    .eq("practice_entry_id", entry.id)
+    .eq("practice_entry_id", entryId)
     .order("created_at");
 
   if (allSections) {
@@ -265,7 +283,7 @@ export async function ensureTodayEntry(): Promise<string> {
     }
   }
 
-  return entry.id;
+  return entryId;
 }
 
 /**
@@ -706,12 +724,12 @@ export async function getFeedPage(
   const today = localDate(new Date(), tz);
   const beforeDate = cursor ?? today;
 
-  // Fetch all entries (practice + lesson) for the date range
+  // --- Batch 1: Fetch entries + session dates in parallel to determine allDates ---
   let peQuery = supabase
     .from("practice_entries")
     .select("id, date, type")
     .order("date", { ascending: false })
-    .limit(limit * 3); // multiple entries per day possible
+    .limit(limit * 3);
 
   if (typeFilter) {
     peQuery = peQuery.eq("type", typeFilter);
@@ -723,27 +741,26 @@ export async function getFeedPage(
     peQuery = peQuery.lte("date", beforeDate);
   }
 
-  const { data: allEntries } = await peQuery;
+  const sessionsPromise = typeFilter !== "lesson"
+    ? (() => {
+        let q = supabase
+          .from("practice_sessions")
+          .select("date")
+          .order("date", { ascending: false })
+          .limit(limit);
+        if (cursor) {
+          q = q.lt("date", beforeDate);
+        } else {
+          q = q.lte("date", beforeDate);
+        }
+        return q;
+      })()
+    : Promise.resolve({ data: null as { date: string }[] | null });
 
-  // Also fetch dates from practice sessions (timer data without notes)
-  // Skip when filtering to lessons only (lessons don't have timer data)
-  let sessionDates: { date: string }[] | null = null;
-  if (typeFilter !== "lesson") {
-    let sessionsQuery = supabase
-      .from("practice_sessions")
-      .select("date")
-      .order("date", { ascending: false })
-      .limit(limit);
-
-    if (cursor) {
-      sessionsQuery = sessionsQuery.lt("date", beforeDate);
-    } else {
-      sessionsQuery = sessionsQuery.lte("date", beforeDate);
-    }
-
-    const result = await sessionsQuery;
-    sessionDates = result.data;
-  }
+  const [{ data: allEntries }, { data: sessionDates }] = await Promise.all([
+    peQuery,
+    sessionsPromise,
+  ]);
 
   // Collect all unique dates
   const dateSet = new Set<string>();
@@ -758,8 +775,7 @@ export async function getFeedPage(
     return { items: [], nextCursor: null };
   }
 
-  // Fetch all entries for the resolved dates (the initial query may have missed some
-  // due to its limit, especially when dates have many duplicate entries)
+  // --- Batch 2: Fetch entries for resolved dates + time summaries + snapshots in parallel ---
   let entriesQuery = supabase
     .from("practice_entries")
     .select("id, date, type")
@@ -771,10 +787,15 @@ export async function getFeedPage(
     entriesQuery = entriesQuery.eq("type", typeFilter);
   }
 
-  const { data: dateEntries } = await entriesQuery;
-
-  // Batch-fetch all time summaries in one go (3 queries instead of 3*N)
-  const timeSummaryMap = await getTimeSummariesForDates(allDates);
+  const [{ data: dateEntries }, timeSummaryMap, { data: allSnapshots }] = await Promise.all([
+    entriesQuery,
+    getTimeSummariesForDates(allDates),
+    supabase
+      .from("section_status_snapshots")
+      .select("piece_id, section_id, old_status, new_status, snapshot_date")
+      .in("snapshot_date", allDates)
+      .order("created_at", { ascending: true }),
+  ]);
 
   // Create missing practice entries for dates with timer data but no entry
   const entriesByDate = new Map<string, typeof dateEntries>();
@@ -785,18 +806,23 @@ export async function getFeedPage(
     );
   }
 
+  const missingEntryPromises: Promise<void>[] = [];
   for (const date of allDates) {
     const timeSummary = timeSummaryMap.get(date) ?? [];
     const forDate = entriesByDate.get(date) ?? [];
     const hasPractice = forDate.some((e) => e.type === "practice");
     if (!hasPractice && timeSummary.length > 0 && typeFilter !== "lesson") {
-      const created = await ensureEntryForDate(date, timeSummary);
-      forDate.push({ ...created, type: "practice" });
-      entriesByDate.set(date, forDate);
+      missingEntryPromises.push(
+        ensureEntryForDate(date, timeSummary).then((created) => {
+          forDate.push({ ...created, type: "practice" });
+          entriesByDate.set(date, forDate);
+        })
+      );
     }
   }
+  await Promise.all(missingEntryPromises);
 
-  // Collect all entry IDs and batch-fetch sections in a single query
+  // Collect all entry IDs and batch-fetch sections + snapshot labels in parallel
   const allFeedEntries: { id: string; date: string; type: string }[] = [];
   for (const date of allDates) {
     for (const e of entriesByDate.get(date) ?? []) {
@@ -805,13 +831,32 @@ export async function getFeedPage(
   }
 
   const allEntryIds = allFeedEntries.map((e) => e.id);
-  const { data: allSections } = allEntryIds.length > 0
-    ? await supabase
-        .from("practice_entry_sections")
-        .select("id, practice_entry_id, piece_id, category, content, sort_order, pieces(name, composer)")
-        .in("practice_entry_id", allEntryIds)
-        .order("sort_order")
-    : { data: null };
+
+  // --- Batch 3: Fetch sections + snapshot section labels in parallel ---
+  const snapshotSectionIds = [...new Set((allSnapshots ?? []).map((s) => s.section_id))];
+
+  const [{ data: allSections }, sectionLabelMap] = await Promise.all([
+    allEntryIds.length > 0
+      ? supabase
+          .from("practice_entry_sections")
+          .select("id, practice_entry_id, piece_id, category, content, sort_order, pieces(name, composer)")
+          .in("practice_entry_id", allEntryIds)
+          .order("sort_order")
+      : Promise.resolve({ data: null }),
+    (async () => {
+      const map = new Map<string, string>();
+      if (snapshotSectionIds.length > 0) {
+        const { data: sectionLabels } = await supabase
+          .from("piece_sections")
+          .select("id, label")
+          .in("id", snapshotSectionIds);
+        for (const s of sectionLabels ?? []) {
+          map.set(s.id, s.label);
+        }
+      }
+      return map;
+    })(),
+  ]);
 
   // Index sections by entry ID
   const sectionsByEntryId = new Map<string, typeof allSections>();
@@ -842,27 +887,7 @@ export async function getFeedPage(
     };
   }
 
-  // Batch-fetch status changes for all dates
-  const { data: allSnapshots } = await supabase
-    .from("section_status_snapshots")
-    .select("piece_id, section_id, old_status, new_status, snapshot_date")
-    .in("snapshot_date", allDates)
-    .order("created_at", { ascending: true });
-
-  // Get section labels for snapshots
-  const snapshotSectionIds = [...new Set((allSnapshots ?? []).map((s) => s.section_id))];
-  const sectionLabelMap = new Map<string, string>();
-  if (snapshotSectionIds.length > 0) {
-    const { data: sectionLabels } = await supabase
-      .from("piece_sections")
-      .select("id, label")
-      .in("id", snapshotSectionIds);
-    for (const s of sectionLabels ?? []) {
-      sectionLabelMap.set(s.id, s.label);
-    }
-  }
-
-  // Group by date → piece_id, collapsing to net change per section
+  // Group snapshots by date → piece_id, collapsing to net change per section
   const statusChangesByDatePiece = new Map<string, Record<string, StatusChange[]>>();
   for (const snap of allSnapshots ?? []) {
     const date = snap.snapshot_date;
@@ -917,74 +942,107 @@ export async function getFeedPage(
   }
 
   // Compute "practice since last lesson" summaries for each lesson on this page
+  // and determine next cursor — both in parallel
   const allLessonsOnPage = items.flatMap((item) => item.lessons);
-  if (allLessonsOnPage.length > 0) {
-    // Fetch all lesson dates globally to find predecessors
-    const { data: allLessonDates } = await supabase
-      .from("practice_entries")
-      .select("id, date")
-      .eq("type", "lesson")
-      .order("date", { ascending: false });
+  const lastDate = allDates[allDates.length - 1];
 
-    const lessonDateList = (allLessonDates ?? []).map((l) => ({ id: l.id, date: l.date }));
+  const [, hasMore] = await Promise.all([
+    // Lesson time summaries
+    (async () => {
+      if (allLessonsOnPage.length === 0) return;
 
-    for (const item of items) {
-      if (item.lessons.length === 0) continue;
-      const summaries: Record<string, LessonTimeSummary> = {};
+      // Fetch all lesson dates globally to find predecessors
+      const { data: allLessonDates } = await supabase
+        .from("practice_entries")
+        .select("id, date")
+        .eq("type", "lesson")
+        .order("date", { ascending: false });
 
-      for (const lesson of item.lessons) {
-        // Find previous lesson date
+      const lessonDateList = (allLessonDates ?? []).map((l) => ({ id: l.id, date: l.date }));
+
+      // Collect all lesson date ranges first, then fetch summaries in parallel
+      const lessonRanges: { item: FeedDay; lessonId: string; startDate: string; endDate: string }[] = [];
+
+      // We may need the earliest session date if any lesson has no predecessor
+      let earliestSessionDate: string | null = null;
+      const needsEarliest = allLessonsOnPage.some((lesson) => {
         const idx = lessonDateList.findIndex((l) => l.id === lesson.id);
-        const prevLesson = idx >= 0 && idx + 1 < lessonDateList.length
-          ? lessonDateList[idx + 1]
-          : null;
+        return idx < 0 || idx + 1 >= lessonDateList.length;
+      });
 
-        // Range: day after previous lesson through this lesson's date
-        let startDate: string;
-        if (prevLesson) {
-          const d = new Date(prevLesson.date + "T12:00:00");
-          d.setDate(d.getDate() + 1);
-          startDate = d.toISOString().slice(0, 10);
-        } else {
-          // No previous lesson — use earliest practice session date
-          const { data: earliest } = await supabase
-            .from("practice_sessions")
-            .select("date")
-            .order("date", { ascending: true })
-            .limit(1);
-          startDate = earliest?.[0]?.date ?? lesson.date;
-        }
-
-        summaries[lesson.id] = await getTimeSummaryForDateRange(startDate, lesson.date);
+      if (needsEarliest) {
+        const { data: earliest } = await supabase
+          .from("practice_sessions")
+          .select("date")
+          .order("date", { ascending: true })
+          .limit(1);
+        earliestSessionDate = earliest?.[0]?.date ?? null;
       }
 
-      item.lessonTimeSummaries = summaries;
-    }
-  }
+      for (const item of items) {
+        if (item.lessons.length === 0) continue;
+        for (const lesson of item.lessons) {
+          const idx = lessonDateList.findIndex((l) => l.id === lesson.id);
+          const prevLesson = idx >= 0 && idx + 1 < lessonDateList.length
+            ? lessonDateList[idx + 1]
+            : null;
 
-  // Determine next cursor
-  const lastDate = allDates[allDates.length - 1];
-  // Check if there are more entries before the last date
-  let moreEntriesQuery = supabase
-    .from("practice_entries")
-    .select("id", { count: "exact", head: true })
-    .lt("date", lastDate);
+          let startDate: string;
+          if (prevLesson) {
+            const d = new Date(prevLesson.date + "T12:00:00");
+            d.setDate(d.getDate() + 1);
+            startDate = d.toISOString().slice(0, 10);
+          } else {
+            startDate = earliestSessionDate ?? lesson.date;
+          }
 
-  if (typeFilter) {
-    moreEntriesQuery = moreEntriesQuery.eq("type", typeFilter);
-  }
+          lessonRanges.push({ item, lessonId: lesson.id, startDate, endDate: lesson.date });
+        }
+      }
 
-  const { count: moreCount } = await moreEntriesQuery;
+      // Fetch all lesson summaries in parallel
+      const summaryResults = await Promise.all(
+        lessonRanges.map((r) =>
+          getTimeSummaryForDateRange(r.startDate, r.endDate).then((summary) => ({
+            ...r,
+            summary,
+          }))
+        )
+      );
 
-  let hasMore = (moreCount ?? 0) > 0;
+      // Assign summaries back to items
+      for (const { item, lessonId, summary } of summaryResults) {
+        if (!item.lessonTimeSummaries) item.lessonTimeSummaries = {};
+        item.lessonTimeSummaries[lessonId] = summary;
+      }
+    })(),
 
-  if (!hasMore && typeFilter !== "lesson") {
-    const { count: moreSessionCount } = await supabase
-      .from("practice_sessions")
-      .select("id", { count: "exact", head: true })
-      .lt("date", lastDate);
-    hasMore = (moreSessionCount ?? 0) > 0;
-  }
+    // Cursor check
+    (async () => {
+      let moreEntriesQuery = supabase
+        .from("practice_entries")
+        .select("id", { count: "exact", head: true })
+        .lt("date", lastDate);
+
+      if (typeFilter) {
+        moreEntriesQuery = moreEntriesQuery.eq("type", typeFilter);
+      }
+
+      const { count: moreCount } = await moreEntriesQuery;
+
+      if ((moreCount ?? 0) > 0) return true;
+
+      if (typeFilter !== "lesson") {
+        const { count: moreSessionCount } = await supabase
+          .from("practice_sessions")
+          .select("id", { count: "exact", head: true })
+          .lt("date", lastDate);
+        if ((moreSessionCount ?? 0) > 0) return true;
+      }
+
+      return false;
+    })(),
+  ]);
 
   return {
     items,
