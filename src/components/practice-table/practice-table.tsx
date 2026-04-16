@@ -11,9 +11,11 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
+  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { PlusIcon } from "lucide-react";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVerticalIcon, PlusIcon } from "lucide-react";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { TaskRow } from "@/components/practice-table/task-row";
 import { reorderTasks } from "@/app/(app)/timer/task-actions";
@@ -80,6 +82,85 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function SortablePieceGroup({
+  group,
+  onAddTask,
+}: {
+  group: PieceGroup;
+  onAddTask: () => void;
+}) {
+  const sortableId = `piece:${group.pieceId ?? "__general__"}`;
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: sortableId });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn("group/piece mb-3", isDragging && "opacity-50")}
+    >
+      {/* Piece header with drag handle in gutter */}
+      <div className="flex items-stretch mb-1.5">
+        <div
+          className={cn(
+            "-ml-8 w-8 shrink-0 flex items-center justify-center gap-0 transition-opacity",
+            "opacity-0 group-hover/piece:opacity-100"
+          )}
+        >
+          <button
+            type="button"
+            onClick={onAddTask}
+            className="flex items-center justify-center w-4 h-6 rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors"
+            title="Add task"
+          >
+            <PlusIcon className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            className="flex items-center justify-center w-4 h-6 cursor-grab rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors"
+            title="Drag to reorder"
+          >
+            <GripVerticalIcon className="size-3.5" />
+          </button>
+        </div>
+        <div className="flex items-center gap-1.5 px-1">
+          <h3 className="text-sm font-medium text-muted-foreground">
+            {group.pieceName}
+          </h3>
+        </div>
+      </div>
+
+      {/* Task rows */}
+      <SortableContext
+        items={group.tasks.map((t) => t.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        {group.tasks.map((task, index) => (
+          <TaskRow
+            key={task.id}
+            task={task}
+            isFirst={index === 0}
+            onAddBelow={onAddTask}
+          />
+        ))}
+      </SortableContext>
+    </div>
+  );
+}
+
 function DayGroup({
   day,
   focusedPieceId,
@@ -111,16 +192,43 @@ function DayGroup({
       const { active, over } = event;
       if (!over || active.id === over.id) return;
 
-      // Find which piece group this belongs to
+      const activeId = String(active.id);
+      const overId = String(over.id);
+
+      // Piece-level reorder: active id is prefixed with "piece:"
+      if (activeId.startsWith("piece:")) {
+        const pieceKey = (g: PieceGroup) =>
+          `piece:${g.pieceId ?? "__general__"}`;
+        const oldIndex = pieceGroups.findIndex((g) => pieceKey(g) === activeId);
+        const newIndex = overId.startsWith("piece:")
+          ? pieceGroups.findIndex((g) => pieceKey(g) === overId)
+          : pieceGroups.findIndex((g) =>
+              g.tasks.some((t) => t.id === overId)
+            );
+        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+        const reorderedGroups = [...pieceGroups];
+        const [moved] = reorderedGroups.splice(oldIndex, 1);
+        reorderedGroups.splice(newIndex, 0, moved);
+        const reorderedTaskIds = reorderedGroups.flatMap((g) =>
+          g.tasks.map((t) => t.id)
+        );
+        if (reorderedTaskIds.length === 0) return;
+        onReorder(day.date, reorderedTaskIds);
+        void reorderTasks(reorderedTaskIds);
+        return;
+      }
+
+      // Task-level reorder within a piece group
       for (const group of pieceGroups) {
         const taskIds = group.tasks.map((t) => t.id);
-        const oldIndex = taskIds.indexOf(active.id as string);
-        const newIndex = taskIds.indexOf(over.id as string);
+        const oldIndex = taskIds.indexOf(activeId);
+        const newIndex = taskIds.indexOf(overId);
 
         if (oldIndex !== -1 && newIndex !== -1) {
           const reordered = [...taskIds];
           reordered.splice(oldIndex, 1);
-          reordered.splice(newIndex, 0, active.id as string);
+          reordered.splice(newIndex, 0, activeId);
           onReorder(day.date, reordered);
           void reorderTasks(reordered);
           break;
@@ -242,31 +350,20 @@ function DayGroup({
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
       >
-        {pieceGroups.map((group) => (
-          <div key={group.pieceId ?? "__general__"} className="mb-3">
-            {/* Piece header */}
-            <div className="flex items-center gap-1.5 mb-1.5 px-1">
-              <h3 className="text-sm font-medium text-muted-foreground">
-                {group.pieceName}
-              </h3>
-            </div>
-
-            {/* Task rows */}
-            <SortableContext
-              items={group.tasks.map((t) => t.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              {group.tasks.map((task, index) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  isFirst={index === 0}
-                  onAddBelow={() => handleAddTask(group.pieceId)}
-                />
-              ))}
-            </SortableContext>
-          </div>
-        ))}
+        <SortableContext
+          items={pieceGroups.map(
+            (g) => `piece:${g.pieceId ?? "__general__"}`
+          )}
+          strategy={verticalListSortingStrategy}
+        >
+          {pieceGroups.map((group) => (
+            <SortablePieceGroup
+              key={group.pieceId ?? "__general__"}
+              group={group}
+              onAddTask={() => handleAddTask(group.pieceId)}
+            />
+          ))}
+        </SortableContext>
       </DndContext>
 
       {/* Empty state for today when the current view has no tasks */}
