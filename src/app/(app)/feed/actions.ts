@@ -4,19 +4,20 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { localDate, getUserTimezone } from "@/lib/date-utils";
 import type {
-  TimerCategory,
   TimeSummaryEntry,
   LessonTimeSummary,
   FeedDay,
   FeedPracticeEntry,
   EntrySectionCategory,
   PracticeEntryType,
+  PieceKind,
   SectionStatus,
   StatusChange,
 } from "@/lib/types";
+import { TECHNIQUE_PIECE_ID, SIGHT_READING_PIECE_ID } from "@/lib/types";
 
 /**
- * Ensure fixed-category sections exist for a practice entry (technique, sight_reading, general).
+ * Ensure fixed sections exist for a practice entry (technique, sight_reading, general).
  * Piece sections are created on-demand when the user adds them or when timer data exists.
  */
 async function ensureSections(entryId: string): Promise<void> {
@@ -44,21 +45,27 @@ async function ensureSections(entryId: string): Promise<void> {
 
   let sortOrder = (existingSections ?? []).length;
 
-  // Fixed category sections only — piece sections are added on-demand
-  const fixedCategories: EntrySectionCategory[] = [
-    "technique",
-    "sight_reading",
-    "general",
-  ];
-  for (const cat of fixedCategories) {
-    if (!existingKeys.has(`${cat}:`)) {
+  // System piece sections (technique, sight reading)
+  const systemPieces = [TECHNIQUE_PIECE_ID, SIGHT_READING_PIECE_ID];
+  for (const pieceId of systemPieces) {
+    if (!existingKeys.has(`piece:${pieceId}`)) {
       toInsert.push({
         practice_entry_id: entryId,
-        piece_id: null,
-        category: cat,
+        piece_id: pieceId,
+        category: "piece",
         sort_order: sortOrder++,
       });
     }
+  }
+
+  // General section
+  if (!existingKeys.has("general:")) {
+    toInsert.push({
+      practice_entry_id: entryId,
+      piece_id: null,
+      category: "general",
+      sort_order: sortOrder++,
+    });
   }
 
   if (toInsert.length > 0) {
@@ -214,17 +221,13 @@ export async function ensureTodayEntry(): Promise<string> {
   const existing = entries?.[0] ?? null;
 
   if (existing) {
-    // Short-circuit: if the entry already has the 3 fixed-category sections, skip setup.
+    // Short-circuit: if the entry already has the 3 fixed sections, skip setup.
     // Piece sections are created on-demand and don't need to block page load.
-    const existingCategories = new Set(
-      (existing.practice_entry_sections ?? []).map(
-        (s: { category: string }) => s.category
-      )
-    );
-    const hasAllFixed =
-      existingCategories.has("technique") &&
-      existingCategories.has("sight_reading") &&
-      existingCategories.has("general");
+    const sections = existing.practice_entry_sections ?? [];
+    const hasGeneral = sections.some((s: { category: string }) => s.category === "general");
+    // Technique and sight reading are now piece sections with system piece IDs
+    // We check via piece_id in ensureSections, but for the short-circuit we just check count
+    const hasAllFixed = hasGeneral && sections.length >= 3;
     if (hasAllFixed) return existing.id;
   }
 
@@ -305,46 +308,23 @@ async function ensureEntryForDate(
 
   if (!entry) throw new Error(`Failed to create practice entry for ${date}`);
 
-  // Create sections based on what was practiced
+  // Create sections based on what was practiced — all entries now have piece_id
   const sections: {
     practice_entry_id: string;
-    piece_id: string | null;
+    piece_id: string;
     category: EntrySectionCategory;
     sort_order: number;
   }[] = [];
 
   let sortOrder = 0;
 
-  // Add technique section if practiced
-  if (timeSummary.some((t) => t.category === "technique")) {
-    sections.push({
-      practice_entry_id: entry.id,
-      piece_id: null,
-      category: "technique",
-      sort_order: sortOrder++,
-    });
-  }
-
-  // Add sight reading section if practiced
-  if (timeSummary.some((t) => t.category === "sight_reading")) {
-    sections.push({
-      practice_entry_id: entry.id,
-      piece_id: null,
-      category: "sight_reading",
-      sort_order: sortOrder++,
-    });
-  }
-
-  // Add piece sections for each piece practiced
   for (const t of timeSummary) {
-    if (t.category === "piece" && t.piece_id) {
-      sections.push({
-        practice_entry_id: entry.id,
-        piece_id: t.piece_id,
-        category: "piece",
-        sort_order: sortOrder++,
-      });
-    }
+    sections.push({
+      practice_entry_id: entry.id,
+      piece_id: t.piece_id,
+      category: "piece",
+      sort_order: sortOrder++,
+    });
   }
 
   if (sections.length > 0) {
@@ -389,9 +369,9 @@ async function getTimeSummariesForDates(
     sessionIds.length > 0
       ? supabase
           .from("timer_entries")
-          .select("session_id, piece_id, category, started_at, ended_at")
+          .select("session_id, piece_id, started_at, ended_at")
           .in("session_id", sessionIds)
-      : Promise.resolve({ data: [] as { session_id: string; piece_id: string | null; category: string; started_at: string; ended_at: string | null }[] }),
+      : Promise.resolve({ data: [] as { session_id: string; piece_id: string; started_at: string; ended_at: string | null }[] }),
     supabase
       .from("practice_tasks")
       .select("piece_id, date, timer_seconds, timer_remaining_seconds")
@@ -406,23 +386,23 @@ async function getTimeSummariesForDates(
     return result;
   }
 
-  // 3. Collect all piece IDs from both sources and fetch names
+  // 3. Collect all piece IDs from both sources and fetch names + kind
   const allPieceIds = new Set<string>();
-  for (const e of entries) { if (e.piece_id) allPieceIds.add(e.piece_id); }
-  for (const t of tasks) { if (t.piece_id) allPieceIds.add(t.piece_id); }
+  for (const e of entries) { allPieceIds.add(e.piece_id); }
+  for (const t of tasks) { allPieceIds.add(t.piece_id); }
 
-  let pieceNames: Record<string, string> = {};
+  let pieceInfo: Record<string, { name: string; kind: PieceKind }> = {};
   if (allPieceIds.size > 0) {
     const { data: pieces } = await supabase
       .from("pieces")
-      .select("id, name")
+      .select("id, name, kind")
       .in("id", [...allPieceIds]);
     if (pieces) {
-      pieceNames = Object.fromEntries(pieces.map((p) => [p.id, p.name]));
+      pieceInfo = Object.fromEntries(pieces.map((p) => [p.id, { name: p.name, kind: p.kind as PieceKind }]));
     }
   }
 
-  // Group by date, then by piece/category
+  // Group by date, then by piece_id
   const now = Date.now();
   const dateGroups = new Map<string, Map<string, TimeSummaryEntry>>();
 
@@ -433,7 +413,7 @@ async function getTimeSummariesForDates(
     if (!dateGroups.has(date)) dateGroups.set(date, new Map());
     const groups = dateGroups.get(date)!;
 
-    const key = entry.piece_id ?? entry.category;
+    const key = entry.piece_id;
     const start = new Date(entry.started_at).getTime();
     const end = entry.ended_at ? new Date(entry.ended_at).getTime() : now;
     const seconds = Math.floor((end - start) / 1000);
@@ -442,12 +422,11 @@ async function getTimeSummariesForDates(
     if (existing) {
       existing.total_seconds += seconds;
     } else {
+      const info = pieceInfo[entry.piece_id];
       groups.set(key, {
-        category: entry.category as TimerCategory,
         piece_id: entry.piece_id,
-        piece_name: entry.piece_id
-          ? (pieceNames[entry.piece_id] ?? null)
-          : null,
+        piece_name: info?.name ?? "Unknown",
+        kind: info?.kind ?? "piece",
         total_seconds: seconds,
       });
     }
@@ -466,10 +445,11 @@ async function getTimeSummariesForDates(
     if (existing) {
       existing.total_seconds += elapsed;
     } else {
+      const info = pieceInfo[task.piece_id];
       groups.set(key, {
-        category: "piece" as TimerCategory,
         piece_id: task.piece_id,
-        piece_name: pieceNames[task.piece_id] ?? null,
+        piece_name: info?.name ?? "Unknown",
+        kind: info?.kind ?? "piece",
         total_seconds: elapsed,
       });
     }
@@ -537,23 +517,23 @@ async function getTimeSummaryForDateRange(
   const { data: entries } = sessionIds.length > 0
     ? await supabase
         .from("timer_entries")
-        .select("session_id, piece_id, category, started_at, ended_at")
+        .select("session_id, piece_id, started_at, ended_at")
         .in("session_id", sessionIds)
-    : { data: [] as { session_id: string; piece_id: string | null; category: string; started_at: string; ended_at: string | null }[] };
+    : { data: [] as { session_id: string; piece_id: string; started_at: string; ended_at: string | null }[] };
 
   // Collect all piece IDs from both sources
   const allPieceIds = new Set<string>();
-  for (const e of entries ?? []) { if (e.piece_id) allPieceIds.add(e.piece_id); }
-  for (const t of tasks) { if (t.piece_id) allPieceIds.add(t.piece_id); }
+  for (const e of entries ?? []) { allPieceIds.add(e.piece_id); }
+  for (const t of tasks) { allPieceIds.add(t.piece_id); }
 
-  let pieceNames: Record<string, string> = {};
+  let pieceInfo: Record<string, { name: string; kind: PieceKind }> = {};
   if (allPieceIds.size > 0) {
     const { data: pieces } = await supabase
       .from("pieces")
-      .select("id, name")
+      .select("id, name, kind")
       .in("id", [...allPieceIds]);
     if (pieces) {
-      pieceNames = Object.fromEntries(pieces.map((p) => [p.id, p.name]));
+      pieceInfo = Object.fromEntries(pieces.map((p) => [p.id, { name: p.name, kind: p.kind as PieceKind }]));
     }
   }
 
@@ -561,7 +541,7 @@ async function getTimeSummaryForDateRange(
   const groups = new Map<string, TimeSummaryEntry>();
 
   for (const entry of entries ?? []) {
-    const key = entry.piece_id ?? entry.category;
+    const key = entry.piece_id;
     const start = new Date(entry.started_at).getTime();
     const end = entry.ended_at ? new Date(entry.ended_at).getTime() : now;
     const seconds = Math.floor((end - start) / 1000);
@@ -570,12 +550,11 @@ async function getTimeSummaryForDateRange(
     if (existing) {
       existing.total_seconds += seconds;
     } else {
+      const info = pieceInfo[entry.piece_id];
       groups.set(key, {
-        category: entry.category as TimerCategory,
         piece_id: entry.piece_id,
-        piece_name: entry.piece_id
-          ? (pieceNames[entry.piece_id] ?? null)
-          : null,
+        piece_name: info?.name ?? "Unknown",
+        kind: info?.kind ?? "piece",
         total_seconds: seconds,
       });
     }
@@ -591,10 +570,11 @@ async function getTimeSummaryForDateRange(
     if (existing) {
       existing.total_seconds += elapsed;
     } else {
+      const info = pieceInfo[task.piece_id];
       groups.set(key, {
-        category: "piece" as TimerCategory,
         piece_id: task.piece_id,
-        piece_name: pieceNames[task.piece_id] ?? null,
+        piece_name: info?.name ?? "Unknown",
+        kind: info?.kind ?? "piece",
         total_seconds: elapsed,
       });
     }
@@ -1079,22 +1059,15 @@ export async function deleteSection(sectionId: string): Promise<void> {
       .select("id")
       .eq("date", entry.date);
 
-    if (sessions && sessions.length > 0) {
+    if (sessions && sessions.length > 0 && section.piece_id) {
       const sessionIds = sessions.map((s) => s.id);
 
       // Delete matching timer entries
-      let timerQuery = supabase
+      await supabase
         .from("timer_entries")
         .delete()
-        .in("session_id", sessionIds);
-
-      if (section.category === "piece" && section.piece_id) {
-        timerQuery = timerQuery.eq("piece_id", section.piece_id);
-      } else if (section.category !== "piece") {
-        timerQuery = timerQuery.eq("category", section.category).is("piece_id", null);
-      }
-
-      await timerQuery;
+        .in("session_id", sessionIds)
+        .eq("piece_id", section.piece_id);
     }
   }
 
@@ -1108,12 +1081,11 @@ export async function deleteSection(sectionId: string): Promise<void> {
 }
 
 /**
- * Fetch individual timer entries for a given section (date + category + piece).
+ * Fetch individual timer entries for a given section (date + piece).
  */
 export async function getTimerEntriesForSection(
   date: string,
-  category: TimerCategory,
-  pieceId: string | null
+  pieceId: string
 ): Promise<{ id: string; started_at: string; ended_at: string | null; duration_seconds: number }[]> {
   const supabase = await createClient();
 
@@ -1124,19 +1096,13 @@ export async function getTimerEntriesForSection(
 
   if (!sessions || sessions.length === 0) return [];
 
-  let query = supabase
+  const { data: entries } = await supabase
     .from("timer_entries")
     .select("id, started_at, ended_at")
     .in("session_id", sessions.map((s) => s.id))
-    .eq("category", category);
+    .eq("piece_id", pieceId)
+    .order("started_at");
 
-  if (category === "piece" && pieceId) {
-    query = query.eq("piece_id", pieceId);
-  } else if (category !== "piece") {
-    query = query.is("piece_id", null);
-  }
-
-  const { data: entries } = await query.order("started_at");
   if (!entries) return [];
 
   const now = Date.now();
@@ -1186,8 +1152,7 @@ export async function updateTimerEntryDuration(
  */
 export async function addManualTimerEntry(
   date: string,
-  category: TimerCategory,
-  pieceId: string | null,
+  pieceId: string,
   durationSeconds: number
 ): Promise<{ id: string }> {
   const supabase = await createClient();
@@ -1210,7 +1175,6 @@ export async function addManualTimerEntry(
     .insert({
       session_id: session.id,
       piece_id: pieceId,
-      category,
       started_at: now,
       ended_at: endedAt,
     })
@@ -1220,32 +1184,30 @@ export async function addManualTimerEntry(
   if (!entry) throw new Error("Failed to create timer entry");
 
   // Ensure a piece section exists so it renders in the feed
-  if (category === "piece" && pieceId) {
-    const entryId = await ensureTodayEntry();
-    const { data: existing } = await supabase
+  const entryId = await ensureTodayEntry();
+  const { data: existing } = await supabase
+    .from("practice_entry_sections")
+    .select("id")
+    .eq("practice_entry_id", entryId)
+    .eq("category", "piece")
+    .eq("piece_id", pieceId)
+    .limit(1);
+
+  if (!existing || existing.length === 0) {
+    const { data: maxRow } = await supabase
       .from("practice_entry_sections")
-      .select("id")
+      .select("sort_order")
       .eq("practice_entry_id", entryId)
-      .eq("category", "piece")
-      .eq("piece_id", pieceId)
-      .limit(1);
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .single();
 
-    if (!existing || existing.length === 0) {
-      const { data: maxRow } = await supabase
-        .from("practice_entry_sections")
-        .select("sort_order")
-        .eq("practice_entry_id", entryId)
-        .order("sort_order", { ascending: false })
-        .limit(1)
-        .single();
-
-      await supabase.from("practice_entry_sections").insert({
-        practice_entry_id: entryId,
-        piece_id: pieceId,
-        category: "piece",
-        sort_order: (maxRow?.sort_order ?? 0) + 1,
-      });
-    }
+    await supabase.from("practice_entry_sections").insert({
+      practice_entry_id: entryId,
+      piece_id: pieceId,
+      category: "piece",
+      sort_order: (maxRow?.sort_order ?? 0) + 1,
+    });
   }
 
   revalidatePath("/");

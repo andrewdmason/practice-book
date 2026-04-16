@@ -17,16 +17,17 @@ import { useZenMode } from "@/components/layout/zen-mode-context";
 import { MetronomeControl } from "@/components/metronome/metronome-control";
 import { useMetronome } from "@/components/metronome/metronome-context";
 import { formatElapsed } from "@/lib/timer-utils";
-import type { TimerTarget } from "@/lib/types";
+import type { TimerTarget, PieceKind } from "@/lib/types";
+import { TECHNIQUE_PIECE_ID, SIGHT_READING_PIECE_ID } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function targetKey(target: TimerTarget): string {
-  return target.category === "piece" ? target.pieceId : target.category;
+  return target.pieceId;
 }
 
 function targetsMatch(a: TimerTarget | null, b: TimerTarget): boolean {
   if (!a) return false;
-  return targetKey(a) === targetKey(b);
+  return a.pieceId === b.pieceId;
 }
 
 export function FooterBar() {
@@ -61,22 +62,16 @@ export function FooterBar() {
       return;
     }
     // Check if focusParam matches the current focusedTarget already
-    if (focusedTarget && targetKey(focusedTarget) === focusParam) return;
+    if (focusedTarget && focusedTarget.pieceId === focusParam) return;
 
-    if (focusParam === "technique") {
-      setFocusedTarget({ category: "technique" });
-    } else if (focusParam === "sight_reading") {
-      setFocusedTarget({ category: "sight_reading" });
-    } else {
-      const piece = activePieces.find((p) => p.id === focusParam);
-      if (piece) {
-        setFocusedTarget({
-          category: "piece",
-          pieceId: piece.id,
-          pieceName: piece.name,
-          composer: piece.composer,
-        });
-      }
+    const piece = activePieces.find((p) => p.id === focusParam);
+    if (piece) {
+      setFocusedTarget({
+        pieceId: piece.id,
+        pieceName: piece.name,
+        composer: piece.composer,
+        kind: (piece.kind ?? "piece") as PieceKind,
+      });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusParam, pathname]);
@@ -138,19 +133,12 @@ export function FooterBar() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [focusedTarget, isRunning, clearFocus]);
 
-  const pieceTargets: TimerTarget[] = activePieces.map((p) => ({
-    category: "piece",
+  const allTargets: TimerTarget[] = activePieces.map((p) => ({
     pieceId: p.id,
     pieceName: p.name,
     composer: p.composer,
+    kind: (p.kind ?? "piece") as PieceKind,
   }));
-
-  const specialTargets: TimerTarget[] = [
-    { category: "technique" },
-    { category: "sight_reading" },
-  ];
-
-  const allTargets = [...specialTargets, ...pieceTargets];
 
   const handleStopClick = async () => {
     const target = currentTarget;
@@ -172,21 +160,14 @@ export function FooterBar() {
 
   const handleSelectChange = (value: string | null) => {
     if (!value) return;
-    let target: TimerTarget;
-    if (value === "technique") {
-      target = { category: "technique" };
-    } else if (value === "sight_reading") {
-      target = { category: "sight_reading" };
-    } else {
-      const piece = activePieces.find((p) => p.id === value);
-      if (!piece) return;
-      target = {
-        category: "piece",
-        pieceId: piece.id,
-        pieceName: piece.name,
-        composer: piece.composer,
-      };
-    }
+    const piece = activePieces.find((p) => p.id === value);
+    if (!piece) return;
+    const target: TimerTarget = {
+      pieceId: piece.id,
+      pieceName: piece.name,
+      composer: piece.composer,
+      kind: (piece.kind ?? "piece") as PieceKind,
+    };
     handlePillClick(target);
   };
 
@@ -230,12 +211,7 @@ export function FooterBar() {
           {allTargets.map((target) => {
             const key = targetKey(target);
             const isActive = targetsMatch(activeTarget, target);
-            const label =
-              target.category === "piece"
-                ? target.pieceName
-                : target.category === "technique"
-                  ? "Technique"
-                  : "Sight Reading";
+            const isSystem = target.kind !== "piece";
 
             return (
               <button
@@ -259,12 +235,12 @@ export function FooterBar() {
                     : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                 )}
               >
-                {target.category === "piece" ? (
-                  <MusicIcon className="size-3" />
-                ) : (
+                {isSystem ? (
                   <BookOpenIcon className="size-3" />
+                ) : (
+                  <MusicIcon className="size-3" />
                 )}
-                {label}
+                {target.pieceName}
               </button>
             );
           })}
@@ -293,13 +269,11 @@ export function FooterBar() {
               <SelectValue placeholder="Select piece..." />
             </SelectTrigger>
             <SelectContent>
-              {pieceTargets.map((target) => (
-                <SelectItem key={target.category === "piece" ? target.pieceId : ""} value={target.category === "piece" ? target.pieceId : ""}>
-                  {target.category === "piece" ? target.pieceName : ""}
+              {allTargets.map((target) => (
+                <SelectItem key={target.pieceId} value={target.pieceId}>
+                  {target.pieceName}
                 </SelectItem>
               ))}
-              <SelectItem value="technique">Technique</SelectItem>
-              <SelectItem value="sight_reading">Sight Reading</SelectItem>
             </SelectContent>
           </Select>
           <MetronomeControl />

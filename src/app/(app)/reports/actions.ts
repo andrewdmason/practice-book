@@ -6,7 +6,7 @@ import type {
   WeeklyPracticeData,
   PieceBreakdownData,
   StreakData,
-  TimerCategory,
+  PieceKind,
   PieceWeeklyCumulativeData,
   PieceOption,
   CompletedAssignmentMarker,
@@ -93,7 +93,7 @@ export async function getPieceBreakdownData(
   let query = supabase
     .from("timer_entries")
     .select(
-      "piece_id, category, started_at, ended_at, practice_sessions!inner(date)"
+      "piece_id, started_at, ended_at, practice_sessions!inner(date)"
     )
     .not("ended_at", "is", null);
 
@@ -108,57 +108,42 @@ export async function getPieceBreakdownData(
 
   if (!entries || entries.length === 0) return [];
 
-  // Group by piece_id or category
-  const groups = new Map<string, { seconds: number; pieceId: string | null; category: TimerCategory }>();
+  // Group by piece_id
+  const groups = new Map<string, number>();
 
   for (const entry of entries) {
-    const key = entry.piece_id ?? entry.category;
+    const key = entry.piece_id;
     const start = new Date(entry.started_at).getTime();
     const end = new Date(entry.ended_at!).getTime();
     const seconds = Math.floor((end - start) / 1000);
 
-    const existing = groups.get(key);
-    if (existing) {
-      existing.seconds += seconds;
-    } else {
-      groups.set(key, {
-        seconds,
-        pieceId: entry.piece_id,
-        category: entry.category as TimerCategory,
-      });
-    }
+    groups.set(key, (groups.get(key) ?? 0) + seconds);
   }
 
-  // Resolve piece names
-  const pieceIds = [...groups.values()]
-    .filter((g) => g.pieceId)
-    .map((g) => g.pieceId!);
+  // Resolve piece names and kinds
+  const pieceIds = [...groups.keys()];
 
-  let pieceNames: Record<string, string> = {};
+  let pieceInfo: Record<string, { name: string; kind: PieceKind }> = {};
   if (pieceIds.length > 0) {
     const { data: pieces } = await supabase
       .from("pieces")
-      .select("id, name")
+      .select("id, name, kind")
       .in("id", pieceIds);
     if (pieces) {
-      pieceNames = Object.fromEntries(pieces.map((p) => [p.id, p.name]));
+      pieceInfo = Object.fromEntries(pieces.map((p) => [p.id, { name: p.name, kind: p.kind as PieceKind }]));
     }
   }
 
-  const categoryLabels: Record<string, string> = {
-    technique: "Technique",
-    sight_reading: "Sight Reading",
-  };
-
   return [...groups.entries()]
-    .map(([key, g]) => ({
-      pieceId: g.pieceId,
-      label: g.pieceId
-        ? (pieceNames[g.pieceId] ?? "Unknown Piece")
-        : (categoryLabels[key] ?? key),
-      totalSeconds: g.seconds,
-      category: g.category,
-    }))
+    .map(([pieceId, seconds]) => {
+      const info = pieceInfo[pieceId];
+      return {
+        pieceId,
+        label: info?.name ?? "Unknown Piece",
+        totalSeconds: seconds,
+        kind: info?.kind ?? ("piece" as PieceKind),
+      };
+    })
     .sort((a, b) => b.totalSeconds - a.totalSeconds);
 }
 

@@ -16,7 +16,8 @@ import { saveEditorContent } from "@/app/(app)/editor/actions";
 import { deleteSection } from "@/app/(app)/feed/actions";
 import { formatMinutes } from "@/lib/timer-utils";
 import { SessionEntriesDialog } from "@/components/feed/session-entries-dialog";
-import type { PracticeEntrySection, StatusChange, TimerCategory } from "@/lib/types";
+import type { PracticeEntrySection, StatusChange } from "@/lib/types";
+import { TECHNIQUE_PIECE_ID, SIGHT_READING_PIECE_ID } from "@/lib/types";
 import { SECTION_STATUS_COLORS, SECTION_STATUS_PERCENTAGE } from "@/lib/types";
 import {
   DropdownMenu,
@@ -28,16 +29,9 @@ import { Button } from "@/components/ui/button";
 import { InlineTaskList, AddTaskButton } from "@/components/timer/task-panel";
 import { cn } from "@/lib/utils";
 
-const CATEGORY_LABELS: Record<string, string> = {
-  technique: "Technique",
-  sight_reading: "Sight Reading",
-  general: "General Notes",
-};
-
-const CATEGORY_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  piece: MusicIcon,
-  technique: PencilIcon,
-  sight_reading: EyeIcon,
+const SYSTEM_PIECE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  [TECHNIQUE_PIECE_ID]: PencilIcon,
+  [SIGHT_READING_PIECE_ID]: EyeIcon,
 };
 
 
@@ -87,20 +81,20 @@ export function FeedSection({ section, date, isToday, allowTasks, isActive, time
 
   const displayTime = timeSeconds;
 
-  const label =
-    section.category === "piece"
-      ? section.piece_name ?? "Unknown Piece"
-      : CATEGORY_LABELS[section.category] ?? section.category;
+  const label = section.category === "general"
+    ? "General Notes"
+    : section.piece_name ?? "Unknown Piece";
 
-  const subtitle =
-    section.category === "piece" ? section.composer : null;
+  const subtitle = section.category === "piece" ? section.composer : null;
 
-  const SectionIcon = CATEGORY_ICONS[section.category] ?? null;
+  const isSystemPiece = section.piece_id === TECHNIQUE_PIECE_ID || section.piece_id === SIGHT_READING_PIECE_ID;
+  const SectionIcon = section.piece_id
+    ? (SYSTEM_PIECE_ICONS[section.piece_id] ?? MusicIcon)
+    : null;
 
   const handleSave = useCallback(
     async (content: JSONContent) => {
-      await saveEditorContent("practice_entry", section.id, content);
-      window.dispatchEvent(new CustomEvent("assignments-changed"));
+      await saveEditorContent(section.id, content);
     },
     [section.id]
   );
@@ -118,14 +112,13 @@ export function FeedSection({ section, date, isToday, allowTasks, isActive, time
 
   if (isDeleted) return null;
 
-  // Hide auto-created fixed-category sections (technique, sight_reading) when they
-  // have no time, no content, and aren't actively being timed. Piece sections are
-  // always shown since they're only created intentionally (by the user or timer).
+  // Hide auto-created system piece sections (technique, sight_reading) when they
+  // have no time, no content, and aren't actively being timed.
   // Lesson sections are always shown — they're manually added via the + button.
   if (
     editorContext !== "lesson" &&
     (isToday || showTasks) &&
-    (section.category === "technique" || section.category === "sight_reading") &&
+    isSystemPiece &&
     !sectionHasContent &&
     (displayTime == null || displayTime <= 0) &&
     !isActive
@@ -260,12 +253,11 @@ export function FeedSection({ section, date, isToday, allowTasks, isActive, time
           onTotalRemainingChange={handleTaskTimeChange}
         />
       )}
-      {section.category !== "general" && (
+      {section.piece_id && (
         <SessionEntriesDialog
           open={isTimeDialogOpen}
           onOpenChange={setIsTimeDialogOpen}
           date={date}
-          category={section.category as TimerCategory}
           pieceId={section.piece_id}
           label={label}
         />
@@ -274,7 +266,7 @@ export function FeedSection({ section, date, isToday, allowTasks, isActive, time
         <div className="pl-3 pr-3 pb-1 pt-0.5 prose-editor-compact">
           <RichTextEditor
             context={editorContext}
-            sourceType="practice_entry"
+
             sourceId={section.id}
             initialContent={section.content as JSONContent | null}
             onSave={handleSave}

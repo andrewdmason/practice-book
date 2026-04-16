@@ -1,6 +1,11 @@
 // Enums matching database
 export type PieceStatus = "active" | "upcoming" | "archived";
-export type TimerCategory = "piece" | "technique" | "sight_reading";
+export type PieceKind = "piece" | "technique" | "sight_reading";
+
+// System piece constants
+export const TECHNIQUE_PIECE_ID = "00000000-0000-0000-0000-000000000001";
+export const SIGHT_READING_PIECE_ID = "00000000-0000-0000-0000-000000000002";
+export const SYSTEM_PIECE_IDS = [TECHNIQUE_PIECE_ID, SIGHT_READING_PIECE_ID] as const;
 
 // Database row types
 export type Collection = {
@@ -18,6 +23,7 @@ export type Piece = {
   name: string;
   composer: string | null;
   status: PieceStatus;
+  kind: PieceKind;
   sort_order: number;
   notes: string | null;
   target_tempo: number | null;
@@ -37,22 +43,25 @@ export type PracticeSession = {
 export type TimerEntry = {
   id: string;
   session_id: string;
-  piece_id: string | null;
-  category: TimerCategory;
+  piece_id: string;
   section_id: string | null;
   started_at: string;
   ended_at: string | null;
 };
 
-export type TimerTarget =
-  | { category: "piece"; pieceId: string; pieceName: string; composer: string | null; sectionId?: string; sectionLabel?: string }
-  | { category: "technique" }
-  | { category: "sight_reading" };
+export type TimerTarget = {
+  pieceId: string;
+  pieceName: string;
+  composer: string | null;
+  kind: PieceKind;
+  sectionId?: string;
+  sectionLabel?: string;
+};
 
 export type TimeSummaryEntry = {
-  category: TimerCategory;
-  piece_id: string | null;
-  piece_name: string | null;
+  piece_id: string;
+  piece_name: string;
+  kind: PieceKind;
   total_seconds: number;
 };
 
@@ -82,19 +91,15 @@ export const PIECE_STATUS_LABELS: Record<PieceStatus, string> = {
 export const PIECE_STATUSES: PieceStatus[] = ["active", "upcoming", "archived"];
 
 // Editor types
-export type SourceType = "practice_entry";
 export type PracticeEntryType = "practice" | "lesson";
-export type EntrySectionCategory = "piece" | "technique" | "sight_reading" | "general";
+export type EntrySectionCategory = "piece" | "general";
 
 export type Assignment = {
   id: string;
-  source_type: SourceType;
-  source_id: string;
-  piece_id: string | null;
+  piece_id: string;
   text: string;
-  progress: number;
+  completed: boolean;
   completed_at: string | null;
-  note: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -129,10 +134,10 @@ export type WeeklyPracticeData = {
 };
 
 export type PieceBreakdownData = {
-  pieceId: string | null;
+  pieceId: string;
   label: string;
   totalSeconds: number;
-  category: TimerCategory;
+  kind: PieceKind;
 };
 
 export type StreakData = {

@@ -2,7 +2,6 @@
 
 import { ClockIcon, MusicIcon, BookOpenIcon } from "lucide-react";
 import { formatMinutes } from "@/lib/timer-utils";
-import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
 import type { TimeSummaryEntry } from "@/lib/types";
 
 export function TimeSummary({
@@ -32,10 +31,9 @@ export function TimeSummary({
 
       <div className="space-y-1">
         {entries.map((entry) => {
-          const entryLabel =
-            entry.piece_name ?? TIMER_CATEGORY_LABELS[entry.category] ?? entry.category;
-          const Icon = entry.category === "piece" ? MusicIcon : BookOpenIcon;
-          const focusKey = entry.piece_id ?? entry.category;
+          const entryLabel = entry.piece_name;
+          const Icon = entry.kind === "piece" ? MusicIcon : BookOpenIcon;
+          const focusKey = entry.piece_id;
           const clickable = !!onItemClick;
 
           return (

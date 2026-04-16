@@ -276,6 +276,7 @@ export function RepertoireTable({
       composer: null,
       collection_id: null,
       status: temp.status,
+      kind: "piece",
       sort_order: 9999,
       notes: null,
       target_tempo: null,

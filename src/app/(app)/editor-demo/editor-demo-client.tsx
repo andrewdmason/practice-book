@@ -20,14 +20,14 @@ export function EditorDemoClient({
 }: EditorDemoClientProps) {
   const handleSaveSection = useCallback(
     async (content: JSONContent) => {
-      await saveEditorContent("practice_entry", sectionId, content);
+      await saveEditorContent(sectionId, content);
     },
     [sectionId]
   );
 
   const handleSaveLesson = useCallback(
     async (content: JSONContent) => {
-      await saveEditorContent("practice_entry", lessonId, content);
+      await saveEditorContent(lessonId, content);
     },
     [lessonId]
   );
@@ -52,7 +52,7 @@ export function EditorDemoClient({
           <div className="rounded-lg border bg-card p-4">
             <RichTextEditor
               context="practice_entry"
-              sourceType="practice_entry"
+
               sourceId={sectionId}
               initialContent={sectionContent}
               onSave={handleSaveSection}
@@ -71,7 +71,7 @@ export function EditorDemoClient({
           <div className="rounded-lg border bg-card p-4">
             <RichTextEditor
               context="lesson"
-              sourceType="practice_entry"
+
               sourceId={lessonId}
               initialContent={lessonContent}
               onSave={handleSaveLesson}

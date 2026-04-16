@@ -26,7 +26,7 @@ const typeFilterOptions = [
 
 function focusKeyFromTarget(target: TimerTarget | null): string | null {
   if (!target) return null;
-  return target.category === "piece" ? target.pieceId : target.category;
+  return target.pieceId;
 }
 
 export function PracticeFeed({ initialData, tomorrowData, pieces, typeFilter }: PracticeFeedProps) {

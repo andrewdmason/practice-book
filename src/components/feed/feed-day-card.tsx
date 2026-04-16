@@ -53,16 +53,8 @@ function getSectionTime(
   section: { category: string; piece_id: string | null },
   timeSummary: TimeSummaryEntry[]
 ): number {
-  if (section.category === "piece" && section.piece_id) {
+  if (section.piece_id) {
     const entry = timeSummary.find((t) => t.piece_id === section.piece_id);
-    return entry?.total_seconds ?? 0;
-  }
-  if (section.category === "technique") {
-    const entry = timeSummary.find((t) => t.category === "technique");
-    return entry?.total_seconds ?? 0;
-  }
-  if (section.category === "sight_reading") {
-    const entry = timeSummary.find((t) => t.category === "sight_reading");
     return entry?.total_seconds ?? 0;
   }
   return 0;
@@ -84,8 +76,6 @@ function filterAndSortSections(
     ? allSections.filter((section) => {
         // For lessons, always keep general sections (lesson notes)
         if (entry.type === "lesson" && section.category === "general") return true;
-        if (focusKey === "technique") return section.category === "technique";
-        if (focusKey === "sight_reading") return section.category === "sight_reading";
         return section.piece_id === focusKey;
       })
     : allSections;
@@ -106,8 +96,10 @@ function filterAndSortSections(
   });
 
   return [...unique].sort((a, b) => {
-    const order: Record<string, number> = { general: -1, technique: 0, sight_reading: 1, piece: 2 };
-    return (order[a.category] ?? 2) - (order[b.category] ?? 2);
+    // General first, then piece sections by sort_order
+    if (a.category === "general" && b.category !== "general") return -1;
+    if (a.category !== "general" && b.category === "general") return 1;
+    return a.sort_order - b.sort_order;
   });
 }
 
@@ -116,10 +108,7 @@ function sectionMatchesTarget(
   target: TimerTarget | null
 ): boolean {
   if (!target) return false;
-  if (target.category === "piece") {
-    return section.category === "piece" && section.piece_id === target.pieceId;
-  }
-  return section.category === target.category;
+  return section.piece_id === target.pieceId;
 }
 
 function hasContent(content: unknown): boolean {
@@ -146,7 +135,7 @@ function DayNotes({
 
   const handleSave = useCallback(
     async (content: JSONContent) => {
-      await saveEditorContent("practice_entry", section.id, content);
+      await saveEditorContent(section.id, content);
     },
     [section.id]
   );
@@ -156,7 +145,6 @@ function DayNotes({
       <div className="px-4 prose-editor-compact text-sm">
         <RichTextEditor
           context="practice_entry"
-          sourceType="practice_entry"
           sourceId={section.id}
           initialContent={section.content as JSONContent | null}
           onSave={handleSave}

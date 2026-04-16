@@ -14,6 +14,7 @@ import type {
   PieceSectionWithChildren,
   PieceSection,
   SectionStatus,
+  TimerTarget,
 } from "@/lib/types";
 import {
   SECTION_STATUS_LABELS,
@@ -126,32 +127,32 @@ function SectionRow({
   const effectiveTempo = section.target_tempo ?? pieceTargetTempo;
   const tempo = practiceTempo(section.status, effectiveTempo);
 
-  const sectionTarget = {
-    category: "piece" as const,
+  const sectionTarget: TimerTarget = {
     pieceId,
     pieceName,
     composer,
+    kind: "piece",
     sectionId: section.id,
     sectionLabel: section.label,
   };
 
   const isActiveSection =
-    (isRunning && currentTarget?.category === "piece" && currentTarget.sectionId === section.id) ||
-    (!isRunning && focusedTarget?.category === "piece" && focusedTarget.sectionId === section.id);
+    (isRunning && currentTarget?.kind === "piece" && currentTarget.sectionId === section.id) ||
+    (!isRunning && focusedTarget?.kind === "piece" && focusedTarget.sectionId === section.id);
 
   const handleLabelClick = () => {
     // Delay single-click to avoid firing before double-click
     if (clickTimeout.current) clearTimeout(clickTimeout.current);
     clickTimeout.current = setTimeout(() => {
       if (isRunning) {
-        if (currentTarget?.category === "piece" && currentTarget.sectionId === section.id) {
-          switchTarget({ category: "piece", pieceId, pieceName, composer });
+        if (currentTarget?.kind === "piece" && currentTarget.sectionId === section.id) {
+          switchTarget({ pieceId, pieceName, composer, kind: "piece" });
         } else {
           switchTarget(sectionTarget);
         }
       } else {
-        if (focusedTarget?.category === "piece" && focusedTarget.sectionId === section.id) {
-          setFocusedTarget({ category: "piece", pieceId, pieceName, composer });
+        if (focusedTarget?.kind === "piece" && focusedTarget.sectionId === section.id) {
+          setFocusedTarget({ pieceId, pieceName, composer, kind: "piece" });
         } else {
           setFocusedTarget(sectionTarget);
         }

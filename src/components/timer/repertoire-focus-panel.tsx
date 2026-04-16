@@ -4,45 +4,42 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowRightIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
   ExternalLinkIcon,
-  MusicIcon,
-  PencilIcon,
+  PlusIcon,
+  Trash2Icon,
   VideoIcon,
   XIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ProgressCircle } from "@/components/ui/progress-circle";
 import { useTimerState } from "@/components/timer/timer-context";
 import { TimeSummary } from "@/components/timer/time-summary";
 import { getTodaySummary } from "@/app/(app)/timer/actions";
 import {
-  getCategoryFocusData,
   getAllOpenAssignments,
-  getPieceFocusData,
-  updateAssignmentProgress,
-  updateAssignmentNote,
+  getAssignmentsForPiece,
+  toggleAssignmentCompleted,
+  createAssignment,
+  deleteAssignment,
 } from "@/app/(app)/focus-panel/actions";
 import type { AssignmentWithPiece } from "@/app/(app)/focus-panel/actions";
 import { getSections } from "@/app/(app)/repertoire/section-actions";
 import { addTaskOptimistic } from "@/components/timer/task-panel";
-import { getNextBounceProgress } from "@/lib/progress-bounce";
 import { createClient } from "@/lib/supabase/client";
 import { useMetronome } from "@/components/metronome/metronome-context";
 import { SectionSidebar } from "@/components/timer/section-sidebar";
 import { YouTubePlayer } from "@/components/video/youtube-player";
 import { useVideo } from "@/components/video/video-context";
-import { TIMER_CATEGORY_LABELS } from "@/lib/timer-utils";
 import type {
   Piece,
+  PieceKind,
   PieceSectionWithChildren,
-  SectionStatus,
   Assignment,
   TimerTarget,
   TimeSummaryEntry,
 } from "@/lib/types";
+import { TECHNIQUE_PIECE_ID, SIGHT_READING_PIECE_ID } from "@/lib/types";
 import { localDate } from "@/lib/date-utils";
 
 // Client-side caches so re-selecting a piece shows data instantly
@@ -56,29 +53,20 @@ export function RepertoireFocusPanel() {
   // Determine active target: timer target when running, focused target from pills otherwise
   const activeTarget = isRunning ? currentTarget : focusedTarget;
 
-  const activePieceId =
-    activeTarget?.category === "piece" ? activeTarget.pieceId : null;
+  const activePieceId = activeTarget?.pieceId ?? null;
 
   const handleFocusItem = useCallback(
     (focusKey: string) => {
       if (isRunning) return;
-      let target: TimerTarget;
-      if (focusKey === "technique") {
-        target = { category: "technique" };
-      } else if (focusKey === "sight_reading") {
-        target = { category: "sight_reading" };
-      } else {
-        const piece = activePieces.find((p) => p.id === focusKey);
-        if (!piece) return;
-        target = {
-          category: "piece",
-          pieceId: piece.id,
-          pieceName: piece.name,
-          composer: piece.composer,
-        };
-      }
+      const piece = activePieces.find((p) => p.id === focusKey);
+      if (!piece) return;
+      const target: TimerTarget = {
+        pieceId: piece.id,
+        pieceName: piece.name,
+        composer: piece.composer,
+        kind: piece.kind as PieceKind,
+      };
       setFocusedTarget(target);
-      // Use history.replaceState to update URL without triggering server re-render
       window.history.replaceState(null, "", `/?focus=${focusKey}`);
     },
     [isRunning, activePieces, setFocusedTarget]
@@ -90,19 +78,13 @@ export function RepertoireFocusPanel() {
     const activePiece = activePieces.find((p) => p.id === activePieceId);
     content = <PieceDetail pieceId={activePieceId} knownPiece={activePiece ?? null} />;
   } else {
-    const activeCategory = activeTarget?.category !== "piece" ? activeTarget?.category : null;
-
-    if (activeCategory === "technique" || activeCategory === "sight_reading") {
-      content = <CategoryDetail category={activeCategory} />;
-    } else {
-      content = (
-        <PracticeOverview
-          isRunning={isRunning}
-          onFocusItem={handleFocusItem}
-          activePieces={activePieces}
-        />
-      );
-    }
+    content = (
+      <PracticeOverview
+        isRunning={isRunning}
+        onFocusItem={handleFocusItem}
+        activePieces={activePieces}
+      />
+    );
   }
 
   return (
@@ -114,8 +96,12 @@ export function RepertoireFocusPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// Piece Detail
+// Piece Detail (handles both regular pieces and system pieces like technique)
 // ---------------------------------------------------------------------------
+
+function isSystemPiece(pieceId: string): boolean {
+  return pieceId === TECHNIQUE_PIECE_ID || pieceId === SIGHT_READING_PIECE_ID;
+}
 
 function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Piece | null }) {
   const cached = assignmentsCache.get(pieceId);
@@ -123,7 +109,8 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
     name: string;
     composer: string | null;
     target_tempo: number | null;
-  } | null>(knownPiece ? { name: knownPiece.name, composer: knownPiece.composer, target_tempo: knownPiece.target_tempo } : null);
+    kind: PieceKind;
+  } | null>(knownPiece ? { name: knownPiece.name, composer: knownPiece.composer, target_tempo: knownPiece.target_tempo, kind: (knownPiece.kind ?? "piece") as PieceKind } : null);
   const [openAssignments, setOpenAssignments] = useState<Assignment[]>(cached?.openAssignments ?? []);
   const [completedAssignments, setCompletedAssignments] = useState<Assignment[]>(cached?.completedAssignments ?? []);
   const [sections, setSections] = useState<PieceSectionWithChildren[]>(
@@ -131,16 +118,17 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
   );
   const [showCompleted, setShowCompleted] = useState(false);
   const [loaded, setLoaded] = useState(!!cached);
+  const [newAssignmentText, setNewAssignmentText] = useState("");
 
   // Update piece immediately when knownPiece changes (no network needed)
   useEffect(() => {
     if (knownPiece) {
-      setPiece({ name: knownPiece.name, composer: knownPiece.composer, target_tempo: knownPiece.target_tempo });
+      setPiece({ name: knownPiece.name, composer: knownPiece.composer, target_tempo: knownPiece.target_tempo, kind: (knownPiece.kind ?? "piece") as PieceKind });
     }
   }, [knownPiece]);
 
   const refreshAssignments = useCallback(() => {
-    getPieceFocusData(pieceId).then((data) => {
+    getAssignmentsForPiece(pieceId).then((data) => {
       assignmentsCache.set(pieceId, data);
       setOpenAssignments(data.openAssignments);
       setCompletedAssignments(data.completedAssignments);
@@ -153,7 +141,6 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
       sectionsCache.set(pieceId, data);
       setSections(data);
     }).catch(() => {
-      // Retry once on failure
       getSections(pieceId).then((data) => {
         sectionsCache.set(pieceId, data);
         setSections(data);
@@ -162,7 +149,6 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
   }, [pieceId]);
 
   useEffect(() => {
-    // Load from cache immediately when pieceId changes
     const cachedSections = sectionsCache.get(pieceId);
     if (cachedSections) setSections(cachedSections);
     const cachedAssignments = assignmentsCache.get(pieceId);
@@ -174,23 +160,24 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
       setLoaded(false);
     }
 
-    // Only fetch piece metadata from DB if not provided via props (e.g. deep link)
     if (!knownPiece) {
       const supabase = createClient();
       supabase
         .from("pieces")
-        .select("name, composer, target_tempo")
+        .select("name, composer, target_tempo, kind")
         .eq("id", pieceId)
         .single()
         .then(({ data }) => {
           if (data) {
-            setPiece({ name: data.name, composer: data.composer, target_tempo: data.target_tempo });
+            setPiece({ name: data.name, composer: data.composer, target_tempo: data.target_tempo, kind: data.kind as PieceKind });
           }
         });
     }
 
     refreshAssignments();
-    refreshSections();
+    if (!isSystemPiece(pieceId)) {
+      refreshSections();
+    }
   }, [pieceId, refreshAssignments, refreshSections, knownPiece]);
 
   useEffect(() => {
@@ -205,7 +192,6 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
     return () => window.removeEventListener("sections-changed", handler);
   }, [refreshSections]);
 
-  // Optimistically apply status changes from other components (e.g. scrubber bar)
   useEffect(() => {
     const handler = (e: Event) => {
       const { sectionId, status } = (e as CustomEvent).detail;
@@ -227,37 +213,43 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
     return () => window.removeEventListener("section-status-changed", handler);
   }, []);
 
-  const handleProgressChange = (assignmentId: string, progress: number) => {
-    if (progress === 4) {
-      // Move from open to completed
-      const assignment = openAssignments.find((t) => t.id === assignmentId);
-      if (assignment) {
-        const updated = { ...assignment, progress, completed_at: new Date().toISOString() };
-        setOpenAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
-        setCompletedAssignments((prev) => [updated, ...prev]);
-      }
+  const handleToggle = async (assignment: Assignment) => {
+    const newCompleted = !assignment.completed;
+    if (newCompleted) {
+      const updated = { ...assignment, completed: true, completed_at: new Date().toISOString() };
+      setOpenAssignments((prev) => prev.filter((t) => t.id !== assignment.id));
+      setCompletedAssignments((prev) => [updated, ...prev]);
     } else {
-      // Could be un-completing from completed list or updating open assignment progress
-      const completedAssignment = completedAssignments.find((t) => t.id === assignmentId);
-      if (completedAssignment) {
-        const updated = { ...completedAssignment, progress, completed_at: null };
-        setCompletedAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
-        setOpenAssignments((prev) => [updated, ...prev]);
-      } else {
-        setOpenAssignments((prev) =>
-          prev.map((t) => t.id === assignmentId ? { ...t, progress } : t)
-        );
-      }
+      const updated = { ...assignment, completed: false, completed_at: null };
+      setCompletedAssignments((prev) => prev.filter((t) => t.id !== assignment.id));
+      setOpenAssignments((prev) => [updated, ...prev]);
     }
+    await toggleAssignmentCompleted(assignment.id, newCompleted);
   };
 
-  const handleNoteChange = (assignmentId: string, note: string | null) => {
-    setOpenAssignments((prev) =>
-      prev.map((t) => t.id === assignmentId ? { ...t, note } : t)
-    );
-    setCompletedAssignments((prev) =>
-      prev.map((t) => t.id === assignmentId ? { ...t, note } : t)
-    );
+  const handleCreate = async () => {
+    const text = newAssignmentText.trim();
+    if (!text) return;
+    setNewAssignmentText("");
+    const tempId = crypto.randomUUID();
+    const temp: Assignment = {
+      id: tempId,
+      piece_id: pieceId,
+      text,
+      completed: false,
+      completed_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setOpenAssignments((prev) => [temp, ...prev]);
+    await createAssignment(pieceId, text);
+    refreshAssignments();
+  };
+
+  const handleDelete = async (assignmentId: string) => {
+    setOpenAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
+    setCompletedAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
+    await deleteAssignment(assignmentId);
   };
 
   if (!piece) {
@@ -270,6 +262,7 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
     );
   }
 
+  const systemPiece = isSystemPiece(pieceId);
   const hasAssignments = loaded && (openAssignments.length > 0 || completedAssignments.length > 0);
 
   return (
@@ -287,21 +280,23 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
               )}
             </CardTitle>
             <div className="flex items-center gap-1 shrink-0">
-              <PieceVideoToggle />
-              <Link
-                href={`/repertoire/${pieceId}`}
-                className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                title="Open repertoire page"
-              >
-                <ExternalLinkIcon className="size-3.5" />
-              </Link>
+              {!systemPiece && <PieceVideoToggle />}
+              {!systemPiece && (
+                <Link
+                  href={`/repertoire/${pieceId}`}
+                  className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  title="Open repertoire page"
+                >
+                  <ExternalLinkIcon className="size-3.5" />
+                </Link>
+              )}
             </div>
           </div>
         </CardHeader>
       </Card>
 
-      {/* Sections card */}
-      {sections.length > 0 && (
+      {/* Sections card (only for regular pieces) */}
+      {!systemPiece && sections.length > 0 && (
         <Card>
           <CardContent className="pt-4">
             <SectionSidebar
@@ -338,59 +333,82 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
       )}
 
       {/* Assignments card */}
-      {hasAssignments && (
-        <Card>
-          <CardContent className="pt-4 space-y-4">
-            {/* Open Assignments */}
-            {openAssignments.length > 0 && (
-              <FocusSection
-                icon={<CheckCircle2Icon className="size-3.5" />}
-                title="Assignments"
-                count={openAssignments.length}
-              >
-                {openAssignments.map((assignment) => (
-                  <AssignmentRow
-                    key={assignment.id}
-                    assignment={assignment}
-                    onProgressChange={(progress) => handleProgressChange(assignment.id, progress)}
-                    onNoteChange={(note) => handleNoteChange(assignment.id, note)}
-                  />
-                ))}
-              </FocusSection>
-            )}
+      <Card>
+        <CardContent className="pt-4 space-y-4">
+          {/* New assignment input */}
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleCreate(); }}
+            className="flex items-center gap-2"
+          >
+            <input
+              type="text"
+              value={newAssignmentText}
+              onChange={(e) => setNewAssignmentText(e.target.value)}
+              placeholder="Add assignment..."
+              className="flex-1 rounded border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            <button
+              type="submit"
+              disabled={!newAssignmentText.trim()}
+              className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
+            >
+              <PlusIcon className="size-4" />
+            </button>
+          </form>
 
-            {/* Completed Assignments (collapsible) */}
-            {completedAssignments.length > 0 && (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => setShowCompleted(!showCompleted)}
-                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors"
-                >
-                  <ChevronDownIcon className={`size-3.5 transition-transform ${showCompleted ? "" : "-rotate-90"}`} />
-                  Completed
-                  <span className="text-[10px] font-normal bg-muted text-muted-foreground rounded-full px-1.5 py-0.5">
-                    {completedAssignments.length}
-                  </span>
-                </button>
-                {showCompleted && (
-                  <div className="space-y-1.5">
-                    {completedAssignments.map((assignment) => (
-                      <AssignmentRow
-                        key={assignment.id}
-                        assignment={assignment}
-                        onProgressChange={(progress) => handleProgressChange(assignment.id, progress)}
-                        onNoteChange={(note) => handleNoteChange(assignment.id, note)}
-                        showCompletedDate
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+          {/* Open Assignments */}
+          {openAssignments.length > 0 && (
+            <FocusSection
+              icon={<CheckCircle2Icon className="size-3.5" />}
+              title="Assignments"
+              count={openAssignments.length}
+            >
+              {openAssignments.map((assignment) => (
+                <AssignmentRow
+                  key={assignment.id}
+                  assignment={assignment}
+                  onToggle={() => handleToggle(assignment)}
+                  onDelete={() => handleDelete(assignment.id)}
+                />
+              ))}
+            </FocusSection>
+          )}
+
+          {/* Completed Assignments (collapsible) */}
+          {completedAssignments.length > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowCompleted(!showCompleted)}
+                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors"
+              >
+                <ChevronDownIcon className={`size-3.5 transition-transform ${showCompleted ? "" : "-rotate-90"}`} />
+                Completed
+                <span className="text-[10px] font-normal bg-muted text-muted-foreground rounded-full px-1.5 py-0.5">
+                  {completedAssignments.length}
+                </span>
+              </button>
+              {showCompleted && (
+                <div className="space-y-1.5">
+                  {completedAssignments.map((assignment) => (
+                    <AssignmentRow
+                      key={assignment.id}
+                      assignment={assignment}
+                      onToggle={() => handleToggle(assignment)}
+                      onDelete={() => handleDelete(assignment.id)}
+                      showCompletedDate
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {loaded && openAssignments.length === 0 && completedAssignments.length === 0 && (
+            <p className="text-sm text-muted-foreground">No assignments yet.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -425,7 +443,6 @@ function FloatingVideoPanel() {
   >(null);
 
   const handleDragStart = useCallback((e: React.MouseEvent) => {
-    // Only drag from title bar, not buttons
     if ((e.target as HTMLElement).closest("button")) return;
     e.preventDefault();
     const pos = position ?? { x: 16, y: window.innerHeight - 16 - Math.round(320 * 9 / 16) - 24 };
@@ -484,8 +501,6 @@ function FloatingVideoPanel() {
   if (!videoId || !showVideo) return null;
 
   const height = Math.round(width * 9 / 16);
-  const titleBarHeight = 24;
-  const panelHeight = height + titleBarHeight;
 
   return (
     <div
@@ -511,7 +526,6 @@ function FloatingVideoPanel() {
       <div style={{ height }} className="relative bg-black">
         <YouTubePlayer bare />
       </div>
-      {/* Resize handle on right edge */}
       <div
         onMouseDown={handleResizeStart}
         className="absolute top-0 right-0 w-1.5 h-full cursor-ew-resize hover:bg-primary/20 transition-colors"
@@ -586,134 +600,47 @@ function AssignmentTextWithMetronome({ text }: { text: string }) {
 
 function AssignmentRow({
   assignment,
-  onProgressChange,
-  onNoteChange,
+  onToggle,
+  onDelete,
   showCompletedDate,
 }: {
   assignment: Assignment;
-  onProgressChange: (progress: number) => void;
-  onNoteChange: (note: string | null) => void;
+  onToggle: () => void;
+  onDelete: () => void;
   showCompletedDate?: boolean;
 }) {
-  const [editingNote, setEditingNote] = useState(false);
-  const [noteValue, setNoteValue] = useState(assignment.note ?? "");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const handleClick = (e: React.MouseEvent) => {
-    let newProgress: number;
-    if (e.altKey) {
-      newProgress = (assignment.progress + 1) % 5;
-    } else {
-      newProgress = assignment.progress === 4 ? 0 : 4;
-    }
-    onProgressChange(newProgress);
-    updateAssignmentProgress(assignment.id, newProgress);
-  };
-
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const newProgress = getNextBounceProgress(assignment.id, assignment.progress);
-    onProgressChange(newProgress);
-    updateAssignmentProgress(assignment.id, newProgress);
-  };
-
-  const handleNoteSave = () => {
-    setEditingNote(false);
-    const trimmed = noteValue.trim() || null;
-    if (trimmed !== assignment.note) {
-      onNoteChange(trimmed);
-      // Notify editor AssignmentItemViews of the note change
-      window.dispatchEvent(
-        new CustomEvent("assignment-note-updated", {
-          detail: { taskId: assignment.id, note: trimmed },
-        })
-      );
-      updateAssignmentNote(assignment.id, trimmed);
-    }
-  };
-
-  useEffect(() => {
-    if (editingNote && textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, [editingNote]);
-
   return (
     <div className="group">
       <div className="flex items-start gap-2 text-sm">
         <button
           type="button"
-          onClick={handleClick}
-          onContextMenu={handleContextMenu}
-          className="mt-0.5 shrink-0 text-primary"
+          onClick={onToggle}
+          className="mt-0.5 shrink-0"
         >
-          <ProgressCircle progress={assignment.progress} size={16} />
+          <div className={`size-4 rounded-full border-2 flex items-center justify-center transition-colors ${
+            assignment.completed
+              ? "bg-primary border-primary text-primary-foreground"
+              : "border-muted-foreground/40 hover:border-primary"
+          }`}>
+            {assignment.completed && (
+              <svg className="size-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M2 6l3 3 5-5" />
+              </svg>
+            )}
+          </div>
         </button>
-        <span className={`flex-1 ${assignment.progress === 4 ? "line-through text-muted-foreground" : ""}`}>
+        <span className={`flex-1 ${assignment.completed ? "line-through text-muted-foreground" : ""}`}>
           <AssignmentTextWithMetronome text={assignment.text} />
         </span>
         <button
           type="button"
-          onClick={() => {
-            const el = document.querySelector(`[data-task-id="${assignment.id}"]`);
-            if (el) {
-              document.querySelectorAll(".assignment-highlight").forEach((prev) => prev.classList.remove("assignment-highlight"));
-              el.scrollIntoView({ behavior: "smooth", block: "center" });
-              void (el as HTMLElement).offsetWidth;
-              el.classList.add("assignment-highlight");
-              el.addEventListener("animationend", () => el.classList.remove("assignment-highlight"), { once: true });
-            }
-          }}
-          className="shrink-0 mt-1 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
-          title="Jump to assignment in feed"
+          onClick={onDelete}
+          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0 mt-0.5"
+          title="Delete assignment"
         >
-          <ArrowRightIcon className="size-3" />
+          <Trash2Icon className="size-3" />
         </button>
-        {!editingNote && !assignment.note && (
-          <button
-            type="button"
-            onClick={() => setEditingNote(true)}
-            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity shrink-0 mt-0.5"
-          >
-            <PencilIcon className="size-3" />
-          </button>
-        )}
       </div>
-      {/* Existing note display */}
-      {assignment.note && !editingNote && (
-        <p
-          className="ml-6 mt-0.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
-          onClick={() => {
-            setNoteValue(assignment.note ?? "");
-            setEditingNote(true);
-          }}
-        >
-          {assignment.note}
-        </p>
-      )}
-      {/* Note editing */}
-      {editingNote && (
-        <textarea
-          ref={textareaRef}
-          value={noteValue}
-          onChange={(e) => setNoteValue(e.target.value)}
-          onBlur={handleNoteSave}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleNoteSave();
-            }
-            if (e.key === "Escape") {
-              setEditingNote(false);
-              setNoteValue(assignment.note ?? "");
-            }
-          }}
-          className="ml-6 mt-1 w-[calc(100%-1.5rem)] rounded border bg-background px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-          rows={2}
-          placeholder="Add a note..."
-        />
-      )}
-      {/* Completed date */}
       {showCompletedDate && assignment.completed_at && (
         <p className="ml-6 mt-0.5 text-[10px] text-muted-foreground/70">
           Completed {formatDate(assignment.completed_at.slice(0, 10))}
@@ -724,77 +651,7 @@ function AssignmentRow({
 }
 
 // ---------------------------------------------------------------------------
-// Category Detail (sidebar when a category like technique/sight_reading is focused)
-// ---------------------------------------------------------------------------
-
-function CategoryDetail({
-  category,
-}: {
-  category: "technique" | "sight_reading";
-}) {
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [loaded, setLoaded] = useState(false);
-
-  const label = TIMER_CATEGORY_LABELS[category] ?? category;
-
-  const refreshAssignments = useCallback(() => {
-    getCategoryFocusData(category).then((data) => {
-      setAssignments(data.assignments);
-      setLoaded(true);
-    });
-  }, [category]);
-
-  useEffect(() => {
-    setLoaded(false);
-    refreshAssignments();
-  }, [refreshAssignments]);
-
-  useEffect(() => {
-    const handler = () => refreshAssignments();
-    window.addEventListener("assignments-changed", handler);
-    return () => window.removeEventListener("assignments-changed", handler);
-  }, [refreshAssignments]);
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <MusicIcon className="size-4" />
-          {label}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {loaded && assignments.length > 0 && (
-          <FocusSection
-            icon={<CheckCircle2Icon className="size-3.5" />}
-            title="Assignments"
-            count={assignments.filter((t) => t.progress < 4).length}
-          >
-            {assignments.map((assignment) => (
-              <AssignmentRow key={assignment.id} assignment={assignment} onProgressChange={(progress) => {
-                setAssignments((prev) =>
-                  prev.map((t) => t.id === assignment.id ? { ...t, progress } : t)
-                );
-              }} onNoteChange={(note) => {
-                setAssignments((prev) =>
-                  prev.map((t) => t.id === assignment.id ? { ...t, note } : t)
-                );
-              }} />
-            ))}
-          </FocusSection>
-        )}
-        {loaded && assignments.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            No assignments yet.
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Practice Overview (sidebar when no piece/category is focused)
+// Practice Overview (sidebar when no piece is focused)
 // ---------------------------------------------------------------------------
 
 function PracticeOverview({
@@ -830,20 +687,14 @@ function PracticeOverview({
     return () => window.removeEventListener("assignments-changed", handler);
   }, [refreshData]);
 
-  const handleProgressChange = (assignmentId: string, progress: number) => {
-    if (progress === 4) {
-      setAllAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
-    } else {
-      setAllAssignments((prev) =>
-        prev.map((t) => (t.id === assignmentId ? { ...t, progress } : t))
-      );
-    }
+  const handleToggle = async (assignmentId: string) => {
+    setAllAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
+    await toggleAssignmentCompleted(assignmentId, true);
   };
 
-  const handleNoteChange = (assignmentId: string, note: string | null) => {
-    setAllAssignments((prev) =>
-      prev.map((t) => (t.id === assignmentId ? { ...t, note } : t))
-    );
+  const handleDelete = async (assignmentId: string) => {
+    setAllAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
+    await deleteAssignment(assignmentId);
   };
 
   if (!loaded) {
@@ -856,55 +707,32 @@ function PracticeOverview({
     );
   }
 
-  // Group assignments by piece or category
-  type AssignmentGroup = { key: string; label: string; subtitle: string | null; focusKey: string; assignments: AssignmentWithPiece[] };
-  const pieceGroups = new Map<string, AssignmentGroup>();
-  const categoryGroups = new Map<string, AssignmentGroup>();
+  // Group assignments by piece (all assignments now have piece_id)
+  type AssignmentGroup = { key: string; label: string; subtitle: string | null; kind: PieceKind; assignments: AssignmentWithPiece[] };
+  const groups = new Map<string, AssignmentGroup>();
   for (const assignment of allAssignments) {
-    if (assignment.piece_id && assignment.piece_name) {
-      const group = pieceGroups.get(assignment.piece_id);
-      if (group) {
-        group.assignments.push(assignment);
-      } else {
-        pieceGroups.set(assignment.piece_id, {
-          key: assignment.piece_id,
-          label: assignment.piece_name,
-          subtitle: assignment.piece_composer,
-          focusKey: assignment.piece_id,
-          assignments: [assignment],
-        });
-      }
+    const group = groups.get(assignment.piece_id);
+    if (group) {
+      group.assignments.push(assignment);
     } else {
-      const cat = assignment.section_category ?? "other";
-      const group = categoryGroups.get(cat);
-      if (group) {
-        group.assignments.push(assignment);
-      } else {
-        const label = TIMER_CATEGORY_LABELS[cat as keyof typeof TIMER_CATEGORY_LABELS] ?? cat;
-        categoryGroups.set(cat, {
-          key: cat,
-          label,
-          subtitle: null,
-          focusKey: cat,
-          assignments: [assignment],
-        });
-      }
+      groups.set(assignment.piece_id, {
+        key: assignment.piece_id,
+        label: assignment.piece_name,
+        subtitle: assignment.piece_composer,
+        kind: assignment.kind,
+        assignments: [assignment],
+      });
     }
   }
 
-  // Sort piece groups by activePieces order (sort_order, then name)
+  // Sort: system pieces (technique, sight_reading) first, then regular pieces by activePieces order
+  const kindOrder: Record<string, number> = { technique: 0, sight_reading: 1, piece: 2 };
   const pieceOrder = new Map(activePieces.map((p, i) => [p.id, i]));
-  const sortedPieceGroups = [...pieceGroups.values()].sort(
-    (a, b) => (pieceOrder.get(a.key) ?? Infinity) - (pieceOrder.get(b.key) ?? Infinity)
-  );
-
-  // Categories before pieces: technique, then sight_reading, then any others
-  const categoryOrder: Record<string, number> = { technique: 0, sight_reading: 1 };
-  const sortedCategoryGroups = [...categoryGroups.values()].sort(
-    (a, b) => (categoryOrder[a.key] ?? 99) - (categoryOrder[b.key] ?? 99)
-  );
-
-  const allGroups = [...sortedCategoryGroups, ...sortedPieceGroups];
+  const sortedGroups = [...groups.values()].sort((a, b) => {
+    const kindDiff = (kindOrder[a.kind] ?? 2) - (kindOrder[b.kind] ?? 2);
+    if (kindDiff !== 0) return kindDiff;
+    return (pieceOrder.get(a.key) ?? Infinity) - (pieceOrder.get(b.key) ?? Infinity);
+  });
 
   return (
     <div className="space-y-4">
@@ -920,11 +748,11 @@ function PracticeOverview({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {allGroups.map((group) => (
+            {sortedGroups.map((group) => (
               <div key={group.key}>
                 <button
                   type="button"
-                  onClick={() => onFocusItem(group.focusKey)}
+                  onClick={() => onFocusItem(group.key)}
                   className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-1.5 flex items-center gap-1"
                 >
                   {group.label}
@@ -937,8 +765,8 @@ function PracticeOverview({
                     <AssignmentRow
                       key={assignment.id}
                       assignment={assignment}
-                      onProgressChange={(progress) => handleProgressChange(assignment.id, progress)}
-                      onNoteChange={(note) => handleNoteChange(assignment.id, note)}
+                      onToggle={() => handleToggle(assignment.id)}
+                      onDelete={() => handleDelete(assignment.id)}
                     />
                   ))}
                 </div>
