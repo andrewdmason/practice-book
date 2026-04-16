@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import {
   getLessonsByDate,
@@ -60,10 +60,18 @@ function LessonEntryRow({
   onDelete: () => void;
 }) {
   const [notes, setNotes] = useState(entry.notes);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setNotes(entry.notes);
   }, [entry.notes]);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [notes]);
 
   const handleBlur = () => {
     if (notes !== entry.notes) {
@@ -98,13 +106,14 @@ function LessonEntryRow({
       </div>
       <div className="flex-1 min-w-0">
         <textarea
+          ref={textareaRef}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           onBlur={handleBlur}
-          rows={Math.max(1, notes.split("\n").length)}
+          rows={1}
           placeholder="Notes..."
           className={cn(
-            "w-full bg-transparent focus:outline-none resize-none text-sm leading-relaxed",
+            "w-full bg-transparent focus:outline-none resize-none text-sm leading-relaxed overflow-hidden",
             "text-foreground placeholder:text-muted-foreground/60"
           )}
         />
