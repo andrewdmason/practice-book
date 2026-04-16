@@ -90,6 +90,7 @@ function isSystemPiece(pieceId: string): boolean {
 }
 
 function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Piece | null }) {
+  const video = useVideo();
   const cached = assignmentsCache.get(pieceId);
   const [piece, setPiece] = useState<{
     name: string;
@@ -165,6 +166,12 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
       refreshSections();
     }
   }, [pieceId, refreshAssignments, refreshSections, knownPiece]);
+
+  useEffect(() => {
+    if (isSystemPiece(pieceId)) return;
+    void video.loadPieceVideo(pieceId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pieceId]);
 
   useEffect(() => {
     const handler = () => refreshAssignments();
