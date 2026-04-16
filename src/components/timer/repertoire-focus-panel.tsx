@@ -25,7 +25,7 @@ import {
 } from "@/app/(app)/focus-panel/actions";
 import type { AssignmentWithPiece } from "@/app/(app)/focus-panel/actions";
 import { getSections } from "@/app/(app)/repertoire/section-actions";
-import { createTask } from "@/app/(app)/timer/task-actions";
+import { createTaskOptimistic } from "@/lib/optimistic-task";
 import { createClient } from "@/lib/supabase/client";
 import { useMetronome } from "@/components/metronome/metronome-context";
 import { SectionSidebar } from "@/components/timer/section-sidebar";
@@ -307,11 +307,21 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
                   return next;
                 });
               }}
-              onAddTask={(sectionId, metronomeSpeed, tomorrow) => {
+              onAddTask={(section, metronomeSpeed, tomorrow) => {
                 const date = tomorrow
                   ? localDate(new Date(Date.now() + 86_400_000))
                   : localDate();
-                void createTask(pieceId, sectionId, metronomeSpeed, date);
+                void createTaskOptimistic({
+                  pieceId,
+                  sectionId: section.id,
+                  date,
+                  metronomeSpeed,
+                  pieceName: piece.name,
+                  pieceComposer: piece.composer,
+                  pieceKind: piece.kind,
+                  sectionLabel: section.label,
+                  sectionStatus: section.status,
+                });
               }}
             />
           </CardContent>

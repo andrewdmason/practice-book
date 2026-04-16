@@ -230,9 +230,6 @@ export async function getFeedPage(
   limit = 7
 ): Promise<{ items: FeedDay[]; nextCursor: string | null }> {
   const supabase = await createClient();
-  const tz = await getUserTimezone();
-  const today = localDate(new Date(), tz);
-  const beforeDate = cursor ?? today;
 
   // Get distinct dates that have practice tasks
   let query = supabase
@@ -242,9 +239,7 @@ export async function getFeedPage(
     .limit(limit * 5); // over-fetch to get enough distinct dates
 
   if (cursor) {
-    query = query.lt("date", beforeDate);
-  } else {
-    query = query.lte("date", beforeDate);
+    query = query.lt("date", cursor);
   }
 
   const { data: taskDates } = await query;

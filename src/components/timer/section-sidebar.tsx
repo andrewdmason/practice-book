@@ -39,7 +39,7 @@ export function SectionSidebar({
   composer: string | null;
   onSectionsChanged: () => void;
   onStatusChange?: (sectionId: string, status: SectionStatus) => void;
-  onAddTask?: (sectionId: string, metronomeSpeed: number | null, tomorrow?: boolean) => void;
+  onAddTask?: (section: PieceSection, metronomeSpeed: number | null, tomorrow?: boolean) => void;
 }) {
   const allSections = flattenSections(sections);
   const video = useVideo();
@@ -108,7 +108,7 @@ function SectionRow({
   composer: string | null;
   onSectionsChanged: () => void;
   onStatusChange?: (sectionId: string, status: SectionStatus) => void;
-  onAddTask?: (sectionId: string, metronomeSpeed: number | null, tomorrow?: boolean) => void;
+  onAddTask?: (section: PieceSection, metronomeSpeed: number | null, tomorrow?: boolean) => void;
   isFirst: boolean;
   isLast: boolean;
   playingSectionId: string | null;
@@ -176,7 +176,7 @@ function SectionRow({
       {/* Add task button — visible on hover, next to label */}
       {onAddTask && (
         <button
-          onClick={(e) => onAddTask(section.id, tempo, e.altKey)}
+          onClick={(e) => onAddTask(section, tempo, e.altKey)}
           className="shrink-0 opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-foreground transition-opacity mr-1"
           title="Add task for this section (⌥-click for tomorrow)"
         >

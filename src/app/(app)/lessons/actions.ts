@@ -182,6 +182,33 @@ export async function createLessonBatch(date?: string): Promise<void> {
   revalidatePath("/lessons");
 }
 
+export async function addLessonEntryForPiece(
+  pieceId: string,
+  date: string
+): Promise<void> {
+  const supabase = await createClient();
+
+  const { data: activePieces } = await supabase
+    .from("pieces")
+    .select("id")
+    .eq("status", "active")
+    .order("sort_order")
+    .order("name");
+
+  const index = (activePieces ?? []).findIndex((p) => p.id === pieceId);
+  const sort_order = index >= 0 ? index + 1 : (activePieces?.length ?? 0) + 1;
+
+  const { error } = await supabase.from("lesson_entries").insert({
+    piece_id: pieceId,
+    date,
+    notes: "",
+    sort_order,
+  });
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/lessons");
+}
+
 export async function updateLessonEntry(
   id: string,
   patch: { piece_id?: string | null; notes?: string }

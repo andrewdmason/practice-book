@@ -16,8 +16,9 @@ import {
 import { PlusIcon } from "lucide-react";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { TaskRow } from "@/components/practice-table/task-row";
-import { reorderTasks, createTask } from "@/app/(app)/timer/task-actions";
+import { reorderTasks } from "@/app/(app)/timer/task-actions";
 import { getFeedPage } from "@/app/(app)/feed/actions";
+import { createTaskOptimistic, type OptimisticTaskDetail, type OptimisticTaskRollback } from "@/lib/optimistic-task";
 import type { FeedDay, TaskWithDetails, PieceKind } from "@/lib/types";
 
 type PieceGroup = {
@@ -73,9 +74,11 @@ function formatDate(dateStr: string): string {
 function DayGroup({
   day,
   focusedPieceId,
+  onReorder,
 }: {
   day: FeedDay;
   focusedPieceId: string | null;
+  onReorder: (dayDate: string, orderedIds: string[]) => void;
 }) {
   const dndId = useId();
   const sensors = useSensors(
@@ -103,16 +106,28 @@ function DayGroup({
           const reordered = [...taskIds];
           reordered.splice(oldIndex, 1);
           reordered.splice(newIndex, 0, active.id as string);
+          onReorder(day.date, reordered);
           void reorderTasks(reordered);
           break;
         }
       }
     },
-    [pieceGroups]
+    [pieceGroups, day.date, onReorder]
   );
 
   const handleAddTask = async (pieceId: string | null) => {
-    await createTask(pieceId, null, null, day.date);
+    const group = pieceGroups.find((g) => g.pieceId === pieceId);
+    await createTaskOptimistic({
+      pieceId,
+      sectionId: null,
+      date: day.date,
+      metronomeSpeed: null,
+      pieceName: group?.pieceName ?? null,
+      pieceComposer: group?.tasks[0]?.piece_composer ?? null,
+      pieceKind: group?.pieceKind ?? null,
+      sectionLabel: null,
+      sectionStatus: null,
+    });
   };
 
   if (pieceGroups.length === 0) return null;
@@ -213,6 +228,87 @@ export function PracticeTable({
     }
   }, [cursor, loading]);
 
+  const handleReorder = useCallback(
+    (dayDate: string, orderedIds: string[]) => {
+      const idSet = new Set(orderedIds);
+      setDays((prev) =>
+        prev.map((d) => {
+          if (d.date !== dayDate) return d;
+          const taskMap = new Map(d.tasks.map((t) => [t.id, t]));
+          let i = 0;
+          const newTasks = d.tasks.map((t) => {
+            if (idSet.has(t.id)) {
+              return taskMap.get(orderedIds[i++])!;
+            }
+            return t;
+          });
+          return { ...d, tasks: newTasks };
+        })
+      );
+    },
+    []
+  );
+
+  // Optimistic task-created listener
+  useEffect(() => {
+    const addHandler = (e: Event) => {
+      const detail = (e as CustomEvent<OptimisticTaskDetail>).detail;
+      const optimistic: TaskWithDetails = {
+        id: detail.tempId,
+        piece_id: detail.pieceId,
+        section_id: detail.sectionId,
+        date: detail.date,
+        text: detail.text ?? "",
+        metronome_speed: detail.metronomeSpeed,
+        timer_seconds: detail.timerSeconds ?? 0,
+        timer_remaining_seconds: detail.timerSeconds ?? 0,
+        completed: false,
+        completed_at: null,
+        started_at: null,
+        ended_at: null,
+        sort_order: Number.MAX_SAFE_INTEGER,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        piece_name: detail.pieceName,
+        piece_composer: detail.pieceComposer,
+        piece_kind: detail.pieceKind,
+        section_label: detail.sectionLabel,
+        section_status: detail.sectionStatus,
+      };
+      setDays((prev) => {
+        const idx = prev.findIndex((d) => d.date === detail.date);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = { ...next[idx], tasks: [...next[idx].tasks, optimistic] };
+          return next;
+        }
+        const newDay: FeedDay = {
+          date: detail.date,
+          tasks: [optimistic],
+          timeSummary: [],
+        };
+        return [newDay, ...prev].sort((a, b) => b.date.localeCompare(a.date));
+      });
+    };
+
+    const rollbackHandler = (e: Event) => {
+      const { tempId } = (e as CustomEvent<OptimisticTaskRollback>).detail;
+      setDays((prev) =>
+        prev.map((d) => ({
+          ...d,
+          tasks: d.tasks.filter((t) => t.id !== tempId),
+        }))
+      );
+    };
+
+    window.addEventListener("task-created-optimistic", addHandler);
+    window.addEventListener("task-created-rollback", rollbackHandler);
+    return () => {
+      window.removeEventListener("task-created-optimistic", addHandler);
+      window.removeEventListener("task-created-rollback", rollbackHandler);
+    };
+  }, []);
+
   // Infinite scroll sentinel
   useEffect(() => {
     if (!cursor) return;
@@ -239,6 +335,7 @@ export function PracticeTable({
           key={day.date}
           day={day}
           focusedPieceId={focusedPieceId}
+          onReorder={handleReorder}
         />
       ))}
 

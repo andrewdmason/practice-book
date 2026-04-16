@@ -5,13 +5,20 @@ import { PlusIcon, Trash2Icon } from "lucide-react";
 import {
   getLessonsByDate,
   createLessonBatch,
+  addLessonEntryForPiece,
   updateLessonEntry,
   deleteLessonEntry,
 } from "@/app/(app)/lessons/actions";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { formatMinutes } from "@/lib/timer-utils";
-import type { LessonDay, LessonEntryWithPiece } from "@/lib/types";
+import type { LessonDay, LessonEntryWithPiece, Piece } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
@@ -117,11 +124,15 @@ function LessonEntryRow({
 function LessonDayCard({
   day,
   pieceOrder,
+  activePieces,
   onDelete,
+  onAddPiece,
 }: {
   day: LessonDay;
   pieceOrder: Map<string, number>;
+  activePieces: Piece[];
   onDelete: (id: string) => void;
+  onAddPiece: (pieceId: string, date: string) => void;
 }) {
   const { totalSeconds, dayCount, calendarDays, entries: summaryEntries } = day.timeSummary;
   const perDay = dayCount > 0 && totalSeconds > 0
@@ -140,6 +151,11 @@ function LessonDayCard({
     return (a.piece_name ?? "").localeCompare(b.piece_name ?? "");
   });
 
+  const existingPieceIds = new Set(
+    day.entries.map((e) => e.piece_id).filter((id): id is string => id !== null)
+  );
+  const addablePieces = activePieces.filter((p) => !existingPieceIds.has(p.id));
+
   return (
     <div className="mb-8">
       <div className="flex items-center gap-2 mb-3 flex-wrap">
@@ -154,6 +170,33 @@ function LessonDayCard({
               Practiced {dayCount} of {calendarDays} days
             </StatPill>
           </>
+        )}
+        {addablePieces.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="ml-auto inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground size-7 transition-colors"
+              title="Add active repertoire"
+            >
+              <PlusIcon className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {addablePieces.map((piece) => (
+                <DropdownMenuItem
+                  key={piece.id}
+                  onClick={() => onAddPiece(piece.id, day.date)}
+                >
+                  <div className="flex flex-col">
+                    <span className="text-sm">{piece.name}</span>
+                    {piece.composer && (
+                      <span className="text-xs text-muted-foreground">
+                        {piece.composer}
+                      </span>
+                    )}
+                  </div>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
       <div className="rounded-lg border bg-card px-4">
@@ -250,6 +293,11 @@ export function LessonsList({
     await deleteLessonEntry(id);
   };
 
+  const handleAddPiece = async (pieceId: string, date: string) => {
+    await addLessonEntryForPiece(pieceId, date);
+    await refresh();
+  };
+
   const activePieceCount = activePieces.length;
   const pieceOrder = new Map<string, number>();
   activePieces.forEach((p, i) => pieceOrder.set(p.id, i));
@@ -274,7 +322,9 @@ export function LessonsList({
           key={day.date}
           day={day}
           pieceOrder={pieceOrder}
+          activePieces={activePieces}
           onDelete={handleDeleteEntry}
+          onAddPiece={handleAddPiece}
         />
       ))}
 

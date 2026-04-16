@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getUserTimezone } from "@/lib/date-utils";
 import { localDate } from "@/lib/date-utils";
-import type { PracticeTask } from "@/lib/types";
+import type { PieceSection, PracticeTask } from "@/lib/types";
 
 export type TaskWithPiece = PracticeTask & {
   piece_name: string | null;
@@ -101,6 +101,7 @@ export async function createTask(
 
   if (error || !data) throw new Error(error?.message ?? "Failed to create task");
 
+  revalidatePath("/");
   return { id: data.id };
 }
 
@@ -128,6 +129,74 @@ export async function updateTaskField(
     .eq("id", taskId);
 
   revalidatePath("/");
+}
+
+/**
+ * Set a task's section and (optionally) its metronome in one write.
+ * Pass `metronomeSpeed: undefined` to leave metronome unchanged.
+ */
+export async function updateTaskSection(
+  taskId: string,
+  sectionId: string | null,
+  metronomeSpeed: number | null | undefined
+) {
+  const supabase = await createClient();
+
+  const update: Record<string, unknown> = { section_id: sectionId };
+  if (metronomeSpeed !== undefined) update.metronome_speed = metronomeSpeed;
+
+  await supabase.from("practice_tasks").update(update).eq("id", taskId);
+  revalidatePath("/");
+}
+
+/**
+ * Flat leaf sections + piece target tempo for the task-row section picker.
+ * Mirrors the flattening behavior of `flattenSections()`: a parent without
+ * children is kept; a parent with children is replaced by its children.
+ */
+export async function getSectionPickerData(
+  pieceId: string
+): Promise<{ sections: PieceSection[]; pieceTargetTempo: number | null }> {
+  const supabase = await createClient();
+
+  const [sectionsRes, pieceRes] = await Promise.all([
+    supabase
+      .from("piece_sections")
+      .select("*")
+      .eq("piece_id", pieceId)
+      .order("sort_order", { ascending: true }),
+    supabase
+      .from("pieces")
+      .select("target_tempo")
+      .eq("id", pieceId)
+      .single(),
+  ]);
+
+  const rows = (sectionsRes.data ?? []) as PieceSection[];
+  const childrenByParent = new Map<string, PieceSection[]>();
+  for (const r of rows) {
+    if (r.parent_id) {
+      const list = childrenByParent.get(r.parent_id) ?? [];
+      list.push(r);
+      childrenByParent.set(r.parent_id, list);
+    }
+  }
+
+  const flat: PieceSection[] = [];
+  for (const r of rows) {
+    if (r.parent_id !== null) continue;
+    const children = childrenByParent.get(r.id);
+    if (!children || children.length === 0) {
+      flat.push(r);
+    } else {
+      flat.push(...children.sort((a, b) => a.sort_order - b.sort_order));
+    }
+  }
+
+  return {
+    sections: flat,
+    pieceTargetTempo: pieceRes.data?.target_tempo ?? null,
+  };
 }
 
 export async function completeTask(taskId: string) {

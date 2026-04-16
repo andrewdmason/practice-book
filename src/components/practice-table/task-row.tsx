@@ -21,7 +21,6 @@ import {
 import {
   Popover,
   PopoverContent,
-  PopoverTrigger,
 } from "@/components/ui/popover";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { useMetronome } from "@/components/metronome/metronome-context";
@@ -33,6 +32,7 @@ import {
   completeTask,
   uncompleteTask,
 } from "@/app/(app)/timer/task-actions";
+import { emitOptimisticTask, rollbackOptimisticTask } from "@/lib/optimistic-task";
 import type { TaskWithDetails, SectionStatus } from "@/lib/types";
 import { SECTION_STATUS_DOT_COLORS } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -97,6 +97,8 @@ export function TaskRow({
   );
   const [noteOpen, setNoteOpen] = useState(false);
   const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const noteInputRef = useRef<HTMLInputElement>(null);
+  const suppressNoteReopenRef = useRef(false);
   const metronomeRef = useRef<HTMLInputElement>(null);
 
   // Sync optimistic state when server revalidation brings a new value
@@ -121,19 +123,67 @@ export function TaskRow({
     el.style.height = `${el.scrollHeight}px`;
   }, []);
 
+  const isNoteOverflowing = useCallback(() => {
+    const el = noteInputRef.current;
+    if (!el) return false;
+    return el.scrollWidth > el.clientWidth;
+  }, []);
+
+  const openNotePopover = useCallback(() => {
+    console.log('[NOTE] openNotePopover called');
+    setNoteOpen(true);
+    requestAnimationFrame(() => {
+      const el = noteTextareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+      autoGrowNote();
+    });
+  }, [autoGrowNote]);
+
   const handleNoteOpenChange = (open: boolean) => {
-    if (!open && text !== task.text) {
+    console.log('[NOTE] handleNoteOpenChange', open, 'current noteOpen', noteOpen);
+    if (!open) {
+      if (text !== task.text) {
+        void updateTaskField(task.id, "text", text);
+      }
+      setNoteOpen(false);
+      // Prevent the input's onFocus from immediately re-opening the popover
+      // if focus returns to it.
+      suppressNoteReopenRef.current = true;
+      requestAnimationFrame(() => {
+        noteInputRef.current?.blur();
+        suppressNoteReopenRef.current = false;
+      });
+    }
+  };
+
+  const handleInlineNoteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setText(e.target.value);
+    requestAnimationFrame(() => {
+      if (isNoteOverflowing()) openNotePopover();
+    });
+  };
+
+  const handleInlineNoteFocus = () => {
+    console.log('[NOTE] input focus, suppress=', suppressNoteReopenRef.current);
+    if (suppressNoteReopenRef.current) return;
+    requestAnimationFrame(() => {
+      if (isNoteOverflowing()) openNotePopover();
+    });
+  };
+
+  const handleInlineNoteBlur = () => {
+    if (noteOpen) return;
+    if (text !== task.text) {
       void updateTaskField(task.id, "text", text);
     }
-    setNoteOpen(open);
-    if (open) {
-      requestAnimationFrame(() => {
-        const el = noteTextareaRef.current;
-        if (!el) return;
-        el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
-        autoGrowNote();
-      });
+  };
+
+  const handleInlineNoteKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === "Escape") {
+      e.preventDefault();
+      e.currentTarget.blur();
     }
   };
 
@@ -220,7 +270,32 @@ export function TaskRow({
             <GripVerticalIcon className="size-3.5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" side="bottom">
-            <DropdownMenuItem onClick={() => duplicateTaskToTomorrow(task.id)}>
+            <DropdownMenuItem
+              onClick={async () => {
+                const d = new Date(task.date + "T12:00:00");
+                d.setDate(d.getDate() + 1);
+                const tomorrowDate = d.toISOString().slice(0, 10);
+                const tempId = emitOptimisticTask({
+                  pieceId: task.piece_id,
+                  sectionId: task.section_id,
+                  date: tomorrowDate,
+                  text: task.text,
+                  metronomeSpeed: task.metronome_speed,
+                  timerSeconds: task.timer_seconds,
+                  pieceName: task.piece_name,
+                  pieceComposer: task.piece_composer,
+                  pieceKind: task.piece_kind,
+                  sectionLabel: task.section_label,
+                  sectionStatus: task.section_status,
+                });
+                try {
+                  await duplicateTaskToTomorrow(task.id);
+                } catch (err) {
+                  rollbackOptimisticTask(tempId);
+                  throw err;
+                }
+              }}
+            >
               <CopyPlusIcon className="size-4 mr-2" />
               Duplicate to tomorrow
             </DropdownMenuItem>
@@ -370,21 +445,28 @@ export function TaskRow({
           )}
         >
           <Popover open={noteOpen} onOpenChange={handleNoteOpenChange}>
-            <PopoverTrigger
+            <input
+              ref={noteInputRef}
+              type="text"
+              value={text}
+              onChange={handleInlineNoteChange}
+              onFocus={handleInlineNoteFocus}
+              onBlur={handleInlineNoteBlur}
+              onKeyDown={handleInlineNoteKeyDown}
+              placeholder="Notes..."
               className={cn(
-                "block w-full min-w-0 truncate text-left leading-tight focus:outline-none cursor-text",
+                "block w-full min-w-0 bg-transparent text-left leading-tight focus:outline-none cursor-text text-ellipsis",
                 isActive
                   ? text
-                    ? "text-white"
-                    : "text-white/60"
+                    ? "text-white placeholder:text-white/60"
+                    : "text-white placeholder:text-white/60"
                   : text
-                    ? "text-muted-foreground"
-                    : "text-muted-foreground/50"
+                    ? "text-muted-foreground placeholder:text-muted-foreground/50"
+                    : "text-muted-foreground placeholder:text-muted-foreground/50"
               )}
-            >
-              {text || "Notes..."}
-            </PopoverTrigger>
+            />
             <PopoverContent
+              anchor={noteInputRef}
               align="start"
               side="bottom"
               sideOffset={-28}
@@ -398,6 +480,7 @@ export function TaskRow({
                   autoGrowNote();
                 }}
                 onKeyDown={(e) => {
+                  console.log('[NOTE] textarea keydown', e.key);
                   if (e.key === "Escape") {
                     e.preventDefault();
                     handleNoteOpenChange(false);
