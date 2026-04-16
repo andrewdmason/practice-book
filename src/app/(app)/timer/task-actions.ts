@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getUserTimezone } from "@/lib/date-utils";
+import { localDate } from "@/lib/date-utils";
 import type { PracticeTask, PracticeTaskType } from "@/lib/types";
 
 export type TaskWithPiece = PracticeTask & {
@@ -245,6 +247,23 @@ export async function stopTaskTimer(taskId: string) {
     .eq("id", taskId);
 
   revalidatePath("/");
+}
+
+export async function getNextTaskForToday(): Promise<PracticeTask | null> {
+  const supabase = await createClient();
+  const tz = await getUserTimezone();
+  const today = localDate(new Date(), tz);
+
+  const { data } = await supabase
+    .from("practice_tasks")
+    .select("*")
+    .eq("date", today)
+    .eq("completed", false)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  return ((data ?? [])[0] as PracticeTask) ?? null;
 }
 
 export async function reorderTasks(taskIds: string[]) {

@@ -41,12 +41,12 @@ export default async function AppLayout({
         <TooltipProvider>
           <TimezoneProvider />
           <div className="flex min-h-full flex-1 flex-col">
-            <Header />
             <VideoProvider>
               <TaskTimerProvider
                 activePieces={(activePieces as Piece[]) ?? []}
                 initialDailySeconds={initialDailySeconds}
               >
+                <Header />
                 <PracticeBar />
                 <ScrubberBar />
                 <div className="flex flex-1 flex-col">{children}</div>

@@ -6,12 +6,13 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   GripVerticalIcon,
   PlusIcon,
-  PlayIcon,
+  ClockIcon,
   PauseIcon,
   CircleIcon,
   CopyPlusIcon,
   MicIcon,
   Trash2Icon,
+  MetronomeIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -36,12 +37,10 @@ import { cn } from "@/lib/utils";
 export function TaskRow({
   task,
   isFirst,
-  isLast,
   onAddBelow,
 }: {
   task: TaskWithDetails;
   isFirst: boolean;
-  isLast: boolean;
   onAddBelow: () => void;
 }) {
   const {
@@ -76,8 +75,14 @@ export function TaskRow({
   );
   const [editingMetronome, setEditingMetronome] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [optimisticCompleted, setOptimisticCompleted] = useState(task.completed);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const metronomeRef = useRef<HTMLInputElement>(null);
+
+  // Sync optimistic state when server revalidation brings a new value
+  useEffect(() => {
+    setOptimisticCompleted(task.completed);
+  }, [task.completed]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -129,11 +134,13 @@ export function TaskRow({
   };
 
   const handleComplete = () => {
-    if (task.completed) {
-      void uncompleteTask(task.id);
-    } else {
+    const nextValue = !optimisticCompleted;
+    setOptimisticCompleted(nextValue);
+    if (nextValue) {
       if (isActive) pauseTaskTimer();
       void completeTask(task.id);
+    } else {
+      void uncompleteTask(task.id);
     }
   };
 
@@ -190,45 +197,57 @@ export function TaskRow({
         </DropdownMenu>
       </div>
 
-      {/* Row content — card styling applied per-row */}
+      {/* Row content — Notion-style: bordered cells, no fill */}
       <div
         className={cn(
-          "flex-1 min-w-0 grid grid-cols-[auto_auto_auto_auto_auto_1fr] items-center gap-0 px-2 py-1.5 text-xs",
-          "border-x bg-card",
-          isFirst && "border-t rounded-t-lg",
-          isLast && "border-b rounded-b-lg",
-          !isLast && "border-b",
-          isActive && "bg-primary/5",
-          task.completed && "opacity-50"
+          "flex-1 min-w-0 grid grid-cols-[32px_56px_72px_88px_56px_1fr] items-stretch text-xs transition-colors",
+          isActive ? "bg-red-500 text-white" : "text-foreground",
+          optimisticCompleted && "opacity-50"
         )}
       >
-        {/* Complete checkbox */}
-        <div className="w-6 flex items-center justify-center">
+        {/* Complete checkbox — no frame borders, only a right divider */}
+        <div className="flex items-center justify-center px-2 py-1.5">
           <input
             type="checkbox"
-            checked={task.completed}
+            checked={optimisticCompleted}
             onChange={handleComplete}
             className="size-3.5 rounded"
           />
         </div>
 
         {/* Section + status dot */}
-        <div className="flex items-center gap-1.5 min-w-0 px-1">
+        <div
+          className={cn(
+            "flex items-center gap-1 min-w-0 px-2 py-1.5 border-b border-l",
+            isFirst && "border-t",
+            !isActive && "border-r border-border/60",
+            isActive && "border-r border-red-400 border-b-red-400 border-l-red-400 border-t-red-400"
+          )}
+        >
           {task.section_status !== null && (
             <CircleIcon
               className={cn(
                 "size-2.5 shrink-0 fill-current",
-                SECTION_STATUS_DOT_COLORS[task.section_status as SectionStatus]
+                isActive
+                  ? "text-white/80"
+                  : SECTION_STATUS_DOT_COLORS[task.section_status as SectionStatus]
               )}
             />
           )}
-          <span className="truncate text-muted-foreground">
+          <span className={cn("truncate", isActive ? "text-white" : "text-muted-foreground")}>
             {task.section_label ?? "—"}
           </span>
         </div>
 
         {/* Metronome pill — click to start/stop, right-click to edit */}
-        <div className="w-14 px-1">
+        <div
+          className={cn(
+            "flex items-center px-2 py-1.5 border-b",
+            isFirst && "border-t",
+            !isActive && "border-r border-border/60",
+            isActive && "border-r border-red-400 border-b-red-400 border-t-red-400"
+          )}
+        >
           {editingMetronome ? (
             <input
               ref={metronomeRef}
@@ -243,7 +262,10 @@ export function TaskRow({
                   handleMetronomeBlur();
                 }
               }}
-              className="w-full bg-transparent text-center text-muted-foreground focus:text-foreground focus:outline-none tabular-nums"
+              className={cn(
+                "w-full bg-transparent text-center focus:outline-none tabular-nums",
+                isActive ? "text-white placeholder:text-white/60" : "text-muted-foreground focus:text-foreground"
+              )}
             />
           ) : (
             <button
@@ -254,46 +276,74 @@ export function TaskRow({
                 requestAnimationFrame(() => metronomeRef.current?.focus());
               }}
               className={cn(
-                "w-full rounded-full px-2 py-0.5 tabular-nums text-center transition-colors",
+                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 tabular-nums transition-colors",
                 task.metronome_speed
-                  ? metronomeCtx.isActive && metronomeCtx.bpm === task.metronome_speed
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
-                  : "text-muted-foreground/40"
+                  ? isActive
+                    ? "bg-white/20 text-white hover:bg-white/30"
+                    : metronomeCtx.isActive && metronomeCtx.bpm === task.metronome_speed
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
+                  : isActive ? "text-white/50" : "text-muted-foreground/40"
               )}
             >
-              {task.metronome_speed ?? "bpm"}
+              <MetronomeIcon className="size-3" />
+              {task.metronome_speed ?? "—"}
             </button>
           )}
         </div>
 
+        {/* Timer button */}
+        <div
+          className={cn(
+            "flex items-center px-2 py-1.5 border-b",
+            isFirst && "border-t",
+            !isActive && "border-r border-border/60",
+            isActive && "border-r border-red-400 border-b-red-400 border-t-red-400"
+          )}
+        >
+          <button
+            onClick={handleTimerClick}
+            disabled={optimisticCompleted}
+            className={cn(
+              "group/timer flex items-center gap-1 rounded px-1.5 py-0.5 tabular-nums transition-colors",
+              isActive
+                ? "bg-white/20 text-white hover:bg-white/30"
+                : "hover:bg-muted text-muted-foreground hover:text-foreground",
+              optimisticCompleted && "cursor-not-allowed"
+            )}
+          >
+            {isActive ? (
+              <PauseIcon className="size-3 fill-current" />
+            ) : (
+              <ClockIcon className="size-3" />
+            )}
+            {formatElapsed(Math.max(0, elapsed))}
+          </button>
+        </div>
+
         {/* Time goal */}
-        <div className="w-10 px-1 text-muted-foreground tabular-nums">
+        <div
+          className={cn(
+            "flex items-center tabular-nums px-2 py-1.5 border-b",
+            isFirst && "border-t",
+            !isActive && "border-r border-border/60",
+            isActive && "border-r border-red-400 border-b-red-400 border-t-red-400",
+            isActive ? "text-white/80" : "text-muted-foreground"
+          )}
+        >
           {timerGoalMinutes > 0 ? `${timerGoalMinutes}m` : "—"}
         </div>
 
-        {/* Timer button */}
-        <button
-          onClick={handleTimerClick}
-          disabled={task.completed}
+        {/* Text notes — widest column */}
+        <div
           className={cn(
-            "flex items-center gap-1 w-16 rounded px-1.5 py-0.5 tabular-nums transition-colors",
+            "flex items-center min-w-0 px-2 py-1.5 border-b border-r",
+            isFirst && "border-t",
             isActive
-              ? "bg-primary text-primary-foreground"
-              : "hover:bg-muted text-muted-foreground hover:text-foreground",
-            task.completed && "cursor-not-allowed"
+              ? "border-r-red-400 border-b-red-400 border-t-red-400"
+              : "border-r-border/60"
           )}
         >
-          {isActive ? (
-            <PauseIcon className="size-3" />
-          ) : (
-            <PlayIcon className="size-3" />
-          )}
-          {formatElapsed(Math.max(0, elapsed))}
-        </button>
-
-        {/* Text notes — widest column */}
-        <div className="min-w-0 px-1">
           <textarea
             ref={textRef}
             value={text}
@@ -301,7 +351,12 @@ export function TaskRow({
             onBlur={handleTextBlur}
             rows={1}
             placeholder="Notes..."
-            className="w-full bg-transparent text-muted-foreground focus:text-foreground focus:outline-none resize-none leading-tight"
+            className={cn(
+              "w-full bg-transparent focus:outline-none resize-none leading-tight",
+              isActive
+                ? "text-white placeholder:text-white/60"
+                : "text-muted-foreground focus:text-foreground"
+            )}
           />
         </div>
       </div>

@@ -161,7 +161,6 @@ function DayGroup({
                   key={task.id}
                   task={task}
                   isFirst={index === 0}
-                  isLast={index === group.tasks.length - 1}
                   onAddBelow={() => handleAddTask(group.pieceId)}
                 />
               ))}

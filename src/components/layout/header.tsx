@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Search } from "lucide-react";
+import { Menu, ClockIcon, PauseIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -11,7 +11,10 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { useSearch } from "@/components/search/search-provider";
+import { MetronomeControl } from "@/components/metronome/metronome-control";
+import { useTaskTimer } from "@/components/timer/task-timer-context";
+import { formatElapsed } from "@/lib/timer-utils";
+import { getNextTaskForToday } from "@/app/(app)/timer/task-actions";
 
 const navItems = [
   { label: "Sessions", href: "/" },
@@ -46,12 +49,24 @@ function NavLink({
 
 export function Header() {
   const pathname = usePathname();
-  const { open: openSearch } = useSearch();
+  const { dailyElapsedSeconds, activeTaskId, startTaskTimer, pauseTaskTimer } =
+    useTaskTimer();
+  const isTimerActive = activeTaskId !== null;
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
     return pathname.startsWith(href);
   }
+
+  const handleTimerClick = async () => {
+    if (isTimerActive) {
+      pauseTaskTimer();
+      return;
+    }
+    const task = await getNextTaskForToday();
+    if (!task) return;
+    startTaskTimer(task.id, task.timer_remaining_seconds);
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -74,20 +89,37 @@ export function Header() {
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2">
-          {/* Search placeholder */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="hidden sm:flex items-center gap-2 text-muted-foreground"
-            onClick={openSearch}
+        <div className="ml-auto flex items-center gap-3">
+          {/* Daily aggregate timer — click to start/stop practice */}
+          <button
+            onClick={handleTimerClick}
+            className={cn(
+              "flex items-center gap-1.5 rounded px-1.5 py-1 transition-colors hover:bg-muted",
+              isTimerActive && "text-primary"
+            )}
+            aria-label={
+              isTimerActive
+                ? "Stop practice timer"
+                : "Start practice timer on next task"
+            }
           >
-            <Search className="h-3.5 w-3.5" />
-            <span className="text-xs">Search...</span>
-            <kbd className="ml-2 pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:flex">
-              <span className="text-xs">⌘</span>K
-            </kbd>
-          </Button>
+            {isTimerActive ? (
+              <PauseIcon className="size-4 fill-current" />
+            ) : (
+              <ClockIcon className="size-4 text-muted-foreground" />
+            )}
+            <span
+              className={cn(
+                "tabular-nums text-sm font-medium min-w-[4ch]",
+                isTimerActive ? "text-foreground" : "text-muted-foreground"
+              )}
+            >
+              {formatElapsed(dailyElapsedSeconds)}
+            </span>
+          </button>
+
+          {/* Metronome */}
+          <MetronomeControl />
 
           {/* Mobile nav */}
           <Sheet>

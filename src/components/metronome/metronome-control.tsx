@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useCallback } from "react";
-import { MinusIcon, PlusIcon } from "lucide-react";
+import { MinusIcon, PlusIcon, MetronomeIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 export function MetronomeControl() {
   const { bpm, setBpm, isActive, toggle, beatPulse } = useMetronome();
-  const pulseRef = useRef<HTMLSpanElement>(null);
+  const pulseRef = useRef<SVGSVGElement>(null);
 
   // Tap tempo state
   const tapTimesRef = useRef<number[]>([]);
@@ -58,7 +58,7 @@ export function MetronomeControl() {
     if (!el) return;
     el.classList.remove("animate-beat-pulse");
     // Force reflow to restart animation
-    void el.offsetWidth;
+    void el.getBoundingClientRect();
     el.classList.add("animate-beat-pulse");
   }, [beatPulse, isActive]);
 
@@ -70,18 +70,12 @@ export function MetronomeControl() {
         className={cn(
           "flex size-7 items-center justify-center rounded-full transition-colors",
           isActive
-            ? "text-foreground hover:bg-muted"
+            ? "text-primary hover:bg-muted"
             : "text-muted-foreground hover:text-foreground hover:bg-muted"
         )}
         aria-label={isActive ? "Stop metronome" : "Start metronome"}
       >
-        <span
-          ref={pulseRef}
-          className={cn(
-            "block size-2.5 rounded-full transition-colors",
-            isActive ? "bg-primary" : "bg-muted-foreground/50"
-          )}
-        />
+        <MetronomeIcon ref={pulseRef} className="size-4" />
       </button>
 
       {/* BPM display + popover */}

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { ClockIcon, MusicIcon, BookOpenIcon, XIcon } from "lucide-react";
+import { MusicIcon, BookOpenIcon, XIcon } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -12,8 +12,6 @@ import {
 } from "@/components/ui/select";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { useZenMode } from "@/components/layout/zen-mode-context";
-import { MetronomeControl } from "@/components/metronome/metronome-control";
-import { formatElapsed } from "@/lib/timer-utils";
 import type { PieceKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -25,11 +23,9 @@ export function PracticeBar() {
   const focusParam = searchParams.get("focus");
 
   const {
-    dailyElapsedSeconds,
     activePieces,
     focusedPieceId,
     setFocusedPieceId,
-    activeTaskId,
   } = useTaskTimer();
 
   // Sync URL focus param → focusedPieceId on mount and param changes
@@ -69,7 +65,6 @@ export function PracticeBar() {
   );
 
   const handlePillClick = (pieceId: string) => {
-    // If already focused on this piece, deselect
     if (focusedPieceId === pieceId) {
       setFocusedPieceId(null);
       setFocusUrl(null);
@@ -84,7 +79,6 @@ export function PracticeBar() {
     setFocusUrl(null);
   }, [setFocusedPieceId, setFocusUrl]);
 
-  // Escape key clears focus
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape" && focusedPieceId) {
@@ -101,26 +95,12 @@ export function PracticeBar() {
   };
 
   const showClear = focusedPieceId !== null;
-  const isTimerActive = activeTaskId !== null;
 
   if (isZenMode) return null;
 
   return (
     <div className="sticky top-14 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-      <div className="mx-auto flex h-12 max-w-7xl items-center gap-3 px-4 sm:px-6">
-        {/* Daily aggregate timer */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <ClockIcon className={cn("size-4", isTimerActive ? "text-primary" : "text-muted-foreground")} />
-          <span
-            className={cn(
-              "tabular-nums text-sm font-medium min-w-[4ch]",
-              isTimerActive ? "text-foreground" : "text-muted-foreground"
-            )}
-          >
-            {formatElapsed(dailyElapsedSeconds)}
-          </span>
-        </div>
-
+      <div className="mx-auto flex h-12 max-w-7xl items-center gap-1.5 px-4 sm:px-6">
         {/* Desktop: piece pill tabs */}
         <div className="hidden md:flex items-center gap-1.5 overflow-x-auto scrollbar-none">
           {activePieces.map((piece) => {
@@ -148,7 +128,6 @@ export function PracticeBar() {
             );
           })}
 
-          {/* Clear focus button */}
           {showClear && (
             <button
               onClick={clearFocus}
@@ -160,15 +139,10 @@ export function PracticeBar() {
           )}
         </div>
 
-        {/* Metronome control - right aligned */}
-        <div className="hidden md:flex ml-auto shrink-0">
-          <MetronomeControl />
-        </div>
-
-        {/* Mobile: select dropdown + metronome */}
-        <div className="flex md:hidden flex-1 items-center justify-end gap-2">
+        {/* Mobile: select dropdown */}
+        <div className="flex md:hidden flex-1 items-center">
           <Select value={focusedPieceId ?? ""} onValueChange={handleSelectChange}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="All pieces" />
             </SelectTrigger>
             <SelectContent>
@@ -179,7 +153,6 @@ export function PracticeBar() {
               ))}
             </SelectContent>
           </Select>
-          <MetronomeControl />
         </div>
       </div>
     </div>
