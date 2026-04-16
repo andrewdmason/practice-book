@@ -90,10 +90,11 @@ export function TaskTimerProvider({
         const elapsed = Math.floor(
           (Date.now() - new Date(state.lastTickAt).getTime()) / 1000
         );
-        const remaining = Math.max(0, state.remainingSeconds - elapsed);
+        // Remaining can go negative once the soft goal has been passed.
+        const remaining = state.remainingSeconds - elapsed;
         setActiveTaskId(state.taskId);
         setRemainingSeconds(remaining);
-        setIsExpired(remaining === 0);
+        setIsExpired(remaining <= 0);
         activeTaskStartRef.current = Date.now() - elapsed * 1000;
       }
     } catch {
@@ -105,7 +106,7 @@ export function TaskTimerProvider({
   const persist = useCallback(
     (taskId: string | null, seconds: number) => {
       if (!restored) return;
-      if (taskId && seconds > 0) {
+      if (taskId) {
         const state: PersistedState = {
           taskId,
           remainingSeconds: seconds,
@@ -131,9 +132,9 @@ export function TaskTimerProvider({
         const elapsed = Math.floor(
           (Date.now() - new Date(state.lastTickAt).getTime()) / 1000
         );
-        const remaining = Math.max(0, state.remainingSeconds - elapsed);
+        const remaining = state.remainingSeconds - elapsed;
         setRemainingSeconds(remaining);
-        if (remaining === 0) {
+        if (remaining <= 0) {
           setIsExpired(true);
         }
       } catch {
@@ -144,28 +145,24 @@ export function TaskTimerProvider({
     return () => document.removeEventListener("visibilitychange", handler);
   }, [activeTaskId]);
 
-  // Countdown interval
+  // Countdown interval — keeps running past the soft goal so the user can
+  // practice longer than planned without stopping the timer.
   useEffect(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
 
-    if (!activeTaskId || isExpired || remainingSeconds <= 0) return;
+    if (!activeTaskId) return;
 
     const tickingTaskId = activeTaskId;
     intervalRef.current = setInterval(() => {
       setRemainingSeconds((prev) => {
         const next = prev - 1;
-        if (next <= 0) {
+        if (prev > 0 && next <= 0) {
+          // Transition to goal-reached once, then keep counting into negatives.
           setIsExpired(true);
           persistTaskRemaining(tickingTaskId, 0);
-          localStorage.removeItem(STORAGE_KEY);
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-          return 0;
         }
         return next;
       });
@@ -183,20 +180,22 @@ export function TaskTimerProvider({
         intervalRef.current = null;
       }
     };
-  }, [activeTaskId, isExpired, remainingSeconds > 0, persistTaskRemaining]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeTaskId, persistTaskRemaining]);
 
-  // Persist every 10 seconds while running
+  // Persist every 10 seconds while running (including past the soft goal, so
+  // overtime is reflected on reload via the server's daily summary).
   const tickCount = useRef(0);
   useEffect(() => {
-    if (!activeTaskId || isExpired || remainingSeconds <= 0) {
+    if (!activeTaskId) {
       tickCount.current = 0;
       return;
     }
     tickCount.current++;
     if (tickCount.current % 10 === 0) {
       persist(activeTaskId, remainingSeconds);
+      void updateTaskRemaining(activeTaskId, remainingSeconds).catch(() => {});
     }
-  }, [remainingSeconds, activeTaskId, isExpired, persist]);
+  }, [remainingSeconds, activeTaskId, persist]);
 
   const refreshDailyTotal = useCallback(async () => {
     try {

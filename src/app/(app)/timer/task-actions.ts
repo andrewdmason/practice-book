@@ -67,7 +67,7 @@ export async function createTask(
   sectionId: string | null,
   metronomeSpeed: number | null,
   date?: string
-): Promise<{ id: string }> {
+): Promise<{ id: string; timer_seconds: number; timer_remaining_seconds: number }> {
   const supabase = await createClient();
 
   // Get next sort_order
@@ -96,13 +96,17 @@ export async function createTask(
       sort_order: nextOrder,
       ...(date ? { date } : {}),
     })
-    .select("id")
+    .select("id, timer_seconds, timer_remaining_seconds")
     .single();
 
   if (error || !data) throw new Error(error?.message ?? "Failed to create task");
 
   revalidatePath("/");
-  return { id: data.id };
+  return {
+    id: data.id,
+    timer_seconds: data.timer_seconds,
+    timer_remaining_seconds: data.timer_remaining_seconds,
+  };
 }
 
 export async function updateTaskField(
@@ -318,12 +322,14 @@ export async function stopTaskTimer(taskId: string) {
   revalidatePath("/");
 }
 
-export async function getNextTaskForToday(): Promise<PracticeTask | null> {
+export async function getNextTaskForToday(
+  pieceId?: string
+): Promise<PracticeTask | null> {
   const supabase = await createClient();
   const tz = await getUserTimezone();
   const today = localDate(new Date(), tz);
 
-  const { data } = await supabase
+  let query = supabase
     .from("practice_tasks")
     .select("*")
     .eq("date", today)
@@ -331,6 +337,10 @@ export async function getNextTaskForToday(): Promise<PracticeTask | null> {
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true })
     .limit(1);
+
+  if (pieceId) query = query.eq("piece_id", pieceId);
+
+  const { data } = await query;
 
   return ((data ?? [])[0] as PracticeTask) ?? null;
 }

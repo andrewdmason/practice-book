@@ -53,6 +53,7 @@ export function TimerCell({
 
   const elapsedMinutes = Math.floor(Math.max(0, elapsedSeconds) / 60);
   const goalMinutes = Math.round(goalSeconds / 60);
+  const goalReached = goalSeconds > 0 && elapsedSeconds >= goalSeconds;
 
   const setGoal = (minutes: number) => {
     onChangeGoal(minutes * 60);
@@ -99,9 +100,13 @@ export function TimerCell({
         <PopoverTrigger
           className={cn(
             "rounded px-1.5 py-0.5 transition-colors focus:outline-none",
-            isActive
-              ? "text-white/80 hover:bg-white/20"
-              : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            goalReached
+              ? isActive
+                ? "bg-emerald-500 text-white ring-1 ring-inset ring-white/30 hover:bg-emerald-600"
+                : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300"
+              : isActive
+                ? "text-white/80 hover:bg-white/20"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
           )}
         >
           {formatMinutesShort(goalMinutes)}

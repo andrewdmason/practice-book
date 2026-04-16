@@ -19,7 +19,15 @@ import { TaskRow } from "@/components/practice-table/task-row";
 import { reorderTasks } from "@/app/(app)/timer/task-actions";
 import { getFeedPage } from "@/app/(app)/feed/actions";
 import { createTaskOptimistic, type OptimisticTaskDetail, type OptimisticTaskRollback } from "@/lib/optimistic-task";
-import type { FeedDay, TaskWithDetails, PieceKind } from "@/lib/types";
+import { localDate } from "@/lib/date-utils";
+import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import type { FeedDay, TaskWithDetails, PieceKind, Piece } from "@/lib/types";
 
 type PieceGroup = {
   pieceId: string | null;
@@ -50,15 +58,15 @@ function groupTasksByPiece(tasks: TaskWithDetails[]): PieceGroup[] {
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
   const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
+  const todayStr = localDate(today);
 
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+  const yesterdayStr = localDate(yesterday);
 
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+  const tomorrowStr = localDate(tomorrow);
 
   if (dateStr === todayStr) return "Today";
   if (dateStr === yesterdayStr) return "Yesterday";
@@ -74,10 +82,16 @@ function formatDate(dateStr: string): string {
 function DayGroup({
   day,
   focusedPieceId,
+  focusedPieceName,
+  activePieces,
+  hasTomorrow,
   onReorder,
 }: {
   day: FeedDay;
   focusedPieceId: string | null;
+  focusedPieceName: string | null;
+  activePieces: Piece[];
+  hasTomorrow: boolean;
   onReorder: (dayDate: string, orderedIds: string[]) => void;
 }) {
   const dndId = useId();
@@ -122,7 +136,9 @@ function DayGroup({
       sectionId: null,
       date: day.date,
       metronomeSpeed: null,
-      pieceName: group?.pieceName ?? null,
+      pieceName:
+        group?.pieceName ??
+        (pieceId === focusedPieceId ? focusedPieceName : null),
       pieceComposer: group?.tasks[0]?.piece_composer ?? null,
       pieceKind: group?.pieceKind ?? null,
       sectionLabel: null,
@@ -130,25 +146,87 @@ function DayGroup({
     });
   };
 
-  if (pieceGroups.length === 0) return null;
+  const handleAddPiece = async (piece: Piece) => {
+    await createTaskOptimistic({
+      pieceId: piece.id,
+      sectionId: null,
+      date: day.date,
+      metronomeSpeed: null,
+      pieceName: piece.name,
+      pieceComposer: piece.composer,
+      pieceKind: piece.kind,
+      sectionLabel: null,
+      sectionStatus: null,
+    });
+  };
+
+  const existingPieceIds = new Set(
+    pieceGroups
+      .map((g) => g.pieceId)
+      .filter((id): id is string => id !== null)
+  );
+  const addablePieces = activePieces.filter(
+    (p) => !existingPieceIds.has(p.id)
+  );
 
   const totalSeconds = day.timeSummary.reduce(
     (sum, e) => sum + e.total_seconds,
     0
   );
   const totalMinutes = Math.round(totalSeconds / 60);
+  const todayStr = localDate();
+  const isToday = day.date === todayStr;
+
+  // Always render the "Today" group (with an empty state when no tasks);
+  // hide other days that would be empty under the current filter.
+  if (pieceGroups.length === 0 && !isToday) return null;
 
   return (
-    <div className="mb-8">
+    <div className="group/day mb-8">
+      {isToday && hasTomorrow && (
+        <hr className="mb-8 border-border" />
+      )}
       {/* Day header */}
-      <div className="flex items-baseline gap-2 mb-3 px-1">
-        <h2 className="text-lg font-semibold text-foreground">
+      <div className="flex items-center gap-2 mb-3 px-1">
+        <h2
+          className={cn(
+            "text-lg font-semibold",
+            isToday ? "text-sky-600 dark:text-sky-400" : "text-foreground"
+          )}
+        >
           {formatDate(day.date)}
         </h2>
         {totalMinutes > 0 && (
           <span className="text-sm text-muted-foreground">
             {totalMinutes}m
           </span>
+        )}
+        {!focusedPieceId && addablePieces.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className="inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground size-6 opacity-0 group-hover/day:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+              title="Add task for piece"
+            >
+              <PlusIcon className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {addablePieces.map((piece) => (
+                <DropdownMenuItem
+                  key={piece.id}
+                  onClick={() => handleAddPiece(piece)}
+                >
+                  <div className="flex flex-col">
+                    <span className="text-sm">{piece.name}</span>
+                    {piece.composer && (
+                      <span className="text-xs text-muted-foreground">
+                        {piece.composer}
+                      </span>
+                    )}
+                  </div>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 
@@ -186,16 +264,27 @@ function DayGroup({
         ))}
       </DndContext>
 
-      {/* Add general note (only when not filtered) */}
-      {!focusedPieceId && (
-        <button
-          onClick={() => handleAddTask(null)}
-          className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <PlusIcon className="size-3" />
-          Add general note
-        </button>
+      {/* Empty state for today when the current view has no tasks */}
+      {isToday && pieceGroups.length === 0 && (
+        <div className="mb-3">
+          {focusedPieceId && focusedPieceName && (
+            <div className="flex items-center gap-1.5 mb-1.5 px-1">
+              <h3 className="text-sm font-medium text-muted-foreground">
+                {focusedPieceName}
+              </h3>
+            </div>
+          )}
+          <button
+            onClick={() => handleAddTask(focusedPieceId)}
+            className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <PlusIcon className="size-3" />
+            No practice yet today. Hit record or add a task.
+          </button>
+        </div>
       )}
+
+      {isToday && <hr className="mt-8 border-border" />}
     </div>
   );
 }
@@ -205,7 +294,9 @@ export function PracticeTable({
 }: {
   initialData: { items: FeedDay[]; nextCursor: string | null };
 }) {
-  const { focusedPieceId } = useTaskTimer();
+  const { focusedPieceId, activePieces } = useTaskTimer();
+  const focusedPieceName =
+    activePieces.find((p) => p.id === focusedPieceId)?.name ?? null;
   const [days, setDays] = useState<FeedDay[]>(initialData.items);
   const [cursor, setCursor] = useState<string | null>(initialData.nextCursor);
   const [loading, setLoading] = useState(false);
@@ -328,13 +419,34 @@ export function PracticeTable({
     return () => observer.disconnect();
   }, [cursor, loadMore]);
 
+  const tomorrowStr = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return localDate(d);
+  })();
+  const hasTomorrow = days.some((d) => d.date === tomorrowStr);
+
+  // Always include today in the displayed list so we can render an empty state
+  // even when nothing has been logged yet.
+  const todayStr = localDate();
+  const displayDays = days.some((d) => d.date === todayStr)
+    ? days
+    : [
+        ...days.filter((d) => d.date > todayStr),
+        { date: todayStr, tasks: [], timeSummary: [] } as FeedDay,
+        ...days.filter((d) => d.date < todayStr),
+      ];
+
   return (
     <div className="pl-8">
-      {days.map((day) => (
+      {displayDays.map((day) => (
         <DayGroup
           key={day.date}
           day={day}
           focusedPieceId={focusedPieceId}
+          focusedPieceName={focusedPieceName}
+          activePieces={activePieces}
+          hasTomorrow={hasTomorrow}
           onReorder={handleReorder}
         />
       ))}
@@ -347,11 +459,6 @@ export function PracticeTable({
         </div>
       )}
 
-      {days.length === 0 && (
-        <div className="py-12 text-center text-muted-foreground">
-          No practice tasks yet. Start by adding a task!
-        </div>
-      )}
     </div>
   );
 }
