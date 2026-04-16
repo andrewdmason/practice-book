@@ -13,8 +13,9 @@ type MetronomeContextValue = {
   bpm: number;
   setBpm: (bpm: number) => void;
   isActive: boolean;
+  activeSourceId: string | null;
   toggle: () => void;
-  start: (bpm?: number) => void;
+  start: (bpm?: number, sourceId?: string | null) => void;
   stop: () => void;
   beatPulse: number;
 };
@@ -81,6 +82,7 @@ function saveState(bpm: number, isActive: boolean) {
 export function MetronomeProvider({ children }: { children: React.ReactNode }) {
   const [bpm, setBpmState] = useState(DEFAULT_BPM);
   const [isActive, setIsActive] = useState(false);
+  const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [beatPulse, setBeatPulse] = useState(0);
   const [restored, setRestored] = useState(false);
   const hasBeenStarted = useRef(false);
@@ -199,7 +201,7 @@ export function MetronomeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const start = useCallback(
-    (newBpm?: number) => {
+    (newBpm?: number, sourceId?: string | null) => {
       if (newBpm !== undefined) {
         const clamped = clampBpm(newBpm);
         setBpmState(clamped);
@@ -207,6 +209,7 @@ export function MetronomeProvider({ children }: { children: React.ReactNode }) {
       }
       hasBeenStarted.current = true;
       setIsActive(true);
+      setActiveSourceId(sourceId ?? null);
       // Stop existing scheduler before starting fresh
       stopScheduler();
       // Use microtask to ensure state is updated before starting
@@ -217,6 +220,7 @@ export function MetronomeProvider({ children }: { children: React.ReactNode }) {
 
   const stop = useCallback(() => {
     setIsActive(false);
+    setActiveSourceId(null);
     stopScheduler();
   }, [stopScheduler]);
 
@@ -327,7 +331,7 @@ export function MetronomeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <MetronomeContext.Provider
-      value={{ bpm, setBpm, isActive, toggle, start, stop, beatPulse }}
+      value={{ bpm, setBpm, isActive, activeSourceId, toggle, start, stop, beatPulse }}
     >
       {children}
     </MetronomeContext.Provider>

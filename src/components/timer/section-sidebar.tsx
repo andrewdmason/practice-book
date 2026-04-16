@@ -1,9 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Play, Pause, PlusIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { useTimerState } from "@/components/timer/timer-context";
 import { useMetronome } from "@/components/metronome/metronome-context";
 import { useVideo } from "@/components/video/video-context";
 import {
@@ -14,7 +13,6 @@ import type {
   PieceSectionWithChildren,
   PieceSection,
   SectionStatus,
-  TimerTarget,
 } from "@/lib/types";
 import {
   SECTION_STATUS_LABELS,
@@ -41,7 +39,7 @@ export function SectionSidebar({
   composer: string | null;
   onSectionsChanged: () => void;
   onStatusChange?: (sectionId: string, status: SectionStatus) => void;
-  onAddTask?: (sectionId: string, metronomeSpeed: number | null, tomorrow?: boolean) => void;
+  onAddTask?: (section: PieceSection, metronomeSpeed: number | null, tomorrow?: boolean) => void;
 }) {
   const allSections = flattenSections(sections);
   const video = useVideo();
@@ -110,64 +108,22 @@ function SectionRow({
   composer: string | null;
   onSectionsChanged: () => void;
   onStatusChange?: (sectionId: string, status: SectionStatus) => void;
-  onAddTask?: (sectionId: string, metronomeSpeed: number | null, tomorrow?: boolean) => void;
+  onAddTask?: (section: PieceSection, metronomeSpeed: number | null, tomorrow?: boolean) => void;
   isFirst: boolean;
   isLast: boolean;
   playingSectionId: string | null;
 }) {
-  const { isRunning, currentTarget, focusedTarget, setFocusedTarget, startTimer, switchTarget, stopTimer } = useTimerState();
   const { start: startMetronome, isActive: metronomeActive } = useMetronome();
   const video = useVideo();
   const [editingTempo, setEditingTempo] = useState(false);
   const [tempoValue, setTempoValue] = useState(
     String(section.target_tempo ?? "")
   );
-  const clickTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const effectiveTempo = section.target_tempo ?? pieceTargetTempo;
   const tempo = practiceTempo(section.status, effectiveTempo);
 
-  const sectionTarget: TimerTarget = {
-    pieceId,
-    pieceName,
-    composer,
-    kind: "piece",
-    sectionId: section.id,
-    sectionLabel: section.label,
-  };
-
-  const isActiveSection =
-    (isRunning && currentTarget?.kind === "piece" && currentTarget.sectionId === section.id) ||
-    (!isRunning && focusedTarget?.kind === "piece" && focusedTarget.sectionId === section.id);
-
-  const handleLabelClick = () => {
-    // Delay single-click to avoid firing before double-click
-    if (clickTimeout.current) clearTimeout(clickTimeout.current);
-    clickTimeout.current = setTimeout(() => {
-      if (isRunning) {
-        if (currentTarget?.kind === "piece" && currentTarget.sectionId === section.id) {
-          switchTarget({ pieceId, pieceName, composer, kind: "piece" });
-        } else {
-          switchTarget(sectionTarget);
-        }
-      } else {
-        if (focusedTarget?.kind === "piece" && focusedTarget.sectionId === section.id) {
-          setFocusedTarget({ pieceId, pieceName, composer, kind: "piece" });
-        } else {
-          setFocusedTarget(sectionTarget);
-        }
-      }
-    }, 200);
-  };
-
-  const handleLabelDoubleClick = () => {
-    if (clickTimeout.current) clearTimeout(clickTimeout.current);
-    if (isRunning) {
-      stopTimer();
-    } else {
-      startTimer(sectionTarget);
-    }
-  };
+  const isActiveSection = false; // No session-level section tracking anymore
 
   const handleStatusCycle = (reverse = false) => {
     const next = (reverse
@@ -184,11 +140,6 @@ function SectionRow({
 
   const handlePracticeTempoClick = () => {
     if (!tempo) return;
-    if (isRunning) {
-      switchTarget(sectionTarget);
-    } else {
-      startTimer(sectionTarget);
-    }
     startMetronome(tempo);
   };
 
@@ -209,8 +160,9 @@ function SectionRow({
     >
       {/* Label */}
       <button
-        onClick={handleLabelClick}
-        onDoubleClick={handleLabelDoubleClick}
+        onClick={() => {
+          if (tempo) startMetronome(tempo);
+        }}
         className={cn(
           "text-xs font-medium w-8 shrink-0 text-left cursor-pointer transition-colors",
           isActiveSection
@@ -224,7 +176,7 @@ function SectionRow({
       {/* Add task button — visible on hover, next to label */}
       {onAddTask && (
         <button
-          onClick={(e) => onAddTask(section.id, tempo, e.altKey)}
+          onClick={(e) => onAddTask(section, tempo, e.altKey)}
           className="shrink-0 opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-foreground transition-opacity mr-1"
           title="Add task for this section (⌥-click for tomorrow)"
         >

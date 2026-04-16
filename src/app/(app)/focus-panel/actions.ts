@@ -88,6 +88,21 @@ export async function deleteAssignment(assignmentId: string) {
   revalidatePath("/");
 }
 
+export async function updateAssignmentText(assignmentId: string, text: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("assignments")
+    .update({ text, updated_at: new Date().toISOString() })
+    .eq("id", assignmentId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/");
+}
+
 export type AssignmentWithPiece = Assignment & {
   piece_name: string;
   piece_composer: string | null;
@@ -153,18 +168,18 @@ export async function getRepertoireOverview(): Promise<RepertoireOverviewItem[]>
     }
   }
 
-  // Get last played dates
-  const { data: entries } = await supabase
-    .from("timer_entries")
-    .select("piece_id, started_at")
+  // Get last played dates from practice_tasks
+  const { data: tasks } = await supabase
+    .from("practice_tasks")
+    .select("piece_id, created_at")
     .in("piece_id", pieceIds)
-    .order("started_at", { ascending: false });
+    .order("created_at", { ascending: false });
 
   const lastPlayedMap = new Map<string, string>();
-  if (entries) {
-    for (const entry of entries) {
-      if (!lastPlayedMap.has(entry.piece_id)) {
-        lastPlayedMap.set(entry.piece_id, entry.started_at);
+  if (tasks) {
+    for (const task of tasks) {
+      if (!lastPlayedMap.has(task.piece_id)) {
+        lastPlayedMap.set(task.piece_id, task.created_at);
       }
     }
   }

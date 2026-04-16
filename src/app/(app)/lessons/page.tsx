@@ -1,5 +1,15 @@
-import { redirect } from "next/navigation";
+import { LessonsList } from "@/components/lessons/lessons-list";
+import { RepertoireFocusPanel } from "@/components/timer/repertoire-focus-panel";
+import { TwoColumnLayout } from "@/components/layout/two-column-layout";
+import { getLessonsByDate } from "@/app/(app)/lessons/actions";
 
-export default function LessonsPage() {
-  redirect("/?type=lesson");
+export default async function LessonsPage() {
+  const initialData = await getLessonsByDate();
+
+  return (
+    <TwoColumnLayout
+      left={<LessonsList initialData={initialData} />}
+      right={<RepertoireFocusPanel />}
+    />
+  );
 }

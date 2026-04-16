@@ -31,33 +31,6 @@ export type Piece = {
   updated_at: string;
 };
 
-// Timer types
-export type PracticeSession = {
-  id: string;
-  date: string;
-  started_at: string;
-  ended_at: string | null;
-  created_at: string;
-};
-
-export type TimerEntry = {
-  id: string;
-  session_id: string;
-  piece_id: string;
-  section_id: string | null;
-  started_at: string;
-  ended_at: string | null;
-};
-
-export type TimerTarget = {
-  pieceId: string;
-  pieceName: string;
-  composer: string | null;
-  kind: PieceKind;
-  sectionId?: string;
-  sectionLabel?: string;
-};
-
 export type TimeSummaryEntry = {
   piece_id: string;
   piece_name: string;
@@ -90,9 +63,6 @@ export const PIECE_STATUS_LABELS: Record<PieceStatus, string> = {
 
 export const PIECE_STATUSES: PieceStatus[] = ["active", "upcoming", "archived"];
 
-// Editor types
-export type PracticeEntryType = "practice" | "lesson";
-export type EntrySectionCategory = "piece" | "general";
 
 export type Assignment = {
   id: string;
@@ -106,7 +76,7 @@ export type Assignment = {
 
 export type PracticeTask = {
   id: string;
-  piece_id: string;
+  piece_id: string | null;
   section_id: string | null;
   date: string;
   text: string;
@@ -115,9 +85,32 @@ export type PracticeTask = {
   timer_remaining_seconds: number;
   completed: boolean;
   completed_at: string | null;
+  started_at: string | null;
+  ended_at: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
+};
+
+export type LessonEntry = {
+  id: string;
+  piece_id: string | null;
+  date: string;
+  notes: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LessonEntryWithPiece = LessonEntry & {
+  piece_name: string | null;
+  piece_composer: string | null;
+};
+
+export type LessonDay = {
+  date: string;
+  entries: LessonEntryWithPiece[];
+  timeSummary: LessonTimeSummary;
 };
 
 export type PieceSuggestion = {
@@ -209,30 +202,18 @@ export type RepertoireOverviewItem = {
 };
 
 // Feed types
-export type PracticeEntrySection = {
-  id: string;
-  practice_entry_id: string;
-  piece_id: string | null;
-  category: EntrySectionCategory;
-  content: unknown;
-  sort_order: number;
-  piece_name?: string | null;
-  composer?: string | null;
-};
-
-export type FeedPracticeEntry = {
-  id: string;
-  date: string;
-  type: PracticeEntryType;
-  sections: PracticeEntrySection[];
+export type TaskWithDetails = PracticeTask & {
+  piece_name: string | null;
+  piece_composer: string | null;
+  piece_kind: PieceKind | null;
+  section_label: string | null;
+  section_status: SectionStatus | null;
 };
 
 export type FeedDay = {
   date: string;
-  practiceEntry: FeedPracticeEntry | null;
-  lessons: FeedPracticeEntry[];
+  tasks: TaskWithDetails[];
   timeSummary: TimeSummaryEntry[];
-  lessonTimeSummaries?: Record<string, LessonTimeSummary>;
   /** Status changes grouped by piece_id for this date */
   statusChangesByPiece?: Record<string, StatusChange[]>;
 };
