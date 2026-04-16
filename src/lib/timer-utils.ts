@@ -23,9 +23,3 @@ export function formatMinutes(totalSeconds: number): string {
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
 }
-
-export const TIMER_CATEGORY_LABELS: Record<string, string> = {
-  piece: "Piece",
-  technique: "Technique",
-  sight_reading: "Sight Reading",
-};

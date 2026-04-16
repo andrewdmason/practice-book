@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { localDate, getUserTimezone } from "@/lib/date-utils";
-import type { TimerTarget, TimerCategory, TimeSummaryEntry, PieceWithLastPlayed } from "@/lib/types";
+import type { TimerTarget, TimeSummaryEntry, PieceWithLastPlayed, PieceKind } from "@/lib/types";
+import { SYSTEM_PIECE_IDS } from "@/lib/types";
 import { ensureTodayEntry } from "@/app/(app)/feed/actions";
 
 /**
@@ -60,9 +61,8 @@ export async function startSession(target: TimerTarget) {
     .from("timer_entries")
     .insert({
       session_id: session.id,
-      piece_id: target.category === "piece" ? target.pieceId : null,
-      section_id: target.category === "piece" ? (target.sectionId ?? null) : null,
-      category: target.category as TimerCategory,
+      piece_id: target.pieceId,
+      section_id: target.sectionId ?? null,
       started_at: now,
     })
     .select("id")
@@ -72,10 +72,7 @@ export async function startSession(target: TimerTarget) {
     return { error: entryError?.message ?? "Failed to create timer entry" };
   }
 
-  // Ensure a piece section exists so it renders in the feed
-  if (target.category === "piece" && target.pieceId) {
-    await ensurePieceSection(target.pieceId);
-  }
+  await ensurePieceSection(target.pieceId);
 
   return { sessionId: session.id, entryId: entry.id, startedAt: now };
 }
@@ -101,9 +98,8 @@ export async function switchEntry(
     .from("timer_entries")
     .insert({
       session_id: sessionId,
-      piece_id: newTarget.category === "piece" ? newTarget.pieceId : null,
-      section_id: newTarget.category === "piece" ? (newTarget.sectionId ?? null) : null,
-      category: newTarget.category as TimerCategory,
+      piece_id: newTarget.pieceId,
+      section_id: newTarget.sectionId ?? null,
       started_at: now,
     })
     .select("id")
@@ -113,10 +109,7 @@ export async function switchEntry(
     return { error: entryError?.message ?? "Failed to create timer entry" };
   }
 
-  // Ensure a piece section exists so it renders in the feed
-  if (newTarget.category === "piece" && newTarget.pieceId) {
-    await ensurePieceSection(newTarget.pieceId);
-  }
+  await ensurePieceSection(newTarget.pieceId);
 
   return { entryId: entry.id, switchedAt: now };
 }
@@ -185,27 +178,27 @@ export async function getTodaySummary(): Promise<TimeSummaryEntry[]> {
   const { data: entries } = sessionIds.length > 0
     ? await supabase
         .from("timer_entries")
-        .select("piece_id, category, started_at, ended_at")
+        .select("piece_id, started_at, ended_at")
         .in("session_id", sessionIds)
-    : { data: [] as { piece_id: string | null; category: string; started_at: string; ended_at: string | null }[] };
+    : { data: [] as { piece_id: string; started_at: string; ended_at: string | null }[] };
 
   if ((!entries || entries.length === 0) && tasks.length === 0) {
     return [];
   }
 
-  // Get piece names for all pieces referenced
+  // Get piece info for all pieces referenced
   const allPieceIds = new Set<string>();
-  for (const e of entries ?? []) { if (e.piece_id) allPieceIds.add(e.piece_id); }
-  for (const t of tasks) { if (t.piece_id) allPieceIds.add(t.piece_id); }
+  for (const e of entries ?? []) { allPieceIds.add(e.piece_id); }
+  for (const t of tasks) { allPieceIds.add(t.piece_id); }
 
-  let pieceNames: Record<string, string> = {};
+  let pieceInfo: Record<string, { name: string; kind: PieceKind }> = {};
   if (allPieceIds.size > 0) {
     const { data: pieces } = await supabase
       .from("pieces")
-      .select("id, name")
+      .select("id, name, kind")
       .in("id", [...allPieceIds]);
     if (pieces) {
-      pieceNames = Object.fromEntries(pieces.map((p) => [p.id, p.name]));
+      pieceInfo = Object.fromEntries(pieces.map((p) => [p.id, { name: p.name, kind: p.kind as PieceKind }]));
     }
   }
 
@@ -214,7 +207,7 @@ export async function getTodaySummary(): Promise<TimeSummaryEntry[]> {
   const now = Date.now();
 
   for (const entry of entries ?? []) {
-    const key = entry.piece_id ?? entry.category;
+    const key = entry.piece_id;
     const start = new Date(entry.started_at).getTime();
     const end = entry.ended_at ? new Date(entry.ended_at).getTime() : now;
     const seconds = Math.floor((end - start) / 1000);
@@ -223,10 +216,11 @@ export async function getTodaySummary(): Promise<TimeSummaryEntry[]> {
     if (existing) {
       existing.total_seconds += seconds;
     } else {
+      const info = pieceInfo[entry.piece_id];
       groups.set(key, {
-        category: entry.category as TimerCategory,
         piece_id: entry.piece_id,
-        piece_name: entry.piece_id ? (pieceNames[entry.piece_id] ?? null) : null,
+        piece_name: info?.name ?? "Unknown",
+        kind: info?.kind ?? "piece",
         total_seconds: seconds,
       });
     }
@@ -242,10 +236,11 @@ export async function getTodaySummary(): Promise<TimeSummaryEntry[]> {
     if (existing) {
       existing.total_seconds += elapsed;
     } else {
+      const info = pieceInfo[task.piece_id];
       groups.set(key, {
-        category: "piece" as TimerCategory,
         piece_id: task.piece_id,
-        piece_name: pieceNames[task.piece_id] ?? null,
+        piece_name: info?.name ?? "Unknown",
+        kind: info?.kind ?? "piece",
         total_seconds: elapsed,
       });
     }
@@ -261,6 +256,7 @@ export async function getPiecesWithLastPlayed(): Promise<PieceWithLastPlayed[]> 
     .from("pieces")
     .select("*")
     .eq("status", "active")
+    .not("id", "in", `(${SYSTEM_PIECE_IDS.join(",")})`)
     .order("name");
 
   if (!pieces || pieces.length === 0) {
@@ -279,7 +275,7 @@ export async function getPiecesWithLastPlayed(): Promise<PieceWithLastPlayed[]> 
   const lastPlayedMap = new Map<string, string>();
   if (entries) {
     for (const entry of entries) {
-      if (entry.piece_id && !lastPlayedMap.has(entry.piece_id)) {
+      if (!lastPlayedMap.has(entry.piece_id)) {
         lastPlayedMap.set(entry.piece_id, entry.started_at);
       }
     }

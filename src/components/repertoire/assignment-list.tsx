@@ -1,18 +1,56 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { CheckCircle2Icon, PencilIcon } from "lucide-react";
-import { ProgressCircle } from "@/components/ui/progress-circle";
-import { updateAssignmentProgress, updateAssignmentNote } from "@/app/(app)/focus-panel/actions";
-import { getNextBounceProgress } from "@/lib/progress-bounce";
+import { useState, useRef } from "react";
+import { CheckCircle2Icon, PlusIcon, Trash2Icon } from "lucide-react";
+import { toggleAssignmentCompleted, createAssignment, deleteAssignment } from "@/app/(app)/focus-panel/actions";
 import type { Assignment } from "@/lib/types";
 
-export function AssignmentList({ initialAssignments }: { initialAssignments: Assignment[] }) {
+export function AssignmentList({ pieceId, initialAssignments }: { pieceId?: string; initialAssignments: Assignment[] }) {
   const [assignments, setAssignments] = useState(initialAssignments);
+  const [newText, setNewText] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  if (assignments.length === 0) return null;
+  const openCount = assignments.filter((t) => !t.completed).length;
 
-  const openCount = assignments.filter((t) => t.progress < 4).length;
+  const handleCreate = async () => {
+    const text = newText.trim();
+    if (!text || !pieceId) return;
+    setNewText("");
+    // Optimistic: add to list
+    const tempId = crypto.randomUUID();
+    const tempAssignment: Assignment = {
+      id: tempId,
+      piece_id: pieceId,
+      text,
+      completed: false,
+      completed_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setAssignments((prev) => [tempAssignment, ...prev]);
+    const realId = await createAssignment(pieceId, text);
+    setAssignments((prev) =>
+      prev.map((a) => (a.id === tempId ? { ...a, id: realId } : a))
+    );
+    inputRef.current?.focus();
+  };
+
+  const handleToggle = async (assignment: Assignment) => {
+    const newCompleted = !assignment.completed;
+    setAssignments((prev) =>
+      prev.map((t) =>
+        t.id === assignment.id
+          ? { ...t, completed: newCompleted, completed_at: newCompleted ? new Date().toISOString() : null }
+          : t
+      )
+    );
+    await toggleAssignmentCompleted(assignment.id, newCompleted);
+  };
+
+  const handleDelete = async (assignmentId: string) => {
+    setAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
+    await deleteAssignment(assignmentId);
+  };
 
   return (
     <div>
@@ -25,139 +63,65 @@ export function AssignmentList({ initialAssignments }: { initialAssignments: Ass
           </span>
         )}
       </h3>
+
+      {/* New assignment input */}
+      {pieceId && (
+        <form
+          onSubmit={(e) => { e.preventDefault(); handleCreate(); }}
+          className="flex items-center gap-2 mb-3"
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            value={newText}
+            onChange={(e) => setNewText(e.target.value)}
+            placeholder="Add assignment..."
+            className="flex-1 rounded border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+          <button
+            type="submit"
+            disabled={!newText.trim()}
+            className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
+          >
+            <PlusIcon className="size-4" />
+          </button>
+        </form>
+      )}
+
       <div className="space-y-2">
         {assignments.map((assignment) => (
-          <AssignmentRow
-            key={assignment.id}
-            assignment={assignment}
-            onProgressChange={(progress) =>
-              setAssignments((prev) =>
-                prev.map((t) => (t.id === assignment.id ? { ...t, progress } : t))
-              )
-            }
-            onNoteChange={(note) =>
-              setAssignments((prev) =>
-                prev.map((t) => (t.id === assignment.id ? { ...t, note } : t))
-              )
-            }
-          />
+          <div key={assignment.id} className="group flex items-start gap-2 text-sm">
+            <button
+              type="button"
+              onClick={() => handleToggle(assignment)}
+              className="mt-0.5 shrink-0"
+            >
+              <div className={`size-4 rounded-full border-2 flex items-center justify-center transition-colors ${
+                assignment.completed
+                  ? "bg-primary border-primary text-primary-foreground"
+                  : "border-muted-foreground/40 hover:border-primary"
+              }`}>
+                {assignment.completed && (
+                  <svg className="size-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M2 6l3 3 5-5" />
+                  </svg>
+                )}
+              </div>
+            </button>
+            <span className={`flex-1 ${assignment.completed ? "line-through text-muted-foreground" : ""}`}>
+              {assignment.text}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleDelete(assignment.id)}
+              className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0 mt-0.5"
+              title="Delete assignment"
+            >
+              <Trash2Icon className="size-3" />
+            </button>
+          </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function AssignmentRow({
-  assignment,
-  onProgressChange,
-  onNoteChange,
-}: {
-  assignment: Assignment;
-  onProgressChange: (progress: number) => void;
-  onNoteChange: (note: string | null) => void;
-}) {
-  const [editingNote, setEditingNote] = useState(false);
-  const [noteValue, setNoteValue] = useState(assignment.note ?? "");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const handleClick = (e: React.MouseEvent) => {
-    let newProgress: number;
-    if (e.altKey) {
-      newProgress = (assignment.progress + 1) % 5;
-    } else {
-      newProgress = assignment.progress === 4 ? 0 : 4;
-    }
-    onProgressChange(newProgress);
-    updateAssignmentProgress(assignment.id, newProgress);
-  };
-
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const newProgress = getNextBounceProgress(assignment.id, assignment.progress);
-    onProgressChange(newProgress);
-    updateAssignmentProgress(assignment.id, newProgress);
-  };
-
-  const handleNoteSave = () => {
-    setEditingNote(false);
-    const trimmed = noteValue.trim() || null;
-    if (trimmed !== assignment.note) {
-      onNoteChange(trimmed);
-      window.dispatchEvent(
-        new CustomEvent("assignment-note-updated", {
-          detail: { taskId: assignment.id, note: trimmed },
-        })
-      );
-      updateAssignmentNote(assignment.id, trimmed);
-    }
-  };
-
-  useEffect(() => {
-    if (editingNote && textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, [editingNote]);
-
-  return (
-    <div className="group">
-      <div className="flex items-start gap-2 text-sm">
-        <button
-          type="button"
-          onClick={handleClick}
-          onContextMenu={handleContextMenu}
-          className="mt-0.5 shrink-0 text-primary"
-        >
-          <ProgressCircle progress={assignment.progress} size={16} />
-        </button>
-        <span
-          className={`flex-1 ${assignment.progress === 4 ? "line-through text-muted-foreground" : ""}`}
-        >
-          {assignment.text}
-        </span>
-        {!editingNote && !assignment.note && (
-          <button
-            type="button"
-            onClick={() => setEditingNote(true)}
-            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity shrink-0 mt-0.5"
-          >
-            <PencilIcon className="size-3" />
-          </button>
-        )}
-      </div>
-      {/* Existing note display */}
-      {assignment.note && !editingNote && (
-        <p
-          className="ml-6 mt-0.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
-          onClick={() => {
-            setNoteValue(assignment.note ?? "");
-            setEditingNote(true);
-          }}
-        >
-          {assignment.note}
-        </p>
-      )}
-      {/* Note editing */}
-      {editingNote && (
-        <textarea
-          ref={textareaRef}
-          value={noteValue}
-          onChange={(e) => setNoteValue(e.target.value)}
-          onBlur={handleNoteSave}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleNoteSave();
-            }
-            if (e.key === "Escape") {
-              setEditingNote(false);
-              setNoteValue(assignment.note ?? "");
-            }
-          }}
-          className="ml-6 mt-1 w-[calc(100%-1.5rem)] rounded border bg-background px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-          rows={2}
-          placeholder="Add a note..."
-        />
-      )}
     </div>
   );
 }

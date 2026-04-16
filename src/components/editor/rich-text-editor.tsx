@@ -9,15 +9,13 @@ import { Extension, textblockTypeInputRule, type JSONContent } from "@tiptap/cor
 import { PluginKey } from "@tiptap/pm/state";
 import { BubbleToolbar } from "./bubble-toolbar";
 import { MetronomeMarking } from "./extensions/metronome-marking";
-import { AssignmentListExtension, AssignmentItemExtension } from "./extensions/inline-task";
+import { LegacyTaskList, LegacyTaskItem } from "./extensions/legacy-task-list";
 import { createMentionSuggestion } from "./extensions/mention-suggestion";
-import type { SourceType } from "@/lib/types";
 
 type EditorContext = "practice_entry" | "lesson";
 
 type RichTextEditorProps = {
   context: EditorContext;
-  sourceType: SourceType;
   sourceId: string;
   initialContent?: JSONContent | null;
   onSave?: (content: JSONContent) => Promise<void>;
@@ -59,7 +57,6 @@ function createMentionExtension() {
 
 export function RichTextEditor({
   context,
-  sourceType,
   sourceId,
   initialContent,
   onSave,
@@ -79,8 +76,8 @@ export function RichTextEditor({
       placeholder: placeholderText,
     }),
     MetronomeMarking,
-    AssignmentListExtension,
-    AssignmentItemExtension.configure({ nested: false }),
+    LegacyTaskList,
+    LegacyTaskItem,
     createMentionExtension(),
     HeadingShortcuts,
   ];

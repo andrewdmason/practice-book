@@ -27,7 +27,7 @@ export function ScrubberBar() {
 
   const activeTarget = isRunning ? currentTarget : focusedTarget;
   const activePieceId =
-    activeTarget?.category === "piece" ? activeTarget.pieceId : null;
+    activeTarget?.kind === "piece" ? activeTarget.pieceId : null;
 
   // Load video data when focused piece changes
   const [sections, setSections] = useState<PieceSection[]>([]);
@@ -71,17 +71,17 @@ export function ScrubberBar() {
     : null;
 
   const handleScrubberSectionClick = (sectionId: string) => {
-    if (!activeTarget || activeTarget.category !== "piece") return;
+    if (!activeTarget || activeTarget.kind !== "piece") return;
 
     const section = sections.find((s) => s.id === sectionId);
     if (!section) return;
 
     // Build section target
     const sectionTarget: TimerTarget = {
-      category: "piece",
       pieceId: activeTarget.pieceId,
       pieceName: activeTarget.pieceName,
       composer: activeTarget.composer,
+      kind: activeTarget.kind,
       sectionId: section.id,
       sectionLabel: section.label,
     };
@@ -125,7 +125,7 @@ export function ScrubberBar() {
   };
 
   const activeSectionId =
-    activeTarget?.category === "piece" ? activeTarget.sectionId : undefined;
+    activeTarget?.kind === "piece" ? activeTarget.sectionId : undefined;
 
   if (isZenMode) return null;
   if (pathname !== "/" && !isRunning) return null;

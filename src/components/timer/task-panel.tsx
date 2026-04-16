@@ -24,7 +24,7 @@ import {
 } from "@/app/(app)/timer/task-actions";
 import { getSections } from "@/app/(app)/repertoire/section-actions";
 import { flattenSections } from "@/lib/section-utils";
-import type { PracticeTask } from "@/lib/types";
+import type { PracticeTask, TimerTarget } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function formatTime(seconds: number): string {
@@ -386,11 +386,11 @@ function InlineTaskRow({
         task.id,
         displaySeconds > 0 ? displaySeconds : task.timer_seconds
       );
-      const target = {
-        category: "piece" as const,
+      const target: TimerTarget = {
         pieceId,
         pieceName,
         composer,
+        kind: "piece",
         ...(task.section_id && sectionLabel
           ? { sectionId: task.section_id, sectionLabel }
           : {}),

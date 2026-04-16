@@ -15,8 +15,6 @@ import {
   addManualTimerEntry,
   deleteTimerEntry,
 } from "@/app/(app)/feed/actions";
-import type { TimerCategory } from "@/lib/types";
-
 type TimerEntryRow = {
   id: string;
   started_at: string;
@@ -28,8 +26,7 @@ type SessionEntriesDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   date: string;
-  category: TimerCategory;
-  pieceId: string | null;
+  pieceId: string;
   label: string;
 };
 
@@ -101,7 +98,6 @@ export function SessionEntriesDialog({
   open,
   onOpenChange,
   date,
-  category,
   pieceId,
   label,
 }: SessionEntriesDialogProps) {
@@ -112,11 +108,11 @@ export function SessionEntriesDialog({
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    getTimerEntriesForSection(date, category, pieceId).then((data) => {
+    getTimerEntriesForSection(date, pieceId).then((data) => {
       setEntries(data);
       setLoading(false);
     });
-  }, [open, date, category, pieceId]);
+  }, [open, date, pieceId]);
 
   const handleDurationChange = (entryId: string, newSeconds: number) => {
     setEntries((prev) =>
@@ -162,7 +158,7 @@ export function SessionEntriesDialog({
     setFocusNewId(optimisticId);
 
     // Replace optimistic ID with real server ID once created
-    addManualTimerEntry(date, category, pieceId, 0).then((result) => {
+    addManualTimerEntry(date, pieceId, 0).then((result) => {
       setEntries((prev) =>
         prev.map((e) => (e.id === optimisticId ? { ...e, id: result.id } : e))
       );

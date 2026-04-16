@@ -19,7 +19,7 @@ const ProgressGrid = dynamic(() =>
 );
 import { Separator } from "@/components/ui/separator";
 import {
-  getPieceFocusData,
+  getAssignmentsForPiece,
 } from "@/app/(app)/focus-panel/actions";
 import { getSections, getProgressSnapshots } from "@/app/(app)/repertoire/section-actions";
 import { getVideos, getTimestamps } from "@/app/(app)/repertoire/video-actions";
@@ -55,7 +55,7 @@ export default async function PieceDetailPage({
           .single()
           .then(({ data }) => data as Collection | null)
       : Promise.resolve(null),
-    getPieceFocusData(id),
+    getAssignmentsForPiece(id),
     getPieceCumulativeData(id),
     getSections(id),
     getVideos(id),
@@ -93,9 +93,9 @@ export default async function PieceDetailPage({
           initialTimestamps={videoTimestamps}
         />
 
-        {(focusData.openAssignments.length > 0 || focusData.completedAssignments.length > 0) && <Separator />}
+        <Separator />
 
-        <AssignmentList initialAssignments={[...focusData.openAssignments, ...focusData.completedAssignments]} />
+        <AssignmentList pieceId={id} initialAssignments={[...focusData.openAssignments, ...focusData.completedAssignments]} />
 
         <Separator />
 

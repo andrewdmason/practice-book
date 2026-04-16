@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { addSection } from "@/app/(app)/feed/actions";
 import { createPiece } from "@/app/(app)/repertoire/actions";
 import type { PracticeEntrySection, PieceSuggestion } from "@/lib/types";
+import { TECHNIQUE_PIECE_ID, SIGHT_READING_PIECE_ID } from "@/lib/types";
 
 type AddSectionButtonProps = {
   entryId: string;
@@ -39,8 +40,8 @@ export function AddSectionButton({
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  const hasTechnique = existingSections.some((s) => s.category === "technique");
-  const hasSightReading = existingSections.some((s) => s.category === "sight_reading");
+  const hasTechnique = existingSections.some((s) => s.piece_id === TECHNIQUE_PIECE_ID);
+  const hasSightReading = existingSections.some((s) => s.piece_id === SIGHT_READING_PIECE_ID);
   const hasGeneral = existingSections.some((s) => s.category === "general");
 
   // Only exclude pieces whose section has content.
@@ -85,7 +86,7 @@ export function AddSectionButton({
   }, [open]);
 
   const handleAdd = useCallback(
-    (category: "technique" | "sight_reading" | "general" | "piece", pieceId?: string) => {
+    (category: "general" | "piece", pieceId?: string) => {
       setOpen(false);
 
       // Optimistic: add section to UI immediately
@@ -217,7 +218,7 @@ export function AddSectionButton({
             {!hasTechnique && (
               <button
                 type="button"
-                onClick={() => handleAdd("technique")}
+                onClick={() => handleAdd("piece", TECHNIQUE_PIECE_ID)}
                 className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-sm hover:bg-accent hover:text-accent-foreground outline-none"
               >
                 <PencilIcon className="size-4" />
@@ -227,7 +228,7 @@ export function AddSectionButton({
             {!hasSightReading && (
               <button
                 type="button"
-                onClick={() => handleAdd("sight_reading")}
+                onClick={() => handleAdd("piece", SIGHT_READING_PIECE_ID)}
                 className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-sm hover:bg-accent hover:text-accent-foreground outline-none"
               >
                 <EyeIcon className="size-4" />
