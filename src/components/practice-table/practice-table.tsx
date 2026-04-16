@@ -25,6 +25,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { FeedDay, TaskWithDetails, PieceKind, Piece } from "@/lib/types";
@@ -201,15 +202,19 @@ function DayGroup({
             {totalMinutes}m
           </span>
         )}
-        {!focusedPieceId && addablePieces.length > 0 && (
+        {!focusedPieceId && (
           <DropdownMenu>
             <DropdownMenuTrigger
               className="inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground size-6 opacity-0 group-hover/day:opacity-100 data-[state=open]:opacity-100 transition-opacity"
-              title="Add task for piece"
+              title="Add task"
             >
               <PlusIcon className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => handleAddTask(null)}>
+                <span className="text-sm">General note</span>
+              </DropdownMenuItem>
+              {addablePieces.length > 0 && <DropdownMenuSeparator />}
               {addablePieces.map((piece) => (
                 <DropdownMenuItem
                   key={piece.id}
