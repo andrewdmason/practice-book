@@ -31,9 +31,6 @@ export type Piece = {
   updated_at: string;
 };
 
-// Practice task type
-export type PracticeTaskType = "practice" | "lesson";
-
 export type TimeSummaryEntry = {
   piece_id: string;
   piece_name: string;
@@ -82,7 +79,6 @@ export type PracticeTask = {
   piece_id: string | null;
   section_id: string | null;
   date: string;
-  type: PracticeTaskType;
   text: string;
   metronome_speed: number | null;
   timer_seconds: number;
@@ -94,6 +90,27 @@ export type PracticeTask = {
   sort_order: number;
   created_at: string;
   updated_at: string;
+};
+
+export type LessonEntry = {
+  id: string;
+  piece_id: string | null;
+  date: string;
+  notes: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LessonEntryWithPiece = LessonEntry & {
+  piece_name: string | null;
+  piece_composer: string | null;
+};
+
+export type LessonDay = {
+  date: string;
+  entries: LessonEntryWithPiece[];
+  timeSummary: LessonTimeSummary;
 };
 
 export type PieceSuggestion = {

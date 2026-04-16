@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
   GripVerticalIcon,
   PlusIcon,
-  ClockIcon,
-  PauseIcon,
   CircleIcon,
   CopyPlusIcon,
   MicIcon,
@@ -20,8 +18,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { useMetronome } from "@/components/metronome/metronome-context";
+import { TimerCell } from "@/components/practice-table/timer-cell";
 import {
   updateTaskField,
   deleteTask,
@@ -29,7 +33,6 @@ import {
   completeTask,
   uncompleteTask,
 } from "@/app/(app)/timer/task-actions";
-import { formatElapsed } from "@/lib/timer-utils";
 import type { TaskWithDetails, SectionStatus } from "@/lib/types";
 import { SECTION_STATUS_DOT_COLORS } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -46,12 +49,25 @@ export function TaskRow({
   const {
     activeTaskId,
     remainingSeconds,
+    isExpired,
     startTaskTimer,
     pauseTaskTimer,
   } = useTaskTimer();
 
   const isActive = activeTaskId === task.id;
+  const goalReached = isActive && isExpired;
   const elapsed = task.timer_seconds - (isActive ? remainingSeconds : task.timer_remaining_seconds);
+
+  const activeRowBg = goalReached ? "bg-green-500" : "bg-red-500";
+  const activeBorderClasses = goalReached
+    ? "border-r border-green-400 border-b-green-400 border-t-green-400"
+    : "border-r border-red-400 border-b-red-400 border-t-red-400";
+  const activeSectionBorderClasses = goalReached
+    ? "border-r border-green-400 border-b-green-400 border-l-green-400 border-t-green-400"
+    : "border-r border-red-400 border-b-red-400 border-l-red-400 border-t-red-400";
+  const activeNotesBorderClasses = goalReached
+    ? "border-r-green-400 border-b-green-400 border-t-green-400"
+    : "border-r-red-400 border-b-red-400 border-t-red-400";
 
   const {
     attributes,
@@ -76,13 +92,50 @@ export function TaskRow({
   const [editingMetronome, setEditingMetronome] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [optimisticCompleted, setOptimisticCompleted] = useState(task.completed);
-  const textRef = useRef<HTMLTextAreaElement>(null);
+  const [optimisticGoalSeconds, setOptimisticGoalSeconds] = useState(
+    task.timer_seconds
+  );
+  const [noteOpen, setNoteOpen] = useState(false);
+  const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
   const metronomeRef = useRef<HTMLInputElement>(null);
 
   // Sync optimistic state when server revalidation brings a new value
   useEffect(() => {
     setOptimisticCompleted(task.completed);
   }, [task.completed]);
+  useEffect(() => {
+    setOptimisticGoalSeconds(task.timer_seconds);
+  }, [task.timer_seconds]);
+
+  // Adopt the server's text when it changes — but not while the user is editing.
+  const [prevServerText, setPrevServerText] = useState(task.text);
+  if (task.text !== prevServerText) {
+    setPrevServerText(task.text);
+    if (!noteOpen) setText(task.text);
+  }
+
+  const autoGrowNote = useCallback(() => {
+    const el = noteTextareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  const handleNoteOpenChange = (open: boolean) => {
+    if (!open && text !== task.text) {
+      void updateTaskField(task.id, "text", text);
+    }
+    setNoteOpen(open);
+    if (open) {
+      requestAnimationFrame(() => {
+        const el = noteTextareaRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+        autoGrowNote();
+      });
+    }
+  };
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -100,12 +153,6 @@ export function TaskRow({
       pauseTaskTimer();
     } else {
       startTaskTimer(task.id, task.timer_remaining_seconds);
-    }
-  };
-
-  const handleTextBlur = () => {
-    if (text !== task.text) {
-      void updateTaskField(task.id, "text", text);
     }
   };
 
@@ -143,8 +190,6 @@ export function TaskRow({
       void uncompleteTask(task.id);
     }
   };
-
-  const timerGoalMinutes = Math.round(task.timer_seconds / 60);
 
   return (
     <div
@@ -200,8 +245,8 @@ export function TaskRow({
       {/* Row content — Notion-style: bordered cells, no fill */}
       <div
         className={cn(
-          "flex-1 min-w-0 grid grid-cols-[32px_56px_72px_88px_56px_1fr] items-stretch text-xs transition-colors",
-          isActive ? "bg-red-500 text-white" : "text-foreground",
+          "flex-1 min-w-0 grid grid-cols-[32px_56px_72px_128px_1fr] items-stretch text-xs transition-colors",
+          isActive ? cn(activeRowBg, "text-white") : "text-foreground",
           optimisticCompleted && "opacity-50"
         )}
       >
@@ -221,7 +266,7 @@ export function TaskRow({
             "flex items-center gap-1 min-w-0 px-2 py-1.5 border-b border-l",
             isFirst && "border-t",
             !isActive && "border-r border-border/60",
-            isActive && "border-r border-red-400 border-b-red-400 border-l-red-400 border-t-red-400"
+            isActive && activeSectionBorderClasses
           )}
         >
           {task.section_status !== null && (
@@ -245,7 +290,7 @@ export function TaskRow({
             "flex items-center px-2 py-1.5 border-b",
             isFirst && "border-t",
             !isActive && "border-r border-border/60",
-            isActive && "border-r border-red-400 border-b-red-400 border-t-red-400"
+            isActive && activeBorderClasses
           )}
         >
           {editingMetronome ? (
@@ -292,72 +337,81 @@ export function TaskRow({
           )}
         </div>
 
-        {/* Timer button */}
+        {/* Timer + goal */}
         <div
           className={cn(
             "flex items-center px-2 py-1.5 border-b",
             isFirst && "border-t",
             !isActive && "border-r border-border/60",
-            isActive && "border-r border-red-400 border-b-red-400 border-t-red-400"
+            isActive && activeBorderClasses
           )}
         >
-          <button
-            onClick={handleTimerClick}
-            disabled={optimisticCompleted}
-            className={cn(
-              "group/timer flex items-center gap-1 rounded px-1.5 py-0.5 tabular-nums transition-colors",
-              isActive
-                ? "bg-white/20 text-white hover:bg-white/30"
-                : "hover:bg-muted text-muted-foreground hover:text-foreground",
-              optimisticCompleted && "cursor-not-allowed"
-            )}
-          >
-            {isActive ? (
-              <PauseIcon className="size-3 fill-current" />
-            ) : (
-              <ClockIcon className="size-3" />
-            )}
-            {formatElapsed(Math.max(0, elapsed))}
-          </button>
+          <TimerCell
+            elapsedSeconds={elapsed}
+            goalSeconds={optimisticGoalSeconds}
+            isActive={isActive}
+            isCompleted={optimisticCompleted}
+            onToggleTimer={handleTimerClick}
+            onChangeGoal={(seconds) => {
+              setOptimisticGoalSeconds(seconds);
+              void updateTaskField(task.id, "timer_seconds", seconds);
+            }}
+          />
         </div>
 
-        {/* Time goal */}
-        <div
-          className={cn(
-            "flex items-center tabular-nums px-2 py-1.5 border-b",
-            isFirst && "border-t",
-            !isActive && "border-r border-border/60",
-            isActive && "border-r border-red-400 border-b-red-400 border-t-red-400",
-            isActive ? "text-white/80" : "text-muted-foreground"
-          )}
-        >
-          {timerGoalMinutes > 0 ? `${timerGoalMinutes}m` : "—"}
-        </div>
-
-        {/* Text notes — widest column */}
+        {/* Text notes — widest column. Truncates to one line; click opens an overlay editor. */}
         <div
           className={cn(
             "flex items-center min-w-0 px-2 py-1.5 border-b border-r",
             isFirst && "border-t",
             isActive
-              ? "border-r-red-400 border-b-red-400 border-t-red-400"
+              ? activeNotesBorderClasses
               : "border-r-border/60"
           )}
         >
-          <textarea
-            ref={textRef}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onBlur={handleTextBlur}
-            rows={1}
-            placeholder="Notes..."
-            className={cn(
-              "w-full bg-transparent focus:outline-none resize-none leading-tight",
-              isActive
-                ? "text-white placeholder:text-white/60"
-                : "text-muted-foreground focus:text-foreground"
-            )}
-          />
+          <Popover open={noteOpen} onOpenChange={handleNoteOpenChange}>
+            <PopoverTrigger
+              className={cn(
+                "block w-full min-w-0 truncate text-left leading-tight focus:outline-none cursor-text",
+                isActive
+                  ? text
+                    ? "text-white"
+                    : "text-white/60"
+                  : text
+                    ? "text-muted-foreground"
+                    : "text-muted-foreground/50"
+              )}
+            >
+              {text || "Notes..."}
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              side="bottom"
+              sideOffset={-28}
+              className="min-w-[320px] max-w-[520px] p-2 gap-0"
+            >
+              <textarea
+                ref={noteTextareaRef}
+                value={text}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  autoGrowNote();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    handleNoteOpenChange(false);
+                  } else if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleNoteOpenChange(false);
+                  }
+                }}
+                placeholder="Notes..."
+                rows={1}
+                className="w-full bg-transparent focus:outline-none resize-none leading-tight text-xs text-foreground placeholder:text-muted-foreground/50"
+              />
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
     </div>

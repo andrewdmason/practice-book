@@ -17,7 +17,8 @@ import { formatElapsed } from "@/lib/timer-utils";
 import { getNextTaskForToday } from "@/app/(app)/timer/task-actions";
 
 const navItems = [
-  { label: "Sessions", href: "/" },
+  { label: "Practice Log", href: "/" },
+  { label: "Lessons", href: "/lessons" },
   { label: "Repertoire", href: "/repertoire" },
   { label: "Reports", href: "/reports" },
 ];
@@ -94,8 +95,10 @@ export function Header() {
           <button
             onClick={handleTimerClick}
             className={cn(
-              "flex items-center gap-1.5 rounded px-1.5 py-1 transition-colors hover:bg-muted",
-              isTimerActive && "text-primary"
+              "flex items-center gap-1.5 transition-colors",
+              isTimerActive
+                ? "rounded-full bg-red-500 px-2.5 py-1 text-white hover:bg-red-600"
+                : "rounded px-1.5 py-1 text-muted-foreground hover:bg-muted"
             )}
             aria-label={
               isTimerActive
@@ -106,14 +109,9 @@ export function Header() {
             {isTimerActive ? (
               <PauseIcon className="size-4 fill-current" />
             ) : (
-              <ClockIcon className="size-4 text-muted-foreground" />
+              <ClockIcon className="size-4" />
             )}
-            <span
-              className={cn(
-                "tabular-nums text-sm font-medium min-w-[4ch]",
-                isTimerActive ? "text-foreground" : "text-muted-foreground"
-              )}
-            >
+            <span className="tabular-nums text-sm font-medium min-w-[4ch]">
               {formatElapsed(dailyElapsedSeconds)}
             </span>
           </button>

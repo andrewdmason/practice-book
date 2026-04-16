@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { localDate, getUserTimezone } from "@/lib/date-utils";
 import type {
@@ -11,7 +10,6 @@ import type {
   PieceKind,
   SectionStatus,
   StatusChange,
-  PracticeTaskType,
 } from "@/lib/types";
 
 /**
@@ -229,8 +227,7 @@ async function getTasksWithDetailsForDates(
  */
 export async function getFeedPage(
   cursor?: string,
-  limit = 7,
-  typeFilter?: "practice" | "lesson"
+  limit = 7
 ): Promise<{ items: FeedDay[]; nextCursor: string | null }> {
   const supabase = await createClient();
   const tz = await getUserTimezone();
@@ -243,10 +240,6 @@ export async function getFeedPage(
     .select("date")
     .order("date", { ascending: false })
     .limit(limit * 5); // over-fetch to get enough distinct dates
-
-  if (typeFilter) {
-    query = query.eq("type", typeFilter);
-  }
 
   if (cursor) {
     query = query.lt("date", beforeDate);
@@ -381,7 +374,6 @@ export async function createTask(
     sectionId?: string | null;
     metronomeSpeed?: number | null;
     date?: string;
-    type?: PracticeTaskType;
     text?: string;
     timerSeconds?: number;
   }
@@ -416,7 +408,6 @@ export async function createTask(
       section_id: options?.sectionId ?? null,
       metronome_speed: options?.metronomeSpeed ?? null,
       sort_order: nextOrder,
-      type: options?.type ?? "practice",
       text: options?.text ?? "",
       timer_seconds: options?.timerSeconds ?? 900,
       timer_remaining_seconds: options?.timerSeconds ?? 900,
@@ -428,36 +419,4 @@ export async function createTask(
   if (error || !data) throw new Error(error?.message ?? "Failed to create task");
 
   return { id: data.id };
-}
-
-/**
- * Delete a lesson (all tasks with type='lesson' for a given date).
- */
-export async function deleteLesson(date: string): Promise<void> {
-  const supabase = await createClient();
-
-  await supabase
-    .from("practice_tasks")
-    .delete()
-    .eq("date", date)
-    .eq("type", "lesson");
-
-  revalidatePath("/");
-}
-
-/**
- * Create a new lesson task for a given date.
- */
-export async function createLesson(date?: string): Promise<string> {
-  const tz = await getUserTimezone();
-  const lessonDate = date ?? localDate(new Date(), tz);
-
-  const result = await createTask(null, {
-    date: lessonDate,
-    type: "lesson",
-    timerSeconds: 0,
-  });
-
-  revalidatePath("/");
-  return result.id;
 }

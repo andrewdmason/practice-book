@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getUserTimezone } from "@/lib/date-utils";
 import { localDate } from "@/lib/date-utils";
-import type { PracticeTask, PracticeTaskType } from "@/lib/types";
+import type { PracticeTask } from "@/lib/types";
 
 export type TaskWithPiece = PracticeTask & {
   piece_name: string | null;
@@ -66,8 +66,7 @@ export async function createTask(
   pieceId: string | null,
   sectionId: string | null,
   metronomeSpeed: number | null,
-  date?: string,
-  type?: PracticeTaskType
+  date?: string
 ): Promise<{ id: string }> {
   const supabase = await createClient();
 
@@ -95,7 +94,6 @@ export async function createTask(
       section_id: sectionId,
       metronome_speed: metronomeSpeed,
       sort_order: nextOrder,
-      type: type ?? "practice",
       ...(date ? { date } : {}),
     })
     .select("id")
@@ -113,18 +111,21 @@ export async function updateTaskField(
 ) {
   const supabase = await createClient();
 
-  // When updating timer_seconds, also reset timer_remaining_seconds to match
+  // When updating timer_seconds, also reset timer_remaining_seconds to match.
+  // Skip revalidation for goal edits — the client holds optimistic state and
+  // no other UI on the feed depends on timer_seconds.
   if (field === "timer_seconds") {
     await supabase
       .from("practice_tasks")
       .update({ timer_seconds: value as number, timer_remaining_seconds: value as number })
       .eq("id", taskId);
-  } else {
-    await supabase
-      .from("practice_tasks")
-      .update({ [field]: value })
-      .eq("id", taskId);
+    return;
   }
+
+  await supabase
+    .from("practice_tasks")
+    .update({ [field]: value })
+    .eq("id", taskId);
 
   revalidatePath("/");
 }
@@ -204,7 +205,6 @@ export async function duplicateTaskToTomorrow(
       piece_id: source.piece_id,
       section_id: source.section_id,
       date: tomorrowDate,
-      type: source.type,
       text: source.text,
       metronome_speed: source.metronome_speed,
       timer_seconds: source.timer_seconds,

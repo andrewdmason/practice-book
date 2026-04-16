@@ -88,6 +88,21 @@ export async function deleteAssignment(assignmentId: string) {
   revalidatePath("/");
 }
 
+export async function updateAssignmentText(assignmentId: string, text: string) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("assignments")
+    .update({ text, updated_at: new Date().toISOString() })
+    .eq("id", assignmentId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/");
+}
+
 export type AssignmentWithPiece = Assignment & {
   piece_name: string;
   piece_composer: string | null;

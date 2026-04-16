@@ -1,5 +1,6 @@
 -- Consolidate practice_sessions, timer_entries, practice_entries, and
 -- practice_entry_sections into practice_tasks.
+-- Lessons are extracted into their own lesson_entries table.
 -- This is an ADDITIVE migration — old tables are NOT dropped yet.
 -- ====================================================================
 
@@ -9,16 +10,37 @@
 -- Allow tasks with no piece (for free-text notes)
 ALTER TABLE practice_tasks ALTER COLUMN piece_id DROP NOT NULL;
 
--- Distinguish practice vs lesson tasks
-ALTER TABLE practice_tasks ADD COLUMN type text NOT NULL DEFAULT 'practice';
-ALTER TABLE practice_tasks ADD CONSTRAINT practice_tasks_type_check
-  CHECK (type IN ('practice', 'lesson'));
-
 -- Track when a task's timer was actively running
 ALTER TABLE practice_tasks ADD COLUMN started_at timestamptz;
 ALTER TABLE practice_tasks ADD COLUMN ended_at timestamptz;
 
--- Step 2: Migrate timer_entries → practice_tasks
+-- Step 2: Create lesson_entries table
+-- One row per (date, piece?) with free-text notes from a lesson.
+-- ====================================================================
+
+CREATE TABLE lesson_entries (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  piece_id uuid REFERENCES pieces(id) ON DELETE CASCADE,
+  date date NOT NULL,
+  notes text NOT NULL DEFAULT '',
+  sort_order integer NOT NULL DEFAULT 0,
+  created_at timestamptz DEFAULT now() NOT NULL,
+  updated_at timestamptz DEFAULT now() NOT NULL
+);
+
+CREATE INDEX idx_lesson_entries_date ON lesson_entries(date DESC);
+CREATE INDEX idx_lesson_entries_piece_id ON lesson_entries(piece_id);
+
+CREATE TRIGGER lesson_entries_updated_at
+  BEFORE UPDATE ON lesson_entries
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+ALTER TABLE lesson_entries ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated access" ON lesson_entries FOR ALL
+  USING (auth.uid() IS NOT NULL)
+  WITH CHECK (auth.uid() IS NOT NULL);
+
+-- Step 3: Migrate timer_entries → practice_tasks
 -- Each timer_entry with recorded time becomes a completed task.
 -- ====================================================================
 
@@ -45,18 +67,19 @@ JOIN practice_sessions ps ON ps.id = te.session_id
 WHERE te.started_at IS NOT NULL
   AND te.ended_at IS NOT NULL;
 
--- Step 3: Migrate practice_entry_sections → practice_tasks
+-- Step 4: Migrate practice_entry_sections
+-- Practice-type entries → practice_tasks.
+-- Lesson-type entries → lesson_entries.
 -- Convert TipTap JSON content to plain text using existing tiptap_to_text().
 -- ====================================================================
 
 INSERT INTO practice_tasks (
-  piece_id, date, type, text, timer_seconds, timer_remaining_seconds,
+  piece_id, date, text, timer_seconds, timer_remaining_seconds,
   completed, sort_order, created_at, updated_at
 )
 SELECT
   pes.piece_id,
   pe.date,
-  pe.type,  -- 'practice' or 'lesson'
   COALESCE(tiptap_to_text(pes.content), ''),
   0,    -- no timer for journal-derived tasks
   0,
@@ -66,10 +89,27 @@ SELECT
   pes.updated_at
 FROM practice_entry_sections pes
 JOIN practice_entries pe ON pe.id = pes.practice_entry_id
-WHERE pes.content IS NOT NULL
+WHERE pe.type = 'practice'
+  AND pes.content IS NOT NULL
   AND tiptap_to_text(pes.content) != '';
 
--- Step 4: Update search_all to query practice_tasks instead of practice_entry_sections
+INSERT INTO lesson_entries (
+  piece_id, date, notes, sort_order, created_at, updated_at
+)
+SELECT
+  pes.piece_id,
+  pe.date,
+  COALESCE(tiptap_to_text(pes.content), ''),
+  pes.sort_order,
+  pes.created_at,
+  pes.updated_at
+FROM practice_entry_sections pes
+JOIN practice_entries pe ON pe.id = pes.practice_entry_id
+WHERE pe.type = 'lesson'
+  AND pes.content IS NOT NULL
+  AND tiptap_to_text(pes.content) != '';
+
+-- Step 5: Update search_all to query practice_tasks and lesson_entries
 -- ====================================================================
 
 DROP FUNCTION IF EXISTS search_all;
@@ -134,10 +174,7 @@ BEGIN
   (
     -- Practice tasks with text content
     SELECT
-      CASE pt.type
-        WHEN 'lesson' THEN 'lesson'::text
-        ELSE 'practice_entry'::text
-      END,
+      'practice_entry'::text,
       pt.id,
       COALESCE(pc.name, 'General Notes'),
       pt.date::text,
@@ -150,6 +187,24 @@ BEGIN
     LEFT JOIN pieces pc ON pc.id = pt.piece_id
     WHERE pt.text != ''
       AND to_tsvector('english', pt.text) @@ q
+  )
+  UNION ALL
+  (
+    -- Lesson entries
+    SELECT
+      'lesson'::text,
+      le.id,
+      COALESCE(pc.name, 'Lesson'),
+      le.date::text,
+      ts_headline('english', le.notes, q,
+        'StartSel=<mark>, StopSel=</mark>, MaxWords=30, MinWords=10'),
+      le.date,
+      '/lessons#' || le.id,
+      ts_rank(to_tsvector('english', le.notes), q)
+    FROM lesson_entries le
+    LEFT JOIN pieces pc ON pc.id = le.piece_id
+    WHERE le.notes != ''
+      AND to_tsvector('english', le.notes) @@ q
   )
   ORDER BY rank DESC
   LIMIT result_limit;

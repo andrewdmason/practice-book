@@ -21,6 +21,7 @@ import {
   toggleAssignmentCompleted,
   createAssignment,
   deleteAssignment,
+  updateAssignmentText,
 } from "@/app/(app)/focus-panel/actions";
 import type { AssignmentWithPiece } from "@/app/(app)/focus-panel/actions";
 import { getSections } from "@/app/(app)/repertoire/section-actions";
@@ -594,6 +595,39 @@ function AssignmentRow({
   onDelete: () => void;
   showCompletedDate?: boolean;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(assignment.text);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setText(assignment.text);
+  }, [assignment.text]);
+
+  useEffect(() => {
+    if (editing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editing]);
+
+  const commit = () => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      setText(assignment.text);
+      setEditing(false);
+      return;
+    }
+    if (trimmed !== assignment.text) {
+      void updateAssignmentText(assignment.id, trimmed);
+    }
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setText(assignment.text);
+    setEditing(false);
+  };
+
   return (
     <div className="group">
       <div className="flex items-start gap-2 text-sm">
@@ -614,9 +648,35 @@ function AssignmentRow({
             )}
           </div>
         </button>
-        <span className={`flex-1 ${assignment.completed ? "line-through text-muted-foreground" : ""}`}>
-          <AssignmentTextWithMetronome text={assignment.text} />
-        </span>
+        {editing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancel();
+              }
+            }}
+            className="flex-1 rounded border bg-background px-1.5 py-0.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => !assignment.completed && setEditing(true)}
+            className={`flex-1 text-left cursor-text ${
+              assignment.completed ? "line-through text-muted-foreground" : ""
+            }`}
+          >
+            <AssignmentTextWithMetronome text={assignment.text} />
+          </button>
+        )}
         <button
           type="button"
           onClick={onDelete}

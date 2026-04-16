@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useId } from "react";
 import {
   DndContext,
   closestCenter,
@@ -77,6 +77,7 @@ function DayGroup({
   day: FeedDay;
   focusedPieceId: string | null;
 }) {
+  const dndId = useId();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
@@ -138,6 +139,7 @@ function DayGroup({
 
       {/* Piece groups */}
       <DndContext
+        id={dndId}
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
@@ -185,10 +187,8 @@ function DayGroup({
 
 export function PracticeTable({
   initialData,
-  typeFilter,
 }: {
   initialData: { items: FeedDay[]; nextCursor: string | null };
-  typeFilter?: "practice" | "lesson";
 }) {
   const { focusedPieceId } = useTaskTimer();
   const [days, setDays] = useState<FeedDay[]>(initialData.items);
@@ -205,13 +205,13 @@ export function PracticeTable({
     if (!cursor || loading) return;
     setLoading(true);
     try {
-      const result = await getFeedPage(cursor, 7, typeFilter);
+      const result = await getFeedPage(cursor, 7);
       setDays((prev) => [...prev, ...result.items]);
       setCursor(result.nextCursor);
     } finally {
       setLoading(false);
     }
-  }, [cursor, loading, typeFilter]);
+  }, [cursor, loading]);
 
   // Infinite scroll sentinel
   useEffect(() => {
