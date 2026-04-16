@@ -2,34 +2,33 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { useTimerState } from "@/components/timer/timer-context";
+import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { useZenMode } from "@/components/layout/zen-mode-context";
 import { useVideo } from "@/components/video/video-context";
 import { SectionScrubber } from "@/components/layout/section-scrubber";
 import { getSections, updateSectionStatus } from "@/app/(app)/repertoire/section-actions";
 import { flattenSections, practiceTempo } from "@/lib/section-utils";
 import { useMetronome } from "@/components/metronome/metronome-context";
-import type { TimerTarget, PieceSection, SectionStatus } from "@/lib/types";
+import type { PieceSection, SectionStatus, PieceKind } from "@/lib/types";
 
 export function ScrubberBar() {
   const isZenMode = useZenMode();
   const pathname = usePathname();
   const {
-    isRunning,
-    currentTarget,
-    focusedTarget,
-    setFocusedTarget,
+    focusedPieceId,
     activePieces,
-    switchTarget,
-  } = useTimerState();
+  } = useTaskTimer();
   const video = useVideo();
   const { start: startMetronome, isActive: metronomeActive } = useMetronome();
 
-  const activeTarget = isRunning ? currentTarget : focusedTarget;
+  const activePiece = focusedPieceId
+    ? activePieces.find((p) => p.id === focusedPieceId)
+    : null;
   const activePieceId =
-    activeTarget?.kind === "piece" ? activeTarget.pieceId : null;
+    activePiece && (activePiece.kind as PieceKind) === "piece"
+      ? activePiece.id
+      : null;
 
-  // Load video data when focused piece changes
   const [sections, setSections] = useState<PieceSection[]>([]);
   const [loadedPieceId, setLoadedPieceId] = useState<string | null>(null);
 
@@ -66,35 +65,7 @@ export function ScrubberBar() {
 
   const videoEnd = video.videoEnd ?? video.duration;
 
-  const activePiece = activePieceId
-    ? activePieces.find((p) => p.id === activePieceId)
-    : null;
-
-  const handleScrubberSectionClick = (sectionId: string) => {
-    if (!activeTarget || activeTarget.kind !== "piece") return;
-
-    const section = sections.find((s) => s.id === sectionId);
-    if (!section) return;
-
-    // Build section target
-    const sectionTarget: TimerTarget = {
-      pieceId: activeTarget.pieceId,
-      pieceName: activeTarget.pieceName,
-      composer: activeTarget.composer,
-      kind: activeTarget.kind,
-      sectionId: section.id,
-      sectionLabel: section.label,
-    };
-
-    // Switch timer to this section
-    if (isRunning) {
-      switchTarget(sectionTarget);
-    } else {
-      setFocusedTarget(sectionTarget);
-    }
-  };
-
-  // Listen for optimistic status updates from other components (e.g. sidebar)
+  // Listen for optimistic status updates from other components
   useEffect(() => {
     const handler = (e: Event) => {
       const { sectionId, status } = (e as CustomEvent).detail;
@@ -124,11 +95,8 @@ export function ScrubberBar() {
     }
   };
 
-  const activeSectionId =
-    activeTarget?.kind === "piece" ? activeTarget.sectionId : undefined;
-
   if (isZenMode) return null;
-  if (pathname !== "/" && !isRunning) return null;
+  if (pathname !== "/") return null;
   if (!showScrubber) return null;
 
   return (
@@ -140,9 +108,9 @@ export function ScrubberBar() {
           videoStart={video.videoStart}
           videoEnd={videoEnd}
           currentTime={video.currentTime}
-          activeSectionId={activeSectionId}
+          activeSectionId={undefined}
           pieceTargetTempo={activePiece?.target_tempo}
-          onSectionClick={handleScrubberSectionClick}
+          onSectionClick={() => {}}
           onStatusCycle={handleStatusCycle}
           onStatusCycleReverse={(sectionId) => handleStatusCycle(sectionId, true)}
         />

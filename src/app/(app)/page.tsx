@@ -1,9 +1,8 @@
-import { TwoColumnLayout } from "@/components/layout/two-column-layout";
+import { PracticeTable } from "@/components/practice-table/practice-table";
 import { RepertoireFocusPanel } from "@/components/timer/repertoire-focus-panel";
-import { PracticeFeed } from "@/components/feed/practice-feed";
-import { ensureTodayEntry, getFeedPage, getTomorrowFeedDay } from "@/app/(app)/feed/actions";
-import { createClient } from "@/lib/supabase/server";
-import type { PieceSuggestion, PracticeEntryType } from "@/lib/types";
+import { TwoColumnLayout } from "@/components/layout/two-column-layout";
+import { getFeedPage } from "@/app/(app)/feed/actions";
+import type { PracticeTaskType } from "@/lib/types";
 
 export default async function FeedPage({
   searchParams,
@@ -11,34 +10,14 @@ export default async function FeedPage({
   searchParams: Promise<{ type?: string }>;
 }) {
   const { type: typeParam } = await searchParams;
-  const typeFilter: PracticeEntryType | undefined =
+  const typeFilter: PracticeTaskType | undefined =
     typeParam === "practice" || typeParam === "lesson" ? typeParam : undefined;
 
-  // Ensure today's entry exists (in parallel with data fetches — doesn't block rendering)
-  const [, initialData, tomorrowData, supabase] = await Promise.all([
-    ensureTodayEntry(),
-    getFeedPage(undefined, 7),
-    getTomorrowFeedDay(),
-    createClient(),
-  ]);
-
-  // Fetch pieces for editor mention autocomplete
-  const { data: pieces } = await supabase
-    .from("pieces")
-    .select("id, name, composer")
-    .eq("status", "active")
-    .order("name");
+  const initialData = await getFeedPage(undefined, 7, typeFilter);
 
   return (
     <TwoColumnLayout
-      left={
-        <PracticeFeed
-          initialData={initialData}
-          tomorrowData={tomorrowData}
-          pieces={(pieces as PieceSuggestion[]) ?? []}
-          typeFilter={typeFilter}
-        />
-      }
+      left={<PracticeTable initialData={initialData} typeFilter={typeFilter} />}
       right={<RepertoireFocusPanel />}
     />
   );

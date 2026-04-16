@@ -9,23 +9,36 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import { updateTaskRemaining } from "@/app/(app)/timer/task-actions";
+import {
+  updateTaskRemaining,
+  startTaskTimer as startTaskTimerAction,
+  stopTaskTimer as stopTaskTimerAction,
+} from "@/app/(app)/timer/task-actions";
+import type { Piece } from "@/lib/types";
 
 const STORAGE_KEY = "practice-task-timer-state";
 
 type PersistedState = {
   taskId: string;
   remainingSeconds: number;
-  lastTickAt: string; // ISO timestamp of last tick
+  lastTickAt: string;
 };
 
 type TaskTimerContextValue = {
   activeTaskId: string | null;
   remainingSeconds: number;
   isExpired: boolean;
+  /** Total elapsed seconds for tasks today (from server data + active timer) */
+  dailyElapsedSeconds: number;
+  activePieces: Piece[];
+  /** Currently focused piece ID (for piece tabs / scrubber) */
+  focusedPieceId: string | null;
+  setFocusedPieceId: (id: string | null) => void;
   startTaskTimer: (taskId: string, seconds: number) => void;
   pauseTaskTimer: () => void;
   resetTaskTimer: (taskId: string, seconds: number) => void;
+  /** Refresh the daily total from server data */
+  refreshDailyTotal: () => void;
 };
 
 const TaskTimerContext = createContext<TaskTimerContextValue | null>(null);
@@ -38,18 +51,29 @@ export function useTaskTimer() {
   return ctx;
 }
 
-export function TaskTimerProvider({ children }: { children: ReactNode }) {
+export function TaskTimerProvider({
+  activePieces,
+  initialDailySeconds = 0,
+  children,
+}: {
+  activePieces: Piece[];
+  initialDailySeconds?: number;
+  children: ReactNode;
+}) {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [isExpired, setIsExpired] = useState(false);
   const [restored, setRestored] = useState(false);
+  const [baseDailySeconds, setBaseDailySeconds] = useState(initialDailySeconds);
+  const [activeTaskElapsed, setActiveTaskElapsed] = useState(0);
+  const [focusedPieceId, setFocusedPieceId] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeTaskStartRef = useRef<number | null>(null);
 
-  // Persist task remaining time and notify listeners so UI updates immediately.
+  const dailyElapsedSeconds = baseDailySeconds + activeTaskElapsed;
+
   const persistTaskRemaining = useCallback((taskId: string, seconds: number) => {
-    void updateTaskRemaining(taskId, seconds).catch(() => {
-      // Ignore transient write failures; UI state remains local-first.
-    });
+    void updateTaskRemaining(taskId, seconds).catch(() => {});
     window.dispatchEvent(
       new CustomEvent("task-timer-paused", {
         detail: { taskId, remainingSeconds: seconds },
@@ -70,6 +94,7 @@ export function TaskTimerProvider({ children }: { children: ReactNode }) {
         setActiveTaskId(state.taskId);
         setRemainingSeconds(remaining);
         setIsExpired(remaining === 0);
+        activeTaskStartRef.current = Date.now() - elapsed * 1000;
       }
     } catch {
       // Ignore corrupt localStorage
@@ -77,7 +102,6 @@ export function TaskTimerProvider({ children }: { children: ReactNode }) {
     setRestored(true);
   }, []);
 
-  // Persist to localStorage
   const persist = useCallback(
     (taskId: string | null, seconds: number) => {
       if (!restored) return;
@@ -95,7 +119,7 @@ export function TaskTimerProvider({ children }: { children: ReactNode }) {
     [restored]
   );
 
-  // Handle visibility change — recalculate remaining time when tab regains focus
+  // Handle visibility change
   useEffect(() => {
     const handler = () => {
       if (document.visibilityState !== "visible") return;
@@ -120,7 +144,7 @@ export function TaskTimerProvider({ children }: { children: ReactNode }) {
     return () => document.removeEventListener("visibilitychange", handler);
   }, [activeTaskId]);
 
-  // Countdown interval — runs when activeTaskId is set and not expired
+  // Countdown interval
   useEffect(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -135,9 +159,7 @@ export function TaskTimerProvider({ children }: { children: ReactNode }) {
         const next = prev - 1;
         if (next <= 0) {
           setIsExpired(true);
-          // Persist the final 0 so reloads don't resurrect stale remaining time.
           persistTaskRemaining(tickingTaskId, 0);
-          // Clear localStorage since timer is done
           localStorage.removeItem(STORAGE_KEY);
           if (intervalRef.current) {
             clearInterval(intervalRef.current);
@@ -147,6 +169,12 @@ export function TaskTimerProvider({ children }: { children: ReactNode }) {
         }
         return next;
       });
+      // Update active task elapsed for daily total
+      if (activeTaskStartRef.current) {
+        setActiveTaskElapsed(
+          Math.floor((Date.now() - activeTaskStartRef.current) / 1000)
+        );
+      }
     }, 1000);
 
     return () => {
@@ -170,27 +198,61 @@ export function TaskTimerProvider({ children }: { children: ReactNode }) {
     }
   }, [remainingSeconds, activeTaskId, isExpired, persist]);
 
+  const refreshDailyTotal = useCallback(async () => {
+    try {
+      const { getTodaySummary } = await import("@/app/(app)/timer/actions");
+      const summary = await getTodaySummary();
+      const total = summary.reduce((sum, e) => sum + e.total_seconds, 0);
+      setBaseDailySeconds(total);
+    } catch {
+      // Ignore
+    }
+  }, []);
+
   const startTaskTimer = useCallback(
     (taskId: string, seconds: number) => {
       if (activeTaskId && activeTaskId !== taskId) {
-        // Switching tasks should persist the previous task's current remaining time.
         persistTaskRemaining(activeTaskId, remainingSeconds);
+        // Add the elapsed time from the previous task to the base total
+        if (activeTaskStartRef.current) {
+          const prevElapsed = Math.floor(
+            (Date.now() - activeTaskStartRef.current) / 1000
+          );
+          setBaseDailySeconds((prev) => prev + prevElapsed);
+        }
       }
       setActiveTaskId(taskId);
       setRemainingSeconds(seconds);
       setIsExpired(seconds <= 0);
+      setActiveTaskElapsed(0);
+      activeTaskStartRef.current = Date.now();
       persist(taskId, seconds);
+
+      // Record started_at on server
+      void startTaskTimerAction(taskId).catch(() => {});
     },
     [activeTaskId, remainingSeconds, persist, persistTaskRemaining]
   );
 
   const pauseTaskTimer = useCallback(() => {
     if (!activeTaskId) return;
-    // Persist remaining to server
     persistTaskRemaining(activeTaskId, remainingSeconds);
-    // Clear localStorage and active state
+
+    // Add elapsed to base daily total
+    if (activeTaskStartRef.current) {
+      const elapsed = Math.floor(
+        (Date.now() - activeTaskStartRef.current) / 1000
+      );
+      setBaseDailySeconds((prev) => prev + elapsed);
+    }
+
+    // Record ended_at on server
+    void stopTaskTimerAction(activeTaskId).catch(() => {});
+
     localStorage.removeItem(STORAGE_KEY);
     setActiveTaskId(null);
+    setActiveTaskElapsed(0);
+    activeTaskStartRef.current = null;
   }, [activeTaskId, remainingSeconds, persistTaskRemaining]);
 
   const resetTaskTimer = useCallback(
@@ -198,6 +260,8 @@ export function TaskTimerProvider({ children }: { children: ReactNode }) {
       setActiveTaskId(taskId);
       setRemainingSeconds(seconds);
       setIsExpired(false);
+      setActiveTaskElapsed(0);
+      activeTaskStartRef.current = Date.now();
       persist(taskId, seconds);
     },
     [persist]
@@ -209,9 +273,14 @@ export function TaskTimerProvider({ children }: { children: ReactNode }) {
         activeTaskId,
         remainingSeconds,
         isExpired,
+        dailyElapsedSeconds,
+        activePieces,
+        focusedPieceId,
+        setFocusedPieceId,
         startTaskTimer,
         pauseTaskTimer,
         resetTaskTimer,
+        refreshDailyTotal,
       }}
     >
       {children}

@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import type { PracticeTask } from "@/lib/types";
+import type { PracticeTask, PracticeTaskType } from "@/lib/types";
 
 export type TaskWithPiece = PracticeTask & {
-  piece_name: string;
+  piece_name: string | null;
   piece_composer: string | null;
   section_label: string | null;
 };
@@ -52,7 +52,7 @@ export async function getTasksForDate(date: string): Promise<TaskWithPiece[]> {
 
   return ((data ?? []) as any[]).map((row) => ({
     ...row,
-    piece_name: row.pieces?.name ?? "",
+    piece_name: row.pieces?.name ?? null,
     piece_composer: row.pieces?.composer ?? null,
     section_label: row.piece_sections?.label ?? null,
     pieces: undefined,
@@ -61,59 +61,29 @@ export async function getTasksForDate(date: string): Promise<TaskWithPiece[]> {
 }
 
 export async function createTask(
-  pieceId: string,
+  pieceId: string | null,
   sectionId: string | null,
   metronomeSpeed: number | null,
-  date?: string
+  date?: string,
+  type?: PracticeTaskType
 ): Promise<{ id: string }> {
   const supabase = await createClient();
 
-  // If a future date is provided, ensure the practice entry and piece section exist
-  if (date) {
-    const { localDate, getUserTimezone } = await import("@/lib/date-utils");
-    const tz = await getUserTimezone();
-    const today = localDate(new Date(), tz);
-    if (date > today) {
-      const { ensureTomorrowEntry } = await import("@/app/(app)/feed/actions");
-      const entryId = await ensureTomorrowEntry();
-
-      const { data: existingSection } = await supabase
-        .from("practice_entry_sections")
-        .select("id")
-        .eq("practice_entry_id", entryId)
-        .eq("category", "piece")
-        .eq("piece_id", pieceId)
-        .limit(1);
-
-      if (!existingSection || existingSection.length === 0) {
-        const { data: maxRow } = await supabase
-          .from("practice_entry_sections")
-          .select("sort_order")
-          .eq("practice_entry_id", entryId)
-          .order("sort_order", { ascending: false })
-          .limit(1)
-          .single();
-
-        await supabase.from("practice_entry_sections").insert({
-          practice_entry_id: entryId,
-          piece_id: pieceId,
-          category: "piece",
-          sort_order: (maxRow?.sort_order ?? 0) + 1,
-        });
-      }
-    }
-  }
-
   // Get next sort_order
-  const { data: maxRow } = await supabase
+  let sortQuery = supabase
     .from("practice_tasks")
     .select("sort_order")
-    .eq("piece_id", pieceId)
     .eq("completed", false)
     .order("sort_order", { ascending: false })
-    .limit(1)
-    .single();
+    .limit(1);
 
+  if (pieceId) {
+    sortQuery = sortQuery.eq("piece_id", pieceId);
+  } else {
+    sortQuery = sortQuery.is("piece_id", null);
+  }
+
+  const { data: maxRow } = await sortQuery.single();
   const nextOrder = (maxRow?.sort_order ?? -1) + 1;
 
   const { data, error } = await supabase
@@ -123,6 +93,7 @@ export async function createTask(
       section_id: sectionId,
       metronome_speed: metronomeSpeed,
       sort_order: nextOrder,
+      type: type ?? "practice",
       ...(date ? { date } : {}),
     })
     .select("id")
@@ -194,7 +165,6 @@ export async function duplicateTaskToTomorrow(
 ): Promise<{ id: string; date: string }> {
   const supabase = await createClient();
 
-  // Fetch the source task
   const { data: source } = await supabase
     .from("practice_tasks")
     .select("*")
@@ -208,56 +178,31 @@ export async function duplicateTaskToTomorrow(
   srcDate.setDate(srcDate.getDate() + 1);
   const tomorrowDate = srcDate.toISOString().slice(0, 10);
 
-  // Ensure tomorrow's practice entry and piece section exist
-  const { ensureTomorrowEntry } = await import("@/app/(app)/feed/actions");
-  const entryId = await ensureTomorrowEntry();
-
-  // Ensure a piece section exists for this piece in tomorrow's entry
-  const { data: existingSection } = await supabase
-    .from("practice_entry_sections")
-    .select("id")
-    .eq("practice_entry_id", entryId)
-    .eq("category", "piece")
-    .eq("piece_id", source.piece_id)
-    .limit(1);
-
-  if (!existingSection || existingSection.length === 0) {
-    const { data: maxRow } = await supabase
-      .from("practice_entry_sections")
-      .select("sort_order")
-      .eq("practice_entry_id", entryId)
-      .order("sort_order", { ascending: false })
-      .limit(1)
-      .single();
-
-    await supabase.from("practice_entry_sections").insert({
-      practice_entry_id: entryId,
-      piece_id: source.piece_id,
-      category: "piece",
-      sort_order: (maxRow?.sort_order ?? 0) + 1,
-    });
-  }
-
   // Get next sort_order for tomorrow's tasks
-  const { data: maxTask } = await supabase
+  let sortQuery = supabase
     .from("practice_tasks")
     .select("sort_order")
-    .eq("piece_id", source.piece_id)
     .eq("date", tomorrowDate)
     .eq("completed", false)
     .order("sort_order", { ascending: false })
-    .limit(1)
-    .single();
+    .limit(1);
 
+  if (source.piece_id) {
+    sortQuery = sortQuery.eq("piece_id", source.piece_id);
+  } else {
+    sortQuery = sortQuery.is("piece_id", null);
+  }
+
+  const { data: maxTask } = await sortQuery.single();
   const nextOrder = (maxTask?.sort_order ?? -1) + 1;
 
-  // Create the duplicate task for tomorrow
   const { data: newTask, error } = await supabase
     .from("practice_tasks")
     .insert({
       piece_id: source.piece_id,
       section_id: source.section_id,
       date: tomorrowDate,
+      type: source.type,
       text: source.text,
       metronome_speed: source.metronome_speed,
       timer_seconds: source.timer_seconds,
@@ -280,4 +225,38 @@ export async function updateTaskRemaining(taskId: string, remainingSeconds: numb
     .from("practice_tasks")
     .update({ timer_remaining_seconds: remainingSeconds })
     .eq("id", taskId);
+}
+
+export async function startTaskTimer(taskId: string) {
+  const supabase = await createClient();
+
+  await supabase
+    .from("practice_tasks")
+    .update({ started_at: new Date().toISOString() })
+    .eq("id", taskId);
+}
+
+export async function stopTaskTimer(taskId: string) {
+  const supabase = await createClient();
+
+  await supabase
+    .from("practice_tasks")
+    .update({ ended_at: new Date().toISOString() })
+    .eq("id", taskId);
+
+  revalidatePath("/");
+}
+
+export async function reorderTasks(taskIds: string[]) {
+  const supabase = await createClient();
+
+  const updates = taskIds.map((id, index) =>
+    supabase
+      .from("practice_tasks")
+      .update({ sort_order: index })
+      .eq("id", id)
+  );
+
+  await Promise.all(updates);
+  revalidatePath("/");
 }

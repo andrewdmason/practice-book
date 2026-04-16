@@ -15,30 +15,35 @@ import type {
 } from "@/lib/types";
 import { SECTION_STATUS_PERCENTAGE } from "@/lib/types";
 
-/**
- * Get the start of the week for a given date string (YYYY-MM-DD).
- * @param weekStartDay 0=Sun, 1=Mon, ... 6=Sat (default 1=Monday)
- */
 function getWeekStart(dateStr: string, weekStartDay: number = 1): string {
-  const d = new Date(dateStr + "T12:00:00"); // noon to avoid DST edge cases
-  const day = d.getDay(); // 0=Sun, 1=Mon, ...
-  const diff = ((day - weekStartDay + 7) % 7);
+  const d = new Date(dateStr + "T12:00:00");
+  const day = d.getDay();
+  const diff = (day - weekStartDay + 7) % 7;
   d.setDate(d.getDate() - diff);
   return localDate(d);
 }
 
-/**
- * Format a date string as a short label like "Mar 10".
- */
 function weekLabel(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 /**
+ * Helper: compute elapsed seconds from a practice task.
+ */
+function taskElapsed(task: {
+  timer_seconds: number;
+  timer_remaining_seconds: number;
+}): number {
+  return Math.max(0, task.timer_seconds - task.timer_remaining_seconds);
+}
+
+/**
  * Last 13 weeks of total practice time per week.
  */
-export async function getWeeklyPracticeData(weekStartDay: number = 1): Promise<WeeklyPracticeData[]> {
+export async function getWeeklyPracticeData(
+  weekStartDay: number = 1
+): Promise<WeeklyPracticeData[]> {
   const supabase = await createClient();
 
   const now = new Date();
@@ -46,25 +51,20 @@ export async function getWeeklyPracticeData(weekStartDay: number = 1): Promise<W
   cutoff.setDate(cutoff.getDate() - 13 * 7);
   const cutoffStr = localDate(cutoff);
 
-  const { data: entries } = await supabase
-    .from("timer_entries")
-    .select("started_at, ended_at, practice_sessions!inner(date)")
-    .gte("practice_sessions.date", cutoffStr)
-    .not("ended_at", "is", null);
+  const { data: tasks } = await supabase
+    .from("practice_tasks")
+    .select("date, timer_seconds, timer_remaining_seconds")
+    .gte("date", cutoffStr);
 
-  // Group by week
   const weekMap = new Map<string, number>();
 
-  for (const entry of entries ?? []) {
-    const session = entry.practice_sessions as unknown as { date: string };
-    const ws = getWeekStart(session.date, weekStartDay);
-    const start = new Date(entry.started_at).getTime();
-    const end = new Date(entry.ended_at!).getTime();
-    const seconds = Math.floor((end - start) / 1000);
-    weekMap.set(ws, (weekMap.get(ws) ?? 0) + seconds);
+  for (const task of tasks ?? []) {
+    const elapsed = taskElapsed(task);
+    if (elapsed <= 0) continue;
+    const ws = getWeekStart(task.date, weekStartDay);
+    weekMap.set(ws, (weekMap.get(ws) ?? 0) + elapsed);
   }
 
-  // Fill in all 13 weeks
   const result: WeeklyPracticeData[] = [];
   const currentWeekStart = getWeekStart(localDate(now), weekStartDay);
 
@@ -83,7 +83,7 @@ export async function getWeeklyPracticeData(weekStartDay: number = 1): Promise<W
 }
 
 /**
- * Time per piece/category for a given time range.
+ * Time per piece for a given time range.
  */
 export async function getPieceBreakdownData(
   range: "7d" | "30d" | "90d" | "all"
@@ -91,37 +91,30 @@ export async function getPieceBreakdownData(
   const supabase = await createClient();
 
   let query = supabase
-    .from("timer_entries")
-    .select(
-      "piece_id, started_at, ended_at, practice_sessions!inner(date)"
-    )
-    .not("ended_at", "is", null);
+    .from("practice_tasks")
+    .select("piece_id, date, timer_seconds, timer_remaining_seconds");
 
   if (range !== "all") {
     const days = range === "7d" ? 7 : range === "30d" ? 30 : 90;
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
-    query = query.gte("practice_sessions.date", localDate(cutoff));
+    query = query.gte("date", localDate(cutoff));
   }
 
-  const { data: entries } = await query;
+  const { data: tasks } = await query;
 
-  if (!entries || entries.length === 0) return [];
+  if (!tasks || tasks.length === 0) return [];
 
-  // Group by piece_id
   const groups = new Map<string, number>();
 
-  for (const entry of entries) {
-    const key = entry.piece_id;
-    const start = new Date(entry.started_at).getTime();
-    const end = new Date(entry.ended_at!).getTime();
-    const seconds = Math.floor((end - start) / 1000);
-
-    groups.set(key, (groups.get(key) ?? 0) + seconds);
+  for (const task of tasks) {
+    const elapsed = taskElapsed(task);
+    if (elapsed <= 0) continue;
+    const key = task.piece_id ?? "__general__";
+    groups.set(key, (groups.get(key) ?? 0) + elapsed);
   }
 
-  // Resolve piece names and kinds
-  const pieceIds = [...groups.keys()];
+  const pieceIds = [...groups.keys()].filter((k) => k !== "__general__");
 
   let pieceInfo: Record<string, { name: string; kind: PieceKind }> = {};
   if (pieceIds.length > 0) {
@@ -130,7 +123,9 @@ export async function getPieceBreakdownData(
       .select("id, name, kind")
       .in("id", pieceIds);
     if (pieces) {
-      pieceInfo = Object.fromEntries(pieces.map((p) => [p.id, { name: p.name, kind: p.kind as PieceKind }]));
+      pieceInfo = Object.fromEntries(
+        pieces.map((p) => [p.id, { name: p.name, kind: p.kind as PieceKind }])
+      );
     }
   }
 
@@ -139,7 +134,7 @@ export async function getPieceBreakdownData(
       const info = pieceInfo[pieceId];
       return {
         pieceId,
-        label: info?.name ?? "Unknown Piece",
+        label: info?.name ?? "General",
         totalSeconds: seconds,
         kind: info?.kind ?? ("piece" as PieceKind),
       };
@@ -153,23 +148,25 @@ export async function getPieceBreakdownData(
 export async function getStreakData(): Promise<StreakData> {
   const supabase = await createClient();
 
-  const { data: sessions } = await supabase
-    .from("practice_sessions")
-    .select("date")
+  // Get distinct dates with practice time
+  const { data: tasks } = await supabase
+    .from("practice_tasks")
+    .select("date, timer_seconds, timer_remaining_seconds")
     .order("date", { ascending: false });
 
-  const practicedDates = new Set(
-    (sessions ?? []).map((s) => s.date)
-  );
+  const practicedDates = new Set<string>();
+  for (const task of tasks ?? []) {
+    if (taskElapsed(task) > 0) {
+      practicedDates.add(task.date);
+    }
+  }
 
-  // Current streak: walk backward from today
   const today = new Date();
   const todayStr = localDate(today);
 
   let currentStreak = 0;
   const d = new Date(today);
 
-  // If today has no session, start from yesterday
   if (!practicedDates.has(todayStr)) {
     d.setDate(d.getDate() - 1);
   }
@@ -184,7 +181,6 @@ export async function getStreakData(): Promise<StreakData> {
     }
   }
 
-  // This week days (Mon-Sun)
   const monday = getWeekStart(todayStr);
   const thisWeekDays: boolean[] = [];
   let daysPracticedThisWeek = 0;
@@ -201,20 +197,27 @@ export async function getStreakData(): Promise<StreakData> {
 }
 
 /**
- * Get all pieces that have timer entries (for the piece selector).
+ * Get all pieces that have practice time (for the piece selector).
  */
 export async function getPiecesWithTimerData(): Promise<PieceOption[]> {
   const supabase = await createClient();
 
-  const { data: entries } = await supabase
-    .from("timer_entries")
-    .select("piece_id")
-    .not("piece_id", "is", null)
-    .not("ended_at", "is", null);
+  const { data: tasks } = await supabase
+    .from("practice_tasks")
+    .select("piece_id, timer_seconds, timer_remaining_seconds")
+    .not("piece_id", "is", null);
 
-  if (!entries || entries.length === 0) return [];
+  if (!tasks || tasks.length === 0) return [];
 
-  const pieceIds = [...new Set(entries.map((e) => e.piece_id!))];
+  const pieceIds = [
+    ...new Set(
+      tasks
+        .filter((t) => taskElapsed(t) > 0)
+        .map((t) => t.piece_id!)
+    ),
+  ];
+
+  if (pieceIds.length === 0) return [];
 
   const { data: pieces } = await supabase
     .from("pieces")
@@ -237,30 +240,25 @@ export async function getPieceCumulativeData(
 ): Promise<PieceWeeklyCumulativeData[]> {
   const supabase = await createClient();
 
-  const { data: entries } = await supabase
-    .from("timer_entries")
-    .select("started_at, ended_at, practice_sessions!inner(date)")
-    .eq("piece_id", pieceId)
-    .not("ended_at", "is", null);
+  const { data: tasks } = await supabase
+    .from("practice_tasks")
+    .select("date, timer_seconds, timer_remaining_seconds")
+    .eq("piece_id", pieceId);
 
-  if (!entries || entries.length === 0) return [];
+  if (!tasks || tasks.length === 0) return [];
 
-  // Group by week
   const weekMap = new Map<string, number>();
 
-  for (const entry of entries) {
-    const session = entry.practice_sessions as unknown as { date: string };
-    const monday = getWeekStart(session.date);
-    const start = new Date(entry.started_at).getTime();
-    const end = new Date(entry.ended_at!).getTime();
-    const seconds = Math.floor((end - start) / 1000);
-    weekMap.set(monday, (weekMap.get(monday) ?? 0) + seconds);
+  for (const task of tasks) {
+    const elapsed = taskElapsed(task);
+    if (elapsed <= 0) continue;
+    const monday = getWeekStart(task.date);
+    weekMap.set(monday, (weekMap.get(monday) ?? 0) + elapsed);
   }
 
-  // Sort weeks chronologically and build cumulative
-  const sortedWeeks = [...weekMap.keys()].sort();
+  if (weekMap.size === 0) return [];
 
-  // Fill in gaps between first and last week
+  const sortedWeeks = [...weekMap.keys()].sort();
   const firstMonday = sortedWeeks[0];
   const now = new Date();
   const lastMonday = getWeekStart(localDate(now));
@@ -286,9 +284,7 @@ export async function getPieceCumulativeData(
 }
 
 /**
- * Compute section completion % for each week, using current section statuses
- * and replaying snapshots backward to reconstruct past state.
- * Returns a map from weekStart (YYYY-MM-DD) to completion percentage (0-100).
+ * Compute section completion % for each week.
  */
 export async function getPieceCompletionByWeek(
   pieceId: string,
@@ -298,7 +294,6 @@ export async function getPieceCompletionByWeek(
 
   const supabase = await createClient();
 
-  // Get all leaf sections (no children) for the piece
   const { data: allSections } = await supabase
     .from("piece_sections")
     .select("id, parent_id, status")
@@ -306,7 +301,6 @@ export async function getPieceCompletionByWeek(
 
   if (!allSections || allSections.length === 0) return new Map();
 
-  // Find leaf sections (sections that are not parents of other sections)
   const parentIds = new Set(
     allSections.filter((s) => s.parent_id).map((s) => s.parent_id!)
   );
@@ -314,7 +308,6 @@ export async function getPieceCompletionByWeek(
 
   if (leafSections.length === 0) return new Map();
 
-  // Get all snapshots for this piece, ordered newest first
   const { data: snapshots } = await supabase
     .from("section_status_snapshots")
     .select("*")
@@ -327,12 +320,10 @@ export async function getPieceCompletionByWeek(
   const leafIds = new Set(leafSections.map((s) => s.id));
   const totalSlots = leafSections.length;
 
-  // Build current status map from leaf sections
   const statusAtPoint = new Map<string, SectionStatus>(
     leafSections.map((s) => [s.id, s.status as SectionStatus])
   );
 
-  // Average completion % from a status map
   function computePct(statusMap: Map<string, SectionStatus>): number {
     let sum = 0;
     for (const status of statusMap.values()) {
@@ -341,14 +332,11 @@ export async function getPieceCompletionByWeek(
     return Math.round((sum / totalSlots) * 1000) / 10;
   }
 
-  // Walk weeks newest-first, replaying snapshots backward to reconstruct
-  // each week's end-of-week status.
   const sortedWeeks = [...weeks].sort().reverse();
   const result = new Map<string, number>();
   let snapshotIdx = 0;
 
   for (const weekStart of sortedWeeks) {
-    // Un-apply snapshots that occurred after this week ended (next Monday).
     const nextMonday = new Date(weekStart + "T00:00:00");
     nextMonday.setDate(nextMonday.getDate() + 7);
     const nextMondayStr = nextMonday.toISOString().slice(0, 10);
@@ -386,7 +374,6 @@ export async function getCompletedAssignmentsForPiece(
 
   if (!assignments || assignments.length === 0) return [];
 
-  // Build a map from weekStart to cumulative hours
   const cumulativeMap = new Map(
     cumulativeData.map((d) => [
       d.weekStart,
@@ -394,7 +381,6 @@ export async function getCompletedAssignmentsForPiece(
     ])
   );
 
-  // Group assignments by week
   const weekGroups = new Map<
     string,
     { id: string; text: string; completedAt: string }[]

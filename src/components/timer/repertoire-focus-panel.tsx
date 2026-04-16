@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   CheckCircle2Icon,
@@ -13,7 +12,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useTimerState } from "@/components/timer/timer-context";
+import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { TimeSummary } from "@/components/timer/time-summary";
 import { getTodaySummary } from "@/app/(app)/timer/actions";
 import {
@@ -25,7 +24,7 @@ import {
 } from "@/app/(app)/focus-panel/actions";
 import type { AssignmentWithPiece } from "@/app/(app)/focus-panel/actions";
 import { getSections } from "@/app/(app)/repertoire/section-actions";
-import { addTaskOptimistic } from "@/components/timer/task-panel";
+import { createTask } from "@/app/(app)/timer/task-actions";
 import { createClient } from "@/lib/supabase/client";
 import { useMetronome } from "@/components/metronome/metronome-context";
 import { SectionSidebar } from "@/components/timer/section-sidebar";
@@ -36,7 +35,6 @@ import type {
   PieceKind,
   PieceSectionWithChildren,
   Assignment,
-  TimerTarget,
   TimeSummaryEntry,
 } from "@/lib/types";
 import { TECHNIQUE_PIECE_ID, SIGHT_READING_PIECE_ID } from "@/lib/types";
@@ -47,29 +45,16 @@ const sectionsCache = new Map<string, PieceSectionWithChildren[]>();
 const assignmentsCache = new Map<string, { openAssignments: Assignment[]; completedAssignments: Assignment[] }>();
 
 export function RepertoireFocusPanel() {
-  const router = useRouter();
-  const { isRunning, currentTarget, focusedTarget, setFocusedTarget, activePieces } = useTimerState();
+  const { focusedPieceId, setFocusedPieceId, activePieces, activeTaskId } = useTaskTimer();
 
-  // Determine active target: timer target when running, focused target from pills otherwise
-  const activeTarget = isRunning ? currentTarget : focusedTarget;
-
-  const activePieceId = activeTarget?.pieceId ?? null;
+  const activePieceId = focusedPieceId;
 
   const handleFocusItem = useCallback(
     (focusKey: string) => {
-      if (isRunning) return;
-      const piece = activePieces.find((p) => p.id === focusKey);
-      if (!piece) return;
-      const target: TimerTarget = {
-        pieceId: piece.id,
-        pieceName: piece.name,
-        composer: piece.composer,
-        kind: piece.kind as PieceKind,
-      };
-      setFocusedTarget(target);
+      setFocusedPieceId(focusKey);
       window.history.replaceState(null, "", `/?focus=${focusKey}`);
     },
-    [isRunning, activePieces, setFocusedTarget]
+    [setFocusedPieceId]
   );
 
   let content: React.ReactNode;
@@ -80,7 +65,7 @@ export function RepertoireFocusPanel() {
   } else {
     content = (
       <PracticeOverview
-        isRunning={isRunning}
+        isRunning={activeTaskId !== null}
         onFocusItem={handleFocusItem}
         activePieces={activePieces}
       />
@@ -325,7 +310,7 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
                 const date = tomorrow
                   ? localDate(new Date(Date.now() + 86_400_000))
                   : localDate();
-                addTaskOptimistic(pieceId, date, sectionId, metronomeSpeed);
+                void createTask(pieceId, sectionId, metronomeSpeed, date);
               }}
             />
           </CardContent>
