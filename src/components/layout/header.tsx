@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Menu, ClockIcon, PauseIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -86,15 +86,7 @@ export function Header() {
   } = useTaskTimer();
   const isTimerActive = activeTaskId !== null;
   const [piecePickerOpen, setPiecePickerOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
   const recordButtonRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 4);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
   function isActive(href: string) {
     if (href === "/") return pathname === "/";
@@ -155,12 +147,7 @@ export function Header() {
   };
 
   return (
-    <header
-      className={cn(
-        "sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 transition-shadow",
-        scrolled && "border-b"
-      )}
-    >
+    <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-14 max-w-7xl items-center px-4 sm:px-6">
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-6 h-14">
