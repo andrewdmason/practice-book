@@ -25,6 +25,7 @@ export function AssignmentList({ pieceId, initialAssignments }: { pieceId?: stri
       completed: false,
       completed_at: null,
       sort_order: 0,
+      metronome_speed: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

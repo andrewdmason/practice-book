@@ -71,6 +71,7 @@ export type Assignment = {
   completed: boolean;
   completed_at: string | null;
   sort_order: number;
+  metronome_speed: number | null;
   created_at: string;
   updated_at: string;
 };

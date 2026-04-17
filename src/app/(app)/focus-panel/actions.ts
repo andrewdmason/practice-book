@@ -57,7 +57,11 @@ export async function toggleAssignmentCompleted(assignmentId: string, completed:
   revalidatePath("/");
 }
 
-export async function createAssignment(pieceId: string, text: string): Promise<Assignment> {
+export async function createAssignment(
+  pieceId: string,
+  text: string,
+  metronomeSpeed: number | null = null
+): Promise<Assignment> {
   const supabase = await createClient();
 
   const { data: maxRow } = await supabase
@@ -72,7 +76,7 @@ export async function createAssignment(pieceId: string, text: string): Promise<A
 
   const { data, error } = await supabase
     .from("assignments")
-    .insert({ piece_id: pieceId, text, sort_order: nextSort })
+    .insert({ piece_id: pieceId, text, sort_order: nextSort, metronome_speed: metronomeSpeed })
     .select("*")
     .single();
 
@@ -125,6 +129,63 @@ export async function updateAssignmentText(assignmentId: string, text: string) {
   revalidatePath("/");
 }
 
+export async function updateAssignmentMetronome(
+  assignmentId: string,
+  metronomeSpeed: number | null
+) {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("assignments")
+    .update({ metronome_speed: metronomeSpeed, updated_at: new Date().toISOString() })
+    .eq("id", assignmentId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/");
+}
+
+export async function createTaskFromAssignment(
+  pieceId: string,
+  text: string,
+  metronomeSpeed: number | null,
+  date: string
+): Promise<string> {
+  const supabase = await createClient();
+
+  const { data: maxRow } = await supabase
+    .from("practice_tasks")
+    .select("sort_order")
+    .eq("piece_id", pieceId)
+    .eq("date", date)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nextOrder = (maxRow?.sort_order ?? -1) + 1;
+
+  const { data, error } = await supabase
+    .from("practice_tasks")
+    .insert({
+      piece_id: pieceId,
+      text,
+      metronome_speed: metronomeSpeed,
+      date,
+      sort_order: nextOrder,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Failed to create task from assignment");
+  }
+
+  revalidatePath("/");
+  return data.id;
+}
+
 export type AssignmentWithPiece = Assignment & {
   piece_name: string;
   piece_composer: string | null;
@@ -152,6 +213,7 @@ export async function getAllOpenAssignments(): Promise<AssignmentWithPiece[]> {
       completed: t.completed,
       completed_at: t.completed_at,
       sort_order: t.sort_order,
+      metronome_speed: t.metronome_speed,
       created_at: t.created_at,
       updated_at: t.updated_at,
       piece_name: piece.name,

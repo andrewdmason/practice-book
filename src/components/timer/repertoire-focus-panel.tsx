@@ -7,6 +7,8 @@ import {
   ChevronDownIcon,
   ExternalLinkIcon,
   GripVerticalIcon,
+  ListPlusIcon,
+  MetronomeIcon,
   PlusIcon,
   Trash2Icon,
   VideoIcon,
@@ -41,14 +43,20 @@ import {
   getAssignmentsForPiece,
   toggleAssignmentCompleted,
   createAssignment,
+  createTaskFromAssignment,
   deleteAssignment,
   updateAssignmentText,
+  updateAssignmentMetronome,
   reorderAssignments,
 } from "@/app/(app)/focus-panel/actions";
 import type { AssignmentWithPiece } from "@/app/(app)/focus-panel/actions";
 import { cn } from "@/lib/utils";
 import { getSections } from "@/app/(app)/repertoire/section-actions";
-import { createTaskOptimistic } from "@/lib/optimistic-task";
+import {
+  createTaskOptimistic,
+  emitOptimisticTask,
+  rollbackOptimisticTask,
+} from "@/lib/optimistic-task";
 import { createClient } from "@/lib/supabase/client";
 import { useMetronome } from "@/components/metronome/metronome-context";
 import { SectionSidebar } from "@/components/timer/section-sidebar";
@@ -255,6 +263,7 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
       completed: false,
       completed_at: null,
       sort_order: 0,
+      metronome_speed: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -267,6 +276,19 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
     setOpenAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
     setCompletedAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
     await deleteAssignment(assignmentId);
+  };
+
+  const handleMetronomeChange = async (
+    assignmentId: string,
+    speed: number | null
+  ) => {
+    setOpenAssignments((prev) =>
+      prev.map((a) => (a.id === assignmentId ? { ...a, metronome_speed: speed } : a))
+    );
+    setCompletedAssignments((prev) =>
+      prev.map((a) => (a.id === assignmentId ? { ...a, metronome_speed: speed } : a))
+    );
+    await updateAssignmentMetronome(assignmentId, speed);
   };
 
   if (!piece) {
@@ -396,6 +418,9 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
                   assignment={assignment}
                   onToggle={() => handleToggle(assignment)}
                   onDelete={() => handleDelete(assignment.id)}
+                  onMetronomeChange={(speed) =>
+                    handleMetronomeChange(assignment.id, speed)
+                  }
                 />
               ))}
             </FocusSection>
@@ -423,6 +448,9 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
                       assignment={assignment}
                       onToggle={() => handleToggle(assignment)}
                       onDelete={() => handleDelete(assignment.id)}
+                      onMetronomeChange={(speed) =>
+                        handleMetronomeChange(assignment.id, speed)
+                      }
                       showCompletedDate
                     />
                   ))}
@@ -630,6 +658,7 @@ function AssignmentRow({
   onToggle,
   onDelete,
   onEdit,
+  onMetronomeChange,
   showCompletedDate,
   dragHandle,
 }: {
@@ -637,16 +666,32 @@ function AssignmentRow({
   onToggle: () => void;
   onDelete?: () => void;
   onEdit?: (newText: string) => void;
+  onMetronomeChange?: (speed: number | null) => void;
   showCompletedDate?: boolean;
   dragHandle?: React.ReactNode;
 }) {
+  const metronomeCtx = useMetronome();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(assignment.text);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const [editingMetronome, setEditingMetronome] = useState(false);
+  const [metronomeText, setMetronomeText] = useState(
+    assignment.metronome_speed?.toString() ?? ""
+  );
+  const [optimisticMetronomeSpeed, setOptimisticMetronomeSpeed] = useState<
+    number | null
+  >(assignment.metronome_speed);
+  const metronomeRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     setText(assignment.text);
   }, [assignment.text]);
+
+  useEffect(() => {
+    setOptimisticMetronomeSpeed(assignment.metronome_speed);
+    setMetronomeText(assignment.metronome_speed?.toString() ?? "");
+  }, [assignment.metronome_speed]);
 
   useEffect(() => {
     if (editing) {
@@ -654,6 +699,13 @@ function AssignmentRow({
       inputRef.current?.select();
     }
   }, [editing]);
+
+  useEffect(() => {
+    if (editingMetronome) {
+      metronomeRef.current?.focus();
+      metronomeRef.current?.select();
+    }
+  }, [editingMetronome]);
 
   const commit = () => {
     const trimmed = text.trim();
@@ -675,6 +727,46 @@ function AssignmentRow({
   const cancel = () => {
     setText(assignment.text);
     setEditing(false);
+  };
+
+  const isMetronomeActiveForThisRow =
+    metronomeCtx.isActive && metronomeCtx.activeSourceId === assignment.id;
+
+  const commitMetronome = () => {
+    const val = metronomeText.trim();
+    const parsed = val ? parseInt(val, 10) : NaN;
+    const normalized = Number.isFinite(parsed) ? parsed : null;
+    if (normalized !== optimisticMetronomeSpeed) {
+      setOptimisticMetronomeSpeed(normalized);
+      setMetronomeText(normalized?.toString() ?? "");
+      if (onMetronomeChange) {
+        onMetronomeChange(normalized);
+      } else {
+        void updateAssignmentMetronome(assignment.id, normalized);
+      }
+    } else {
+      setMetronomeText(normalized?.toString() ?? "");
+    }
+    setEditingMetronome(false);
+  };
+
+  const cancelMetronome = () => {
+    setMetronomeText(optimisticMetronomeSpeed?.toString() ?? "");
+    setEditingMetronome(false);
+  };
+
+  const handleMetronomePillClick = () => {
+    if (!optimisticMetronomeSpeed) return;
+    if (isMetronomeActiveForThisRow) {
+      metronomeCtx.stop();
+    } else {
+      metronomeCtx.start(optimisticMetronomeSpeed, assignment.id);
+    }
+  };
+
+  const handleMetronomeRightClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setEditingMetronome(true);
   };
 
   return (
@@ -725,6 +817,52 @@ function AssignmentRow({
             }`}
           >
             <AssignmentTextWithMetronome text={assignment.text} />
+          </button>
+        )}
+        {editingMetronome ? (
+          <input
+            ref={metronomeRef}
+            type="text"
+            inputMode="numeric"
+            value={metronomeText}
+            onChange={(e) => setMetronomeText(e.target.value)}
+            onBlur={commitMetronome}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitMetronome();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancelMetronome();
+              }
+            }}
+            className="w-12 shrink-0 rounded border bg-background px-1 py-0 text-xs text-center tabular-nums focus:outline-none focus:ring-1 focus:ring-ring mt-0.5"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={handleMetronomePillClick}
+            onContextMenu={handleMetronomeRightClick}
+            onDoubleClick={(e) => {
+              e.preventDefault();
+              setEditingMetronome(true);
+            }}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] tabular-nums transition-colors mt-0.5",
+              optimisticMetronomeSpeed
+                ? isMetronomeActiveForThisRow
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
+                : "text-muted-foreground/40 opacity-0 group-hover:opacity-100 hover:text-muted-foreground"
+            )}
+            title={
+              optimisticMetronomeSpeed
+                ? "Click to start/stop; right-click to edit"
+                : "Right-click or double-click to set tempo"
+            }
+          >
+            <MetronomeIcon className="size-3" />
+            {optimisticMetronomeSpeed ?? "—"}
           </button>
         )}
         {onDelete && (
@@ -844,6 +982,48 @@ function PracticeOverview({
     [updateAssignments]
   );
 
+  const handleMetronomeChange = useCallback(
+    (assignmentId: string, speed: number | null) => {
+      updateAssignments((prev) =>
+        prev.map((t) =>
+          t.id === assignmentId ? { ...t, metronome_speed: speed } : t
+        )
+      );
+      void updateAssignmentMetronome(assignmentId, speed);
+    },
+    [updateAssignments]
+  );
+
+  const handleAddToTasks = useCallback(
+    async (assignment: AssignmentWithPiece) => {
+      const today = localDate();
+      const tempId = emitOptimisticTask({
+        pieceId: assignment.piece_id,
+        sectionId: null,
+        date: today,
+        text: assignment.text,
+        metronomeSpeed: assignment.metronome_speed,
+        pieceName: assignment.piece_name,
+        pieceComposer: assignment.piece_composer,
+        pieceKind: assignment.kind,
+        sectionLabel: null,
+        sectionStatus: null,
+      });
+      try {
+        await createTaskFromAssignment(
+          assignment.piece_id,
+          assignment.text,
+          assignment.metronome_speed,
+          today
+        );
+      } catch (err) {
+        rollbackOptimisticTask(tempId);
+        throw err;
+      }
+    },
+    []
+  );
+
   const handleCreate = useCallback(
     async (piece: {
       id: string;
@@ -859,6 +1039,7 @@ function PracticeOverview({
         completed: false,
         completed_at: null,
         sort_order: 9999,
+        metronome_speed: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         piece_name: piece.name,
@@ -1048,6 +1229,8 @@ function PracticeOverview({
                 onToggle={handleToggle}
                 onDelete={handleDelete}
                 onEdit={handleEdit}
+                onMetronomeChange={handleMetronomeChange}
+                onAddToTasks={handleAddToTasks}
                 onReorder={handleReorder}
                 onPendingSubmit={async (text) => {
                   setPendingPieceId(null);
@@ -1094,6 +1277,8 @@ function AssignmentPieceGroup({
   onToggle,
   onDelete,
   onEdit,
+  onMetronomeChange,
+  onAddToTasks,
   onReorder,
   onPendingSubmit,
   onPendingCancel,
@@ -1104,6 +1289,8 @@ function AssignmentPieceGroup({
   onToggle: (assignmentId: string) => void;
   onDelete: (assignmentId: string) => void;
   onEdit: (assignmentId: string, newText: string) => void;
+  onMetronomeChange: (assignmentId: string, speed: number | null) => void;
+  onAddToTasks: (assignment: AssignmentWithPiece) => Promise<void>;
   onReorder: (pieceId: string, orderedIds: string[]) => void;
   onPendingSubmit: (text: string) => Promise<void>;
   onPendingCancel: () => void;
@@ -1165,6 +1352,10 @@ function AssignmentPieceGroup({
                 onToggle={() => onToggle(assignment.id)}
                 onDelete={() => onDelete(assignment.id)}
                 onEdit={(text) => onEdit(assignment.id, text)}
+                onMetronomeChange={(speed) =>
+                  onMetronomeChange(assignment.id, speed)
+                }
+                onAddToTasks={() => onAddToTasks(assignment)}
               />
             ))}
           </div>
@@ -1229,11 +1420,15 @@ function SortableAssignmentRow({
   onToggle,
   onDelete,
   onEdit,
+  onMetronomeChange,
+  onAddToTasks,
 }: {
   assignment: AssignmentWithPiece;
   onToggle: () => void;
   onDelete: () => void;
   onEdit: (newText: string) => void;
+  onMetronomeChange: (speed: number | null) => void;
+  onAddToTasks: () => Promise<void> | void;
 }) {
   const {
     attributes,
@@ -1285,8 +1480,16 @@ function SortableAssignmentRow({
           anchor={gripButtonRef}
           align="start"
           side="bottom"
-          className="w-40"
+          className="w-44"
         >
+          <DropdownMenuItem
+            onClick={() => {
+              void onAddToTasks();
+            }}
+          >
+            <ListPlusIcon />
+            Add to tasks
+          </DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onClick={onDelete}>
             <Trash2Icon />
             Delete
@@ -1306,6 +1509,7 @@ function SortableAssignmentRow({
         assignment={assignment}
         onToggle={onToggle}
         onEdit={onEdit}
+        onMetronomeChange={onMetronomeChange}
         dragHandle={dragHandle}
       />
     </div>
