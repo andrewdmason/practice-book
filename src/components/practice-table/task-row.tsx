@@ -31,11 +31,12 @@ import {
   updateTaskSection,
   getSectionPickerData,
   deleteTask,
-  duplicateTaskToTomorrow,
+  duplicateTask,
   completeTask,
   uncompleteTask,
 } from "@/app/(app)/timer/task-actions";
 import { emitOptimisticTask, rollbackOptimisticTask } from "@/lib/optimistic-task";
+import { localDate } from "@/lib/date-utils";
 import { practiceTempo } from "@/lib/section-utils";
 import type { PieceSection, TaskWithDetails, SectionStatus } from "@/lib/types";
 import { SECTION_STATUS_DOT_COLORS } from "@/lib/types";
@@ -369,13 +370,20 @@ export function TaskRow({
           >
             <DropdownMenuItem
               onClick={async () => {
-                const d = new Date(task.date + "T12:00:00");
-                d.setDate(d.getDate() + 1);
-                const tomorrowDate = d.toISOString().slice(0, 10);
+                const today = localDate();
+                const isToday = task.date === today;
+                let targetDate: string;
+                if (isToday) {
+                  const d = new Date(task.date + "T12:00:00");
+                  d.setDate(d.getDate() + 1);
+                  targetDate = d.toISOString().slice(0, 10);
+                } else {
+                  targetDate = today;
+                }
                 const tempId = emitOptimisticTask({
                   pieceId: task.piece_id,
                   sectionId: task.section_id,
-                  date: tomorrowDate,
+                  date: targetDate,
                   text: task.text,
                   metronomeSpeed: task.metronome_speed,
                   timerSeconds: task.timer_seconds,
@@ -386,7 +394,7 @@ export function TaskRow({
                   sectionStatus: task.section_status,
                 });
                 try {
-                  await duplicateTaskToTomorrow(task.id);
+                  await duplicateTask(task.id, targetDate);
                 } catch (err) {
                   rollbackOptimisticTask(tempId);
                   throw err;
@@ -394,7 +402,9 @@ export function TaskRow({
               }}
             >
               <CopyPlusIcon />
-              Duplicate to tomorrow
+              {task.date === localDate()
+                ? "Duplicate to tomorrow"
+                : "Duplicate to today"}
             </DropdownMenuItem>
             <DropdownMenuItem>
               <MicIcon />

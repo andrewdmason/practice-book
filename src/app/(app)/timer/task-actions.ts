@@ -236,8 +236,9 @@ export async function deleteTask(taskId: string) {
   revalidatePath("/");
 }
 
-export async function duplicateTaskToTomorrow(
-  taskId: string
+export async function duplicateTask(
+  taskId: string,
+  targetDate: string
 ): Promise<{ id: string; date: string }> {
   const supabase = await createClient();
 
@@ -249,16 +250,10 @@ export async function duplicateTaskToTomorrow(
 
   if (!source) throw new Error("Task not found");
 
-  // Compute tomorrow's date from the source task's date
-  const srcDate = new Date(source.date + "T12:00:00");
-  srcDate.setDate(srcDate.getDate() + 1);
-  const tomorrowDate = srcDate.toISOString().slice(0, 10);
-
-  // Get next sort_order for tomorrow's tasks
   let sortQuery = supabase
     .from("practice_tasks")
     .select("sort_order")
-    .eq("date", tomorrowDate)
+    .eq("date", targetDate)
     .eq("completed", false)
     .order("sort_order", { ascending: false })
     .limit(1);
@@ -277,7 +272,7 @@ export async function duplicateTaskToTomorrow(
     .insert({
       piece_id: source.piece_id,
       section_id: source.section_id,
-      date: tomorrowDate,
+      date: targetDate,
       text: source.text,
       metronome_speed: source.metronome_speed,
       timer_seconds: source.timer_seconds,
@@ -290,7 +285,7 @@ export async function duplicateTaskToTomorrow(
   if (error || !newTask) throw new Error(error?.message ?? "Failed to duplicate task");
 
   revalidatePath("/");
-  return { id: newTask.id, date: tomorrowDate };
+  return { id: newTask.id, date: targetDate };
 }
 
 export async function updateTaskRemaining(taskId: string, remainingSeconds: number) {
