@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   CheckCircle2Icon,
-  ChevronDownIcon,
   ExternalLinkIcon,
   GripVerticalIcon,
   ListPlusIcon,
@@ -130,13 +129,14 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
     kind: PieceKind;
   } | null>(knownPiece ? { name: knownPiece.name, composer: knownPiece.composer, target_tempo: knownPiece.target_tempo, kind: (knownPiece.kind ?? "piece") as PieceKind } : null);
   const [openAssignments, setOpenAssignments] = useState<Assignment[]>(cached?.openAssignments ?? []);
-  const [completedAssignments, setCompletedAssignments] = useState<Assignment[]>(cached?.completedAssignments ?? []);
   const [sections, setSections] = useState<PieceSectionWithChildren[]>(
     () => sectionsCache.get(pieceId) ?? []
   );
-  const [showCompleted, setShowCompleted] = useState(false);
-  const [loaded, setLoaded] = useState(!!cached);
-  const [newAssignmentText, setNewAssignmentText] = useState("");
+  const [isAddingAssignment, setIsAddingAssignment] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
 
   // Update piece immediately when knownPiece changes (no network needed)
   useEffect(() => {
@@ -149,8 +149,6 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
     getAssignmentsForPiece(pieceId).then((data) => {
       assignmentsCache.set(pieceId, data);
       setOpenAssignments(data.openAssignments);
-      setCompletedAssignments(data.completedAssignments);
-      setLoaded(true);
     });
   }, [pieceId]);
 
@@ -172,10 +170,6 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
     const cachedAssignments = assignmentsCache.get(pieceId);
     if (cachedAssignments) {
       setOpenAssignments(cachedAssignments.openAssignments);
-      setCompletedAssignments(cachedAssignments.completedAssignments);
-      setLoaded(true);
-    } else {
-      setLoaded(false);
     }
 
     if (!knownPiece) {
@@ -238,44 +232,42 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
   }, []);
 
   const handleToggle = async (assignment: Assignment) => {
-    const newCompleted = !assignment.completed;
-    if (newCompleted) {
-      const updated = { ...assignment, completed: true, completed_at: new Date().toISOString() };
-      setOpenAssignments((prev) => prev.filter((t) => t.id !== assignment.id));
-      setCompletedAssignments((prev) => [updated, ...prev]);
-    } else {
-      const updated = { ...assignment, completed: false, completed_at: null };
-      setCompletedAssignments((prev) => prev.filter((t) => t.id !== assignment.id));
-      setOpenAssignments((prev) => [updated, ...prev]);
-    }
-    await toggleAssignmentCompleted(assignment.id, newCompleted);
+    setOpenAssignments((prev) => prev.filter((t) => t.id !== assignment.id));
+    await toggleAssignmentCompleted(assignment.id, true);
   };
 
-  const handleCreate = async () => {
-    const text = newAssignmentText.trim();
-    if (!text) return;
-    setNewAssignmentText("");
-    const tempId = crypto.randomUUID();
+  const handleCreate = async (text: string) => {
+    const tempId = `temp-${crypto.randomUUID()}`;
     const temp: Assignment = {
       id: tempId,
       piece_id: pieceId,
       text,
       completed: false,
       completed_at: null,
-      sort_order: 0,
+      sort_order: 9999,
       metronome_speed: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    setOpenAssignments((prev) => [temp, ...prev]);
-    const created = await createAssignment(pieceId, text);
-    setOpenAssignments((prev) => prev.map((a) => (a.id === tempId ? created : a)));
+    setOpenAssignments((prev) => [...prev, temp]);
+    try {
+      const created = await createAssignment(pieceId, text);
+      setOpenAssignments((prev) => prev.map((a) => (a.id === tempId ? created : a)));
+    } catch {
+      setOpenAssignments((prev) => prev.filter((a) => a.id !== tempId));
+    }
   };
 
   const handleDelete = async (assignmentId: string) => {
     setOpenAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
-    setCompletedAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
     await deleteAssignment(assignmentId);
+  };
+
+  const handleEdit = async (assignmentId: string, newText: string) => {
+    setOpenAssignments((prev) =>
+      prev.map((a) => (a.id === assignmentId ? { ...a, text: newText } : a))
+    );
+    await updateAssignmentText(assignmentId, newText);
   };
 
   const handleMetronomeChange = async (
@@ -285,11 +277,74 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
     setOpenAssignments((prev) =>
       prev.map((a) => (a.id === assignmentId ? { ...a, metronome_speed: speed } : a))
     );
-    setCompletedAssignments((prev) =>
-      prev.map((a) => (a.id === assignmentId ? { ...a, metronome_speed: speed } : a))
-    );
     await updateAssignmentMetronome(assignmentId, speed);
   };
+
+  const handleReorder = useCallback(
+    (orderedIds: string[]) => {
+      setOpenAssignments((prev) => {
+        const byId = new Map(prev.map((a) => [a.id, a]));
+        return orderedIds
+          .map((id) => byId.get(id))
+          .filter((a): a is Assignment => !!a)
+          .map((a, i) => ({ ...a, sort_order: i }));
+      });
+      const realIds = orderedIds.filter((id) => !id.startsWith("temp-"));
+      if (realIds.length > 0) {
+        void reorderAssignments(realIds);
+      }
+    },
+    []
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const ids = openAssignments.map((a) => a.id);
+      const activeId = String(active.id);
+      const overId = String(over.id);
+      const oldIndex = ids.indexOf(activeId);
+      const newIndex = ids.indexOf(overId);
+      if (oldIndex === -1 || newIndex === -1) return;
+      const reordered = [...ids];
+      reordered.splice(oldIndex, 1);
+      reordered.splice(newIndex, 0, activeId);
+      handleReorder(reordered);
+    },
+    [openAssignments, handleReorder]
+  );
+
+  const handleAddToTasks = useCallback(
+    async (assignment: Assignment) => {
+      if (!piece) return;
+      const today = localDate();
+      const tempId = emitOptimisticTask({
+        pieceId: assignment.piece_id,
+        sectionId: null,
+        date: today,
+        text: assignment.text,
+        metronomeSpeed: assignment.metronome_speed,
+        pieceName: piece.name,
+        pieceComposer: piece.composer,
+        pieceKind: piece.kind,
+        sectionLabel: null,
+        sectionStatus: null,
+      });
+      try {
+        await createTaskFromAssignment(
+          assignment.piece_id,
+          assignment.text,
+          assignment.metronome_speed,
+          today
+        );
+      } catch (err) {
+        rollbackOptimisticTask(tempId);
+        throw err;
+      }
+    },
+    [piece]
+  );
 
   if (!piece) {
     return (
@@ -302,11 +357,13 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
   }
 
   const systemPiece = isSystemPiece(pieceId);
-  const hasAssignments = loaded && (openAssignments.length > 0 || completedAssignments.length > 0);
+  const hasAssignmentsContent = isAddingAssignment || openAssignments.length > 0;
+  const hasSectionsContent = !systemPiece && sections.length > 0;
+  const showCardContent = hasAssignmentsContent || hasSectionsContent;
 
   return (
     <div className="space-y-4">
-      {/* Piece header card */}
+      {/* Piece card: header, assignments, sections */}
       <Card>
         <CardHeader className="pb-0">
           <div className="flex items-center gap-2">
@@ -320,6 +377,15 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
             </CardTitle>
             <div className="flex items-center gap-1 shrink-0">
               {!systemPiece && <PieceVideoToggle />}
+              <button
+                type="button"
+                onClick={() => setIsAddingAssignment(true)}
+                className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                title="Add assignment"
+                aria-label="Add assignment"
+              >
+                <PlusIcon className="size-3.5" />
+              </button>
               {!systemPiece && (
                 <Link
                   href={`/repertoire/${pieceId}`}
@@ -332,137 +398,90 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
             </div>
           </div>
         </CardHeader>
-      </Card>
-
-      {/* Sections card (only for regular pieces) */}
-      {!systemPiece && sections.length > 0 && (
-        <Card>
-          <CardContent className="pt-4">
-            <SectionSidebar
-              sections={sections}
-              pieceTargetTempo={piece.target_tempo}
-              pieceId={pieceId}
-              pieceName={piece.name}
-              composer={piece.composer}
-              onSectionsChanged={refreshSections}
-              onStatusChange={(sectionId, status) => {
-                setSections((prev) => {
-                  const next = prev.map((s) => {
-                    if (s.id === sectionId) return { ...s, status };
-                    return {
-                      ...s,
-                      children: s.children.map((c) =>
-                        c.id === sectionId ? { ...c, status } : c
-                      ),
-                    };
+        {showCardContent && (
+          <CardContent className="space-y-4">
+            {hasAssignmentsContent && (
+              <div>
+                {isAddingAssignment && (
+                  <PendingAssignmentInput
+                    onSubmit={async (text) => {
+                      setIsAddingAssignment(false);
+                      await handleCreate(text);
+                    }}
+                    onCancel={() => setIsAddingAssignment(false)}
+                  />
+                )}
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={openAssignments.map((a) => a.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="space-y-1.5">
+                      {openAssignments.map((assignment) => (
+                        <SortableAssignmentRow
+                          key={assignment.id}
+                          assignment={assignment}
+                          onToggle={() => handleToggle(assignment)}
+                          onDelete={() => handleDelete(assignment.id)}
+                          onEdit={(text) => handleEdit(assignment.id, text)}
+                          onMetronomeChange={(speed) =>
+                            handleMetronomeChange(assignment.id, speed)
+                          }
+                          onAddToTasks={() => handleAddToTasks(assignment)}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              </div>
+            )}
+            {hasSectionsContent && (
+              <SectionSidebar
+                sections={sections}
+                pieceTargetTempo={piece.target_tempo}
+                pieceId={pieceId}
+                pieceName={piece.name}
+                composer={piece.composer}
+                onSectionsChanged={refreshSections}
+                onStatusChange={(sectionId, status) => {
+                  setSections((prev) => {
+                    const next = prev.map((s) => {
+                      if (s.id === sectionId) return { ...s, status };
+                      return {
+                        ...s,
+                        children: s.children.map((c) =>
+                          c.id === sectionId ? { ...c, status } : c
+                        ),
+                      };
+                    });
+                    sectionsCache.set(pieceId, next);
+                    return next;
                   });
-                  sectionsCache.set(pieceId, next);
-                  return next;
-                });
-              }}
-              onAddTask={(section, metronomeSpeed, tomorrow) => {
-                const date = tomorrow
-                  ? localDate(new Date(Date.now() + 86_400_000))
-                  : localDate();
-                void createTaskOptimistic({
-                  pieceId,
-                  sectionId: section.id,
-                  date,
-                  metronomeSpeed,
-                  pieceName: piece.name,
-                  pieceComposer: piece.composer,
-                  pieceKind: piece.kind,
-                  sectionLabel: section.label,
-                  sectionStatus: section.status,
-                });
-              }}
-            />
+                }}
+                onAddTask={(section, metronomeSpeed, tomorrow) => {
+                  const date = tomorrow
+                    ? localDate(new Date(Date.now() + 86_400_000))
+                    : localDate();
+                  void createTaskOptimistic({
+                    pieceId,
+                    sectionId: section.id,
+                    date,
+                    metronomeSpeed,
+                    pieceName: piece.name,
+                    pieceComposer: piece.composer,
+                    pieceKind: piece.kind,
+                    sectionLabel: section.label,
+                    sectionStatus: section.status,
+                  });
+                }}
+              />
+            )}
           </CardContent>
-        </Card>
-      )}
-
-      {/* Assignments card */}
-      <Card>
-        <CardContent className="pt-4 space-y-4">
-          {/* New assignment input */}
-          <form
-            onSubmit={(e) => { e.preventDefault(); handleCreate(); }}
-            className="flex items-center gap-2"
-          >
-            <input
-              type="text"
-              value={newAssignmentText}
-              onChange={(e) => setNewAssignmentText(e.target.value)}
-              placeholder="Add assignment..."
-              className="flex-1 rounded border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-            <button
-              type="submit"
-              disabled={!newAssignmentText.trim()}
-              className="p-1 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
-            >
-              <PlusIcon className="size-4" />
-            </button>
-          </form>
-
-          {/* Open Assignments */}
-          {openAssignments.length > 0 && (
-            <FocusSection
-              icon={<CheckCircle2Icon className="size-3.5" />}
-              title="Assignments"
-              count={openAssignments.length}
-            >
-              {openAssignments.map((assignment) => (
-                <AssignmentRow
-                  key={assignment.id}
-                  assignment={assignment}
-                  onToggle={() => handleToggle(assignment)}
-                  onDelete={() => handleDelete(assignment.id)}
-                  onMetronomeChange={(speed) =>
-                    handleMetronomeChange(assignment.id, speed)
-                  }
-                />
-              ))}
-            </FocusSection>
-          )}
-
-          {/* Completed Assignments (collapsible) */}
-          {completedAssignments.length > 0 && (
-            <div>
-              <button
-                type="button"
-                onClick={() => setShowCompleted(!showCompleted)}
-                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 hover:text-foreground transition-colors"
-              >
-                <ChevronDownIcon className={`size-3.5 transition-transform ${showCompleted ? "" : "-rotate-90"}`} />
-                Completed
-                <span className="text-[10px] font-normal bg-muted text-muted-foreground rounded-full px-1.5 py-0.5">
-                  {completedAssignments.length}
-                </span>
-              </button>
-              {showCompleted && (
-                <div className="space-y-1.5">
-                  {completedAssignments.map((assignment) => (
-                    <AssignmentRow
-                      key={assignment.id}
-                      assignment={assignment}
-                      onToggle={() => handleToggle(assignment)}
-                      onDelete={() => handleDelete(assignment.id)}
-                      onMetronomeChange={(speed) =>
-                        handleMetronomeChange(assignment.id, speed)
-                      }
-                      showCompletedDate
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {loaded && openAssignments.length === 0 && completedAssignments.length === 0 && (
-            <p className="text-sm text-muted-foreground">No assignments yet.</p>
-          )}
-        </CardContent>
+        )}
       </Card>
     </div>
   );
@@ -585,37 +604,6 @@ function FloatingVideoPanel() {
         onMouseDown={handleResizeStart}
         className="absolute top-0 right-0 w-1.5 h-full cursor-ew-resize hover:bg-primary/20 transition-colors"
       />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Focus Section wrapper
-// ---------------------------------------------------------------------------
-
-function FocusSection({
-  icon,
-  title,
-  count,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  count?: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <h4 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-        {icon}
-        {title}
-        {count !== undefined && count > 0 && (
-          <span className="ml-auto text-[10px] font-normal bg-muted text-muted-foreground rounded-full px-1.5 py-0.5">
-            {count}
-          </span>
-        )}
-      </h4>
-      <div className="space-y-1.5">{children}</div>
     </div>
   );
 }
@@ -1423,7 +1411,7 @@ function SortableAssignmentRow({
   onMetronomeChange,
   onAddToTasks,
 }: {
-  assignment: AssignmentWithPiece;
+  assignment: Assignment;
   onToggle: () => void;
   onDelete: () => void;
   onEdit: (newText: string) => void;
