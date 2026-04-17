@@ -428,7 +428,7 @@ export function TaskRow({
       {/* Row content — Notion-style: bordered cells, no fill */}
       <div
         className={cn(
-          "flex-1 min-w-0 grid grid-cols-[32px_56px_72px_128px_1fr] items-stretch text-xs transition-colors",
+          "flex-1 min-w-0 grid grid-cols-[32px_128px_72px_56px_1fr] items-stretch text-xs transition-colors",
           isActive ? cn(activeRowBg, "text-white") : "text-foreground",
           optimisticCompleted && "opacity-50"
         )}
@@ -443,62 +443,26 @@ export function TaskRow({
           />
         </div>
 
-        {/* Section + status dot — click opens picker */}
+        {/* Timer + goal */}
         <div
           className={cn(
-            "flex items-stretch min-w-0 border-b border-l",
+            "flex items-center px-2 py-1.5 border-b border-l",
             isFirst && "border-t",
             !isActive && "border-r border-border/60",
             isActive && activeSectionBorderClasses
           )}
         >
-          <Popover
-            open={sectionPickerOpen}
-            onOpenChange={handleSectionPickerOpenChange}
-          >
-            <PopoverTrigger
-              disabled={!task.piece_id}
-              className={cn(
-                "flex flex-1 items-center gap-1 min-w-0 px-2 py-1.5 text-left focus:outline-none",
-                task.piece_id && "cursor-pointer rounded-sm hover:bg-muted/40",
-                isActive && "hover:bg-white/10",
-                !task.piece_id && "cursor-default"
-              )}
-            >
-              {optimisticSection.status !== null && (
-                <CircleIcon
-                  className={cn(
-                    "size-2.5 shrink-0 fill-current",
-                    isActive
-                      ? "text-white/80"
-                      : SECTION_STATUS_DOT_COLORS[
-                          optimisticSection.status as SectionStatus
-                        ]
-                  )}
-                />
-              )}
-              <span
-                className={cn(
-                  "truncate",
-                  isActive ? "text-white" : "text-muted-foreground"
-                )}
-              >
-                {optimisticSection.label ?? "—"}
-              </span>
-            </PopoverTrigger>
-            <PopoverContent
-              align="start"
-              side="bottom"
-              sideOffset={2}
-              className="w-auto min-w-[200px] max-w-[280px] p-1 gap-0"
-            >
-              <SectionPickerList
-                data={sectionPickerData}
-                selectedSectionId={optimisticSection.sectionId}
-                onSelect={handleSelectSection}
-              />
-            </PopoverContent>
-          </Popover>
+          <TimerCell
+            elapsedSeconds={elapsed}
+            goalSeconds={optimisticGoalSeconds}
+            isActive={isActive}
+            isCompleted={optimisticCompleted}
+            onToggleTimer={handleTimerClick}
+            onChangeGoal={(seconds) => {
+              setOptimisticGoalSeconds(seconds);
+              void updateTaskField(task.id, "timer_seconds", seconds);
+            }}
+          />
         </div>
 
         {/* Metronome pill — click to start/stop, right-click to edit */}
@@ -554,26 +518,62 @@ export function TaskRow({
           )}
         </div>
 
-        {/* Timer + goal */}
+        {/* Section + status dot — click opens picker */}
         <div
           className={cn(
-            "flex items-center px-2 py-1.5 border-b",
+            "flex items-stretch min-w-0 border-b",
             isFirst && "border-t",
             !isActive && "border-r border-border/60",
             isActive && activeBorderClasses
           )}
         >
-          <TimerCell
-            elapsedSeconds={elapsed}
-            goalSeconds={optimisticGoalSeconds}
-            isActive={isActive}
-            isCompleted={optimisticCompleted}
-            onToggleTimer={handleTimerClick}
-            onChangeGoal={(seconds) => {
-              setOptimisticGoalSeconds(seconds);
-              void updateTaskField(task.id, "timer_seconds", seconds);
-            }}
-          />
+          <Popover
+            open={sectionPickerOpen}
+            onOpenChange={handleSectionPickerOpenChange}
+          >
+            <PopoverTrigger
+              disabled={!task.piece_id}
+              className={cn(
+                "flex flex-1 items-center gap-1 min-w-0 px-2 py-1.5 text-left focus:outline-none",
+                task.piece_id && "cursor-pointer rounded-sm hover:bg-muted/40",
+                isActive && "hover:bg-white/10",
+                !task.piece_id && "cursor-default"
+              )}
+            >
+              {optimisticSection.status !== null && (
+                <CircleIcon
+                  className={cn(
+                    "size-2.5 shrink-0 fill-current",
+                    isActive
+                      ? "text-white/80"
+                      : SECTION_STATUS_DOT_COLORS[
+                          optimisticSection.status as SectionStatus
+                        ]
+                  )}
+                />
+              )}
+              <span
+                className={cn(
+                  "truncate",
+                  isActive ? "text-white" : "text-muted-foreground"
+                )}
+              >
+                {optimisticSection.label ?? "—"}
+              </span>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              side="bottom"
+              sideOffset={2}
+              className="w-auto min-w-[200px] max-w-[280px] p-1 gap-0"
+            >
+              <SectionPickerList
+                data={sectionPickerData}
+                selectedSectionId={optimisticSection.sectionId}
+                onSelect={handleSelectSection}
+              />
+            </PopoverContent>
+          </Popover>
         </div>
 
         {/* Text notes — widest column. Truncates to one line; click opens an overlay editor. */}
