@@ -85,12 +85,15 @@ export function PracticeLogHeader() {
     ? activePieces.find((p) => p.id === focusedPieceId)
     : null;
 
-  const title = focusedPiece ? `${focusedPiece.name} Log` : "Practice Log";
+  const title = focusedPiece
+    ? `Practice Log: ${focusedPiece.name}`
+    : "Practice Log";
 
   return (
     <div className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6">
-      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-      <div className="mt-3 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+      <div className="pl-8">
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <button
           onClick={() => handlePillClick(null)}
           className={cn(
@@ -119,6 +122,7 @@ export function PracticeLogHeader() {
             </button>
           );
         })}
+        </div>
       </div>
     </div>
   );
