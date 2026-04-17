@@ -1,5 +1,5 @@
 import { createTask } from "@/app/(app)/timer/task-actions";
-import type { PieceKind, SectionStatus } from "@/lib/types";
+import type { PieceKind, SectionStatus, TaskWithDetails } from "@/lib/types";
 
 export type OptimisticTaskDetail = {
   tempId: string;
@@ -53,4 +53,30 @@ export async function createTaskOptimistic(
     rollbackOptimisticTask(tempId);
     throw err;
   }
+}
+
+export type OptimisticTaskUpdate = {
+  taskId: string;
+  updates: Partial<TaskWithDetails>;
+};
+
+export function emitOptimisticTaskUpdate(
+  taskId: string,
+  updates: Partial<TaskWithDetails>
+): void {
+  window.dispatchEvent(
+    new CustomEvent<OptimisticTaskUpdate>("task-updated-optimistic", {
+      detail: { taskId, updates },
+    })
+  );
+}
+
+export type OptimisticTaskDelete = { taskId: string };
+
+export function emitOptimisticTaskDelete(taskId: string): void {
+  window.dispatchEvent(
+    new CustomEvent<OptimisticTaskDelete>("task-deleted-optimistic", {
+      detail: { taskId },
+    })
+  );
 }
