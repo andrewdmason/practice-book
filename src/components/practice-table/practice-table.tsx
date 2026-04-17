@@ -15,13 +15,21 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVerticalIcon, PlusIcon } from "lucide-react";
+import { ClockIcon, GripVerticalIcon, PlusIcon } from "lucide-react";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { TaskRow } from "@/components/practice-table/task-row";
+import { PieceSessionsDialog } from "@/components/practice-table/piece-sessions-dialog";
 import { reorderTasks } from "@/app/(app)/timer/task-actions";
 import { getFeedPage } from "@/app/(app)/feed/actions";
-import { createTaskOptimistic, type OptimisticTaskDetail, type OptimisticTaskRollback } from "@/lib/optimistic-task";
+import {
+  createTaskOptimistic,
+  type OptimisticTaskDetail,
+  type OptimisticTaskRollback,
+  type OptimisticTaskUpdate,
+  type OptimisticTaskDelete,
+} from "@/lib/optimistic-task";
 import { localDate } from "@/lib/date-utils";
+import { formatMinutes } from "@/lib/timer-utils";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -104,6 +112,13 @@ function SortablePieceGroup({
     transition,
   };
 
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+
+  const totalElapsed = group.tasks.reduce(
+    (sum, t) => sum + Math.max(0, t.timer_seconds - t.timer_remaining_seconds),
+    0
+  );
+
   return (
     <div
       ref={setNodeRef}
@@ -140,6 +155,17 @@ function SortablePieceGroup({
           <h3 className="text-sm font-medium text-muted-foreground">
             {group.pieceName}
           </h3>
+          {totalElapsed > 0 && group.pieceId && (
+            <button
+              type="button"
+              onClick={() => setSessionsOpen(true)}
+              title="Edit individual sessions"
+              className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums font-medium text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground transition-colors"
+            >
+              <ClockIcon className="size-3" />
+              {formatMinutes(totalElapsed)}
+            </button>
+          )}
         </div>
       </div>
 
@@ -157,6 +183,14 @@ function SortablePieceGroup({
           />
         ))}
       </SortableContext>
+      {group.pieceId && (
+        <PieceSessionsDialog
+          open={sessionsOpen}
+          onOpenChange={setSessionsOpen}
+          title={group.pieceName}
+          tasks={group.tasks}
+        />
+      )}
     </div>
   );
 }
@@ -494,11 +528,40 @@ export function PracticeTable({
       );
     };
 
+    const updateHandler = (e: Event) => {
+      const { taskId, updates } = (e as CustomEvent<OptimisticTaskUpdate>).detail;
+      setDays((prev) =>
+        prev.map((d) => {
+          if (!d.tasks.some((t) => t.id === taskId)) return d;
+          return {
+            ...d,
+            tasks: d.tasks.map((t) =>
+              t.id === taskId ? { ...t, ...updates } : t
+            ),
+          };
+        })
+      );
+    };
+
+    const deleteHandler = (e: Event) => {
+      const { taskId } = (e as CustomEvent<OptimisticTaskDelete>).detail;
+      setDays((prev) =>
+        prev.map((d) => ({
+          ...d,
+          tasks: d.tasks.filter((t) => t.id !== taskId),
+        }))
+      );
+    };
+
     window.addEventListener("task-created-optimistic", addHandler);
     window.addEventListener("task-created-rollback", rollbackHandler);
+    window.addEventListener("task-updated-optimistic", updateHandler);
+    window.addEventListener("task-deleted-optimistic", deleteHandler);
     return () => {
       window.removeEventListener("task-created-optimistic", addHandler);
       window.removeEventListener("task-created-rollback", rollbackHandler);
+      window.removeEventListener("task-updated-optimistic", updateHandler);
+      window.removeEventListener("task-deleted-optimistic", deleteHandler);
     };
   }, []);
 
