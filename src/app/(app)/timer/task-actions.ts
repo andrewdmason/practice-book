@@ -66,26 +66,63 @@ export async function createTask(
   pieceId: string | null,
   sectionId: string | null,
   metronomeSpeed: number | null,
-  date?: string
+  date?: string,
+  afterTaskId?: string | null
 ): Promise<{ id: string; timer_seconds: number; timer_remaining_seconds: number }> {
   const supabase = await createClient();
 
-  // Get next sort_order
-  let sortQuery = supabase
-    .from("practice_tasks")
-    .select("sort_order")
-    .eq("completed", false)
-    .order("sort_order", { ascending: false })
-    .limit(1);
+  let nextOrder: number;
 
-  if (pieceId) {
-    sortQuery = sortQuery.eq("piece_id", pieceId);
+  if (afterTaskId) {
+    // Insert directly below the given task: shift later siblings down by 1.
+    const { data: target } = await supabase
+      .from("practice_tasks")
+      .select("sort_order, piece_id, date")
+      .eq("id", afterTaskId)
+      .single();
+
+    if (!target) throw new Error("Anchor task not found");
+
+    nextOrder = target.sort_order + 1;
+
+    let shiftQuery = supabase
+      .from("practice_tasks")
+      .select("id, sort_order")
+      .eq("date", target.date)
+      .gte("sort_order", nextOrder);
+    shiftQuery = target.piece_id
+      ? shiftQuery.eq("piece_id", target.piece_id)
+      : shiftQuery.is("piece_id", null);
+
+    const { data: toShift } = await shiftQuery;
+    if (toShift && toShift.length > 0) {
+      await Promise.all(
+        toShift.map((row) =>
+          supabase
+            .from("practice_tasks")
+            .update({ sort_order: row.sort_order + 1 })
+            .eq("id", row.id)
+        )
+      );
+    }
   } else {
-    sortQuery = sortQuery.is("piece_id", null);
-  }
+    // No anchor: append at end of the piece group.
+    let sortQuery = supabase
+      .from("practice_tasks")
+      .select("sort_order")
+      .eq("completed", false)
+      .order("sort_order", { ascending: false })
+      .limit(1);
 
-  const { data: maxRow } = await sortQuery.single();
-  const nextOrder = (maxRow?.sort_order ?? -1) + 1;
+    if (pieceId) {
+      sortQuery = sortQuery.eq("piece_id", pieceId);
+    } else {
+      sortQuery = sortQuery.is("piece_id", null);
+    }
+
+    const { data: maxRow } = await sortQuery.single();
+    nextOrder = (maxRow?.sort_order ?? -1) + 1;
+  }
 
   const { data, error } = await supabase
     .from("practice_tasks")

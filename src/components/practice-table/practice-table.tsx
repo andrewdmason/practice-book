@@ -95,7 +95,7 @@ function SortablePieceGroup({
   onAddTask,
 }: {
   group: PieceGroup;
-  onAddTask: () => void;
+  onAddTask: (afterTaskId: string | null) => void;
 }) {
   const sortableId = `piece:${group.pieceId ?? "__general__"}`;
   const {
@@ -135,7 +135,7 @@ function SortablePieceGroup({
         >
           <button
             type="button"
-            onClick={onAddTask}
+            onClick={() => onAddTask(null)}
             className="flex items-center justify-center w-4 h-6 rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors"
             title="Add task"
           >
@@ -179,7 +179,7 @@ function SortablePieceGroup({
             key={task.id}
             task={task}
             isFirst={index === 0}
-            onAddBelow={onAddTask}
+            onAddBelow={(afterTaskId) => onAddTask(afterTaskId)}
           />
         ))}
       </SortableContext>
@@ -272,7 +272,10 @@ function DayGroup({
     [pieceGroups, day.date, onReorder]
   );
 
-  const handleAddTask = async (pieceId: string | null) => {
+  const handleAddTask = async (
+    pieceId: string | null,
+    afterTaskId: string | null = null
+  ) => {
     const group = pieceGroups.find((g) => g.pieceId === pieceId);
     await createTaskOptimistic({
       pieceId,
@@ -286,6 +289,7 @@ function DayGroup({
       pieceKind: group?.pieceKind ?? null,
       sectionLabel: null,
       sectionStatus: null,
+      afterTaskId,
     });
   };
 
@@ -394,7 +398,9 @@ function DayGroup({
             <SortablePieceGroup
               key={group.pieceId ?? "__general__"}
               group={group}
-              onAddTask={() => handleAddTask(group.pieceId)}
+              onAddTask={(afterTaskId) =>
+                handleAddTask(group.pieceId, afterTaskId)
+              }
             />
           ))}
         </SortableContext>
@@ -506,7 +512,16 @@ export function PracticeTable({
         const idx = prev.findIndex((d) => d.date === detail.date);
         if (idx >= 0) {
           const next = [...prev];
-          next[idx] = { ...next[idx], tasks: [...next[idx].tasks, optimistic] };
+          const tasks = [...next[idx].tasks];
+          const anchorIdx = detail.afterTaskId
+            ? tasks.findIndex((t) => t.id === detail.afterTaskId)
+            : -1;
+          if (anchorIdx >= 0) {
+            tasks.splice(anchorIdx + 1, 0, optimistic);
+          } else {
+            tasks.push(optimistic);
+          }
+          next[idx] = { ...next[idx], tasks };
           return next;
         }
         const newDay: FeedDay = {

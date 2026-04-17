@@ -14,6 +14,7 @@ export type OptimisticTaskDetail = {
   pieceKind: PieceKind | null;
   sectionLabel: string | null;
   sectionStatus: SectionStatus | null;
+  afterTaskId?: string | null;
 };
 
 export type OptimisticTaskRollback = { tempId: string };
@@ -47,7 +48,8 @@ export async function createTaskOptimistic(
       input.pieceId,
       input.sectionId,
       input.metronomeSpeed,
-      input.date
+      input.date,
+      input.afterTaskId ?? null
     );
   } catch (err) {
     rollbackOptimisticTask(tempId);

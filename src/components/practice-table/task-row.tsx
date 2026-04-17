@@ -74,7 +74,7 @@ export function TaskRow({
 }: {
   task: TaskWithDetails;
   isFirst: boolean;
-  onAddBelow: () => void;
+  onAddBelow: (afterTaskId: string) => void;
 }) {
   const {
     activeTaskId,
@@ -346,7 +346,7 @@ export function TaskRow({
         menuOpen ? "opacity-100" : "opacity-0 group-hover/task:opacity-100",
       )}>
         <button
-          onClick={onAddBelow}
+          onClick={() => onAddBelow(task.id)}
           className="flex items-center justify-center w-4 h-6 rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors"
         >
           <PlusIcon className="size-3.5" />
