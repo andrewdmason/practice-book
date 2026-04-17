@@ -100,7 +100,7 @@ export function ScrubberBar() {
   if (!showScrubber) return null;
 
   return (
-    <div className="sticky top-26 z-30 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60 border-b">
+    <div className="sticky top-14 z-30 bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60 border-b">
       <div className="mx-auto max-w-7xl px-4 py-1.5 sm:px-6">
         <SectionScrubber
           sections={sections}
