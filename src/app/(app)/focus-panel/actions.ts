@@ -21,6 +21,7 @@ export async function getAssignmentsForPiece(pieceId: string): Promise<{
       .select("*")
       .eq("piece_id", pieceId)
       .eq("completed", false)
+      .order("sort_order", { ascending: true })
       .order("created_at", { ascending: false }),
     supabase
       .from("assignments")
@@ -56,13 +57,23 @@ export async function toggleAssignmentCompleted(assignmentId: string, completed:
   revalidatePath("/");
 }
 
-export async function createAssignment(pieceId: string, text: string): Promise<string> {
+export async function createAssignment(pieceId: string, text: string): Promise<Assignment> {
   const supabase = await createClient();
+
+  const { data: maxRow } = await supabase
+    .from("assignments")
+    .select("sort_order")
+    .eq("piece_id", pieceId)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nextSort = (maxRow?.sort_order ?? -1) + 1;
 
   const { data, error } = await supabase
     .from("assignments")
-    .insert({ piece_id: pieceId, text })
-    .select("id")
+    .insert({ piece_id: pieceId, text, sort_order: nextSort })
+    .select("*")
     .single();
 
   if (error) {
@@ -70,7 +81,18 @@ export async function createAssignment(pieceId: string, text: string): Promise<s
   }
 
   revalidatePath("/");
-  return data.id;
+  return data as Assignment;
+}
+
+export async function reorderAssignments(assignmentIds: string[]) {
+  const supabase = await createClient();
+
+  const updates = assignmentIds.map((id, index) =>
+    supabase.from("assignments").update({ sort_order: index }).eq("id", id)
+  );
+
+  await Promise.all(updates);
+  revalidatePath("/");
 }
 
 export async function deleteAssignment(assignmentId: string) {
@@ -116,6 +138,7 @@ export async function getAllOpenAssignments(): Promise<AssignmentWithPiece[]> {
     .from("assignments")
     .select("*, pieces(name, composer, kind)")
     .eq("completed", false)
+    .order("sort_order", { ascending: true })
     .order("created_at", { ascending: false });
 
   if (!assignments) return [];
@@ -128,6 +151,7 @@ export async function getAllOpenAssignments(): Promise<AssignmentWithPiece[]> {
       text: t.text,
       completed: t.completed,
       completed_at: t.completed_at,
+      sort_order: t.sort_order,
       created_at: t.created_at,
       updated_at: t.updated_at,
       piece_name: piece.name,

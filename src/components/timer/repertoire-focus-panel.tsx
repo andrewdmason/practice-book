@@ -1,17 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   CheckCircle2Icon,
   ChevronDownIcon,
   ExternalLinkIcon,
+  GripVerticalIcon,
   PlusIcon,
   Trash2Icon,
   VideoIcon,
   XIcon,
 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { TimeSummary } from "@/components/timer/time-summary";
 import { getTodaySummary } from "@/app/(app)/timer/actions";
@@ -22,8 +43,10 @@ import {
   createAssignment,
   deleteAssignment,
   updateAssignmentText,
+  reorderAssignments,
 } from "@/app/(app)/focus-panel/actions";
 import type { AssignmentWithPiece } from "@/app/(app)/focus-panel/actions";
+import { cn } from "@/lib/utils";
 import { getSections } from "@/app/(app)/repertoire/section-actions";
 import { createTaskOptimistic } from "@/lib/optimistic-task";
 import { createClient } from "@/lib/supabase/client";
@@ -231,12 +254,13 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
       text,
       completed: false,
       completed_at: null,
+      sort_order: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     setOpenAssignments((prev) => [temp, ...prev]);
-    await createAssignment(pieceId, text);
-    refreshAssignments();
+    const created = await createAssignment(pieceId, text);
+    setOpenAssignments((prev) => prev.map((a) => (a.id === tempId ? created : a)));
   };
 
   const handleDelete = async (assignmentId: string) => {
@@ -605,12 +629,16 @@ function AssignmentRow({
   assignment,
   onToggle,
   onDelete,
+  onEdit,
   showCompletedDate,
+  dragHandle,
 }: {
   assignment: Assignment;
   onToggle: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
+  onEdit?: (newText: string) => void;
   showCompletedDate?: boolean;
+  dragHandle?: React.ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(assignment.text);
@@ -635,7 +663,11 @@ function AssignmentRow({
       return;
     }
     if (trimmed !== assignment.text) {
-      void updateAssignmentText(assignment.id, trimmed);
+      if (onEdit) {
+        onEdit(trimmed);
+      } else {
+        void updateAssignmentText(assignment.id, trimmed);
+      }
     }
     setEditing(false);
   };
@@ -647,7 +679,8 @@ function AssignmentRow({
 
   return (
     <div className="group">
-      <div className="flex items-start gap-2 text-sm">
+      <div className="flex items-start gap-1.5 text-sm">
+        {dragHandle}
         <button
           type="button"
           onClick={onToggle}
@@ -694,14 +727,16 @@ function AssignmentRow({
             <AssignmentTextWithMetronome text={assignment.text} />
           </button>
         )}
-        <button
-          type="button"
-          onClick={onDelete}
-          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0 mt-0.5"
-          title="Delete assignment"
-        >
-          <Trash2Icon className="size-3" />
-        </button>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0 mt-0.5"
+            title="Delete assignment"
+          >
+            <Trash2Icon className="size-3" />
+          </button>
+        )}
       </div>
       {showCompletedDate && assignment.completed_at && (
         <p className="ml-6 mt-0.5 text-[10px] text-muted-foreground/70">
@@ -716,6 +751,20 @@ function AssignmentRow({
 // Practice Overview (sidebar when no piece is focused)
 // ---------------------------------------------------------------------------
 
+// Module-level cache so reopening the overview shows last-seen data instantly
+const overviewCache: {
+  assignments: AssignmentWithPiece[] | null;
+  summary: TimeSummaryEntry[] | null;
+} = { assignments: null, summary: null };
+
+type AssignmentGroup = {
+  key: string;
+  label: string;
+  subtitle: string | null;
+  kind: PieceKind;
+  assignments: AssignmentWithPiece[];
+};
+
 function PracticeOverview({
   isRunning,
   onFocusItem,
@@ -725,13 +774,22 @@ function PracticeOverview({
   onFocusItem: (focusKey: string) => void;
   activePieces: Piece[];
 }) {
-  const [summary, setSummary] = useState<TimeSummaryEntry[]>([]);
-  const [allAssignments, setAllAssignments] = useState<AssignmentWithPiece[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [summary, setSummary] = useState<TimeSummaryEntry[]>(
+    () => overviewCache.summary ?? []
+  );
+  const [allAssignments, setAllAssignments] = useState<AssignmentWithPiece[]>(
+    () => overviewCache.assignments ?? []
+  );
+  const [loaded, setLoaded] = useState(
+    () => overviewCache.assignments !== null && overviewCache.summary !== null
+  );
+  const [pendingPieceId, setPendingPieceId] = useState<string | null>(null);
 
   const refreshData = useCallback(() => {
     Promise.all([getTodaySummary(), getAllOpenAssignments()]).then(
       ([summaryData, assignmentsData]) => {
+        overviewCache.summary = summaryData;
+        overviewCache.assignments = assignmentsData;
         setSummary(summaryData);
         setAllAssignments(assignmentsData);
         setLoaded(true);
@@ -749,15 +807,176 @@ function PracticeOverview({
     return () => window.removeEventListener("assignments-changed", handler);
   }, [refreshData]);
 
-  const handleToggle = async (assignmentId: string) => {
-    setAllAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
-    await toggleAssignmentCompleted(assignmentId, true);
-  };
+  const updateAssignments = useCallback(
+    (updater: (prev: AssignmentWithPiece[]) => AssignmentWithPiece[]) => {
+      setAllAssignments((prev) => {
+        const next = updater(prev);
+        overviewCache.assignments = next;
+        return next;
+      });
+    },
+    []
+  );
 
-  const handleDelete = async (assignmentId: string) => {
-    setAllAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
-    await deleteAssignment(assignmentId);
-  };
+  const handleToggle = useCallback(
+    (assignmentId: string) => {
+      updateAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
+      void toggleAssignmentCompleted(assignmentId, true);
+    },
+    [updateAssignments]
+  );
+
+  const handleDelete = useCallback(
+    (assignmentId: string) => {
+      updateAssignments((prev) => prev.filter((t) => t.id !== assignmentId));
+      void deleteAssignment(assignmentId);
+    },
+    [updateAssignments]
+  );
+
+  const handleEdit = useCallback(
+    (assignmentId: string, newText: string) => {
+      updateAssignments((prev) =>
+        prev.map((t) => (t.id === assignmentId ? { ...t, text: newText } : t))
+      );
+      void updateAssignmentText(assignmentId, newText);
+    },
+    [updateAssignments]
+  );
+
+  const handleCreate = useCallback(
+    async (piece: {
+      id: string;
+      name: string;
+      composer: string | null;
+      kind: PieceKind;
+    }, text: string) => {
+      const tempId = `temp-${crypto.randomUUID()}`;
+      const temp: AssignmentWithPiece = {
+        id: tempId,
+        piece_id: piece.id,
+        text,
+        completed: false,
+        completed_at: null,
+        sort_order: 9999,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        piece_name: piece.name,
+        piece_composer: piece.composer,
+        kind: piece.kind,
+      };
+      updateAssignments((prev) => [...prev, temp]);
+      try {
+        const created = await createAssignment(piece.id, text);
+        updateAssignments((prev) =>
+          prev.map((t) =>
+            t.id === tempId
+              ? {
+                  ...temp,
+                  id: created.id,
+                  sort_order: created.sort_order,
+                  created_at: created.created_at,
+                  updated_at: created.updated_at,
+                }
+              : t
+          )
+        );
+      } catch {
+        updateAssignments((prev) => prev.filter((t) => t.id !== tempId));
+      }
+    },
+    [updateAssignments]
+  );
+
+  const handleReorder = useCallback(
+    (pieceId: string, orderedIds: string[]) => {
+      updateAssignments((prev) => {
+        const byId = new Map(prev.map((a) => [a.id, a]));
+        const orderIndex = new Map(orderedIds.map((id, i) => [id, i]));
+        // Rewrite sort_order for items in this piece so local order matches
+        const next: AssignmentWithPiece[] = prev.map((a) => {
+          if (a.piece_id !== pieceId) return a;
+          const idx = orderIndex.get(a.id);
+          return idx === undefined ? a : { ...a, sort_order: idx };
+        });
+        // Sort by piece grouping isn't needed here; render layer re-groups.
+        // But we need to preserve grouping order → sort the in-piece items by new sort_order
+        // by replacing them in-place using the ordered list.
+        const orderedAssignments = orderedIds
+          .map((id) => byId.get(id))
+          .filter((a): a is AssignmentWithPiece => !!a)
+          .map((a, i) => ({ ...a, sort_order: i }));
+        const otherPieces = next.filter((a) => a.piece_id !== pieceId);
+        return [...otherPieces, ...orderedAssignments];
+      });
+      // Skip temp ids — they don't exist server-side yet.
+      const realIds = orderedIds.filter((id) => !id.startsWith("temp-"));
+      if (realIds.length > 0) {
+        void reorderAssignments(realIds);
+      }
+    },
+    [updateAssignments]
+  );
+
+  // Build a group per active piece (always present so the dropdown can pick
+  // any piece), plus groups for archived/unknown pieces that still have open
+  // assignments.
+  const allGroups = useMemo<AssignmentGroup[]>(() => {
+    const byPiece = new Map<string, AssignmentGroup>();
+    for (const piece of activePieces) {
+      byPiece.set(piece.id, {
+        key: piece.id,
+        label: piece.name,
+        subtitle: piece.composer,
+        kind: (piece.kind ?? "piece") as PieceKind,
+        assignments: [],
+      });
+    }
+    for (const a of allAssignments) {
+      const g = byPiece.get(a.piece_id);
+      if (g) {
+        g.assignments.push(a);
+      } else {
+        byPiece.set(a.piece_id, {
+          key: a.piece_id,
+          label: a.piece_name,
+          subtitle: a.piece_composer,
+          kind: a.kind,
+          assignments: [a],
+        });
+      }
+    }
+    for (const g of byPiece.values()) {
+      g.assignments.sort(
+        (a, b) =>
+          a.sort_order - b.sort_order ||
+          (a.created_at > b.created_at ? -1 : 1)
+      );
+    }
+    const kindOrder: Record<string, number> = {
+      technique: 0,
+      sight_reading: 1,
+      piece: 2,
+    };
+    const pieceOrder = new Map(activePieces.map((p, i) => [p.id, i]));
+    return [...byPiece.values()].sort((a, b) => {
+      const kindDiff = (kindOrder[a.kind] ?? 2) - (kindOrder[b.kind] ?? 2);
+      if (kindDiff !== 0) return kindDiff;
+      return (
+        (pieceOrder.get(a.key) ?? Infinity) -
+        (pieceOrder.get(b.key) ?? Infinity)
+      );
+    });
+  }, [allAssignments, activePieces]);
+
+  // Only render groups that have assignments, unless they're the pending piece.
+  const visibleGroups = useMemo(
+    () =>
+      allGroups.filter(
+        (g) => g.assignments.length > 0 || g.key === pendingPieceId
+      ),
+    [allGroups, pendingPieceId]
+  );
 
   if (!loaded) {
     return (
@@ -769,70 +988,81 @@ function PracticeOverview({
     );
   }
 
-  // Group assignments by piece (all assignments now have piece_id)
-  type AssignmentGroup = { key: string; label: string; subtitle: string | null; kind: PieceKind; assignments: AssignmentWithPiece[] };
-  const groups = new Map<string, AssignmentGroup>();
-  for (const assignment of allAssignments) {
-    const group = groups.get(assignment.piece_id);
-    if (group) {
-      group.assignments.push(assignment);
-    } else {
-      groups.set(assignment.piece_id, {
-        key: assignment.piece_id,
-        label: assignment.piece_name,
-        subtitle: assignment.piece_composer,
-        kind: assignment.kind,
-        assignments: [assignment],
-      });
-    }
-  }
-
-  // Sort: system pieces (technique, sight_reading) first, then regular pieces by activePieces order
-  const kindOrder: Record<string, number> = { technique: 0, sight_reading: 1, piece: 2 };
-  const pieceOrder = new Map(activePieces.map((p, i) => [p.id, i]));
-  const sortedGroups = [...groups.values()].sort((a, b) => {
-    const kindDiff = (kindOrder[a.kind] ?? 2) - (kindOrder[b.kind] ?? 2);
-    if (kindDiff !== 0) return kindDiff;
-    return (pieceOrder.get(a.key) ?? Infinity) - (pieceOrder.get(b.key) ?? Infinity);
-  });
+  const showAssignmentsCard = visibleGroups.length > 0 || allGroups.length > 0;
 
   return (
     <div className="space-y-4">
-      {allAssignments.length > 0 && (
+      {showAssignmentsCard && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <CheckCircle2Icon className="size-4" />
               Active Assignments
-              <span className="text-xs font-normal bg-muted text-muted-foreground rounded-full px-1.5 py-0.5">
-                {allAssignments.length}
-              </span>
+              {allAssignments.length > 0 && (
+                <span className="text-xs font-normal bg-muted text-muted-foreground rounded-full px-1.5 py-0.5">
+                  {allAssignments.length}
+                </span>
+              )}
+              {allGroups.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    className="ml-auto inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground size-6 transition-colors"
+                    title="Add assignment"
+                    aria-label="Add assignment"
+                  >
+                    <PlusIcon className="size-4" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {allGroups.map((group) => (
+                      <DropdownMenuItem
+                        key={group.key}
+                        onClick={() => setPendingPieceId(group.key)}
+                      >
+                        <div className="flex flex-col">
+                          <span className="text-sm">{group.label}</span>
+                          {group.subtitle && (
+                            <span className="text-xs text-muted-foreground">
+                              {group.subtitle}
+                            </span>
+                          )}
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {sortedGroups.map((group) => (
-              <div key={group.key}>
-                <button
-                  type="button"
-                  onClick={() => onFocusItem(group.key)}
-                  className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-1.5 flex items-center gap-1"
-                >
-                  {group.label}
-                  {group.subtitle && (
-                    <span className="font-normal">— {group.subtitle}</span>
-                  )}
-                </button>
-                <div className="space-y-1.5">
-                  {group.assignments.map((assignment) => (
-                    <AssignmentRow
-                      key={assignment.id}
-                      assignment={assignment}
-                      onToggle={() => handleToggle(assignment.id)}
-                      onDelete={() => handleDelete(assignment.id)}
-                    />
-                  ))}
-                </div>
-              </div>
+            {visibleGroups.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No active assignments.
+              </p>
+            )}
+            {visibleGroups.map((group) => (
+              <AssignmentPieceGroup
+                key={group.key}
+                group={group}
+                isPending={group.key === pendingPieceId}
+                onFocus={onFocusItem}
+                onToggle={handleToggle}
+                onDelete={handleDelete}
+                onEdit={handleEdit}
+                onReorder={handleReorder}
+                onPendingSubmit={async (text) => {
+                  setPendingPieceId(null);
+                  await handleCreate(
+                    {
+                      id: group.key,
+                      name: group.label,
+                      composer: group.subtitle,
+                      kind: group.kind,
+                    },
+                    text
+                  );
+                }}
+                onPendingCancel={() => setPendingPieceId(null)}
+              />
             ))}
           </CardContent>
         </Card>
@@ -853,6 +1083,231 @@ function PracticeOverview({
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+function AssignmentPieceGroup({
+  group,
+  isPending,
+  onFocus,
+  onToggle,
+  onDelete,
+  onEdit,
+  onReorder,
+  onPendingSubmit,
+  onPendingCancel,
+}: {
+  group: AssignmentGroup;
+  isPending: boolean;
+  onFocus: (pieceId: string) => void;
+  onToggle: (assignmentId: string) => void;
+  onDelete: (assignmentId: string) => void;
+  onEdit: (assignmentId: string, newText: string) => void;
+  onReorder: (pieceId: string, orderedIds: string[]) => void;
+  onPendingSubmit: (text: string) => Promise<void>;
+  onPendingCancel: () => void;
+}) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const ids = group.assignments.map((a) => a.id);
+      const activeId = String(active.id);
+      const overId = String(over.id);
+      const oldIndex = ids.indexOf(activeId);
+      const newIndex = ids.indexOf(overId);
+      if (oldIndex === -1 || newIndex === -1) return;
+      const reordered = [...ids];
+      reordered.splice(oldIndex, 1);
+      reordered.splice(newIndex, 0, activeId);
+      onReorder(group.key, reordered);
+    },
+    [group.assignments, group.key, onReorder]
+  );
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => onFocus(group.key)}
+        className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-1.5 flex items-center gap-1"
+      >
+        {group.label}
+        {group.subtitle && (
+          <span className="font-normal">— {group.subtitle}</span>
+        )}
+      </button>
+      {isPending && (
+        <PendingAssignmentInput
+          onSubmit={onPendingSubmit}
+          onCancel={onPendingCancel}
+        />
+      )}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={group.assignments.map((a) => a.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="space-y-1.5">
+            {group.assignments.map((assignment) => (
+              <SortableAssignmentRow
+                key={assignment.id}
+                assignment={assignment}
+                onToggle={() => onToggle(assignment.id)}
+                onDelete={() => onDelete(assignment.id)}
+                onEdit={(text) => onEdit(assignment.id, text)}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+    </div>
+  );
+}
+
+function PendingAssignmentInput({
+  onSubmit,
+  onCancel,
+}: {
+  onSubmit: (text: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const submit = () => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      onCancel();
+      return;
+    }
+    void onSubmit(trimmed);
+  };
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+      className="mb-1.5"
+    >
+      <input
+        ref={inputRef}
+        type="text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={submit}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+        placeholder="Assignment..."
+        className="w-full rounded border bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+      />
+    </form>
+  );
+}
+
+function SortableAssignmentRow({
+  assignment,
+  onToggle,
+  onDelete,
+  onEdit,
+}: {
+  assignment: AssignmentWithPiece;
+  onToggle: () => void;
+  onDelete: () => void;
+  onEdit: (newText: string) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: assignment.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  const [menuOpen, setMenuOpen] = useState(false);
+  const gripButtonRef = useRef<HTMLButtonElement>(null);
+  const gripPointerStart = useRef<{ x: number; y: number } | null>(null);
+
+  const handleGripPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    gripPointerStart.current = { x: e.clientX, y: e.clientY };
+    listeners?.onPointerDown?.(e);
+  };
+
+  const handleGripPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const start = gripPointerStart.current;
+    gripPointerStart.current = null;
+    if (!start) return;
+    const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y) >= 5;
+    if (!moved) setMenuOpen((prev) => !prev);
+  };
+
+  const dragHandle = (
+    <>
+      <button
+        ref={gripButtonRef}
+        type="button"
+        {...attributes}
+        onPointerDown={handleGripPointerDown}
+        onPointerUp={handleGripPointerUp}
+        className={cn(
+          "mt-0.5 flex items-center justify-center w-3 h-5 shrink-0 cursor-grab rounded-sm text-muted-foreground/40 hover:text-foreground hover:bg-muted transition-opacity touch-none",
+          menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        )}
+        aria-label="Drag to reorder or open menu"
+      >
+        <GripVerticalIcon className="size-3" />
+      </button>
+      <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenuContent
+          anchor={gripButtonRef}
+          align="start"
+          side="bottom"
+          className="w-40"
+        >
+          <DropdownMenuItem variant="destructive" onClick={onDelete}>
+            <Trash2Icon />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  );
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(isDragging && "opacity-50")}
+    >
+      <AssignmentRow
+        assignment={assignment}
+        onToggle={onToggle}
+        onEdit={onEdit}
+        dragHandle={dragHandle}
+      />
     </div>
   );
 }

@@ -24,14 +24,13 @@ export function AssignmentList({ pieceId, initialAssignments }: { pieceId?: stri
       text,
       completed: false,
       completed_at: null,
+      sort_order: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     setAssignments((prev) => [tempAssignment, ...prev]);
-    const realId = await createAssignment(pieceId, text);
-    setAssignments((prev) =>
-      prev.map((a) => (a.id === tempId ? { ...a, id: realId } : a))
-    );
+    const created = await createAssignment(pieceId, text);
+    setAssignments((prev) => prev.map((a) => (a.id === tempId ? created : a)));
     inputRef.current?.focus();
   };
 

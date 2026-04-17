@@ -70,6 +70,7 @@ export type Assignment = {
   text: string;
   completed: boolean;
   completed_at: string | null;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 };
