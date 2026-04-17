@@ -36,12 +36,30 @@ function NavLink({
   label,
   active,
   onClick,
+  variant = "default",
 }: {
   href: string;
   label: string;
   active: boolean;
   onClick?: () => void;
+  variant?: "default" | "tab";
 }) {
+  if (variant === "tab") {
+    return (
+      <Link
+        href={href}
+        onClick={onClick}
+        className={cn(
+          "relative flex h-14 items-center text-sm font-medium transition-colors hover:text-foreground",
+          active ? "text-foreground" : "text-muted-foreground",
+          active &&
+            "after:absolute after:inset-x-0 after:bottom-[-1px] after:h-[2px] after:bg-primary"
+        )}
+      >
+        {label}
+      </Link>
+    );
+  }
   return (
     <Link
       href={href}
@@ -132,13 +150,14 @@ export function Header() {
     <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto flex h-14 max-w-7xl items-center px-4 sm:px-6">
         {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-6">
+        <nav className="hidden md:flex items-center gap-6 h-14">
           {navItems.map((item) => (
             <NavLink
               key={item.href}
               href={item.href}
               label={item.label}
               active={isActive(item.href)}
+              variant="tab"
             />
           ))}
         </nav>
