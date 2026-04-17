@@ -168,6 +168,48 @@ export async function updateSectionLabel(sectionId: string, label: string) {
   return { success: true };
 }
 
+export async function updateSectionName(
+  sectionId: string,
+  name: string | null
+) {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("piece_sections")
+    .update({ name })
+    .eq("id", sectionId)
+    .select("piece_id")
+    .single();
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidate(data.piece_id);
+  return { success: true };
+}
+
+export async function updateSectionNotes(
+  sectionId: string,
+  notes: string | null
+) {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("piece_sections")
+    .update({ notes })
+    .eq("id", sectionId)
+    .select("piece_id")
+    .single();
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  revalidate(data.piece_id);
+  return { success: true };
+}
+
 export async function deleteSection(sectionId: string) {
   const supabase = await createClient();
 
