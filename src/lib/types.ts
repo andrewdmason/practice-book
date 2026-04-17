@@ -297,6 +297,8 @@ export type PieceSection = {
   piece_id: string;
   parent_id: string | null;
   label: string;
+  name: string | null;
+  notes: string | null;
   sort_order: number;
   status: SectionStatus;
   target_tempo: number | null;
