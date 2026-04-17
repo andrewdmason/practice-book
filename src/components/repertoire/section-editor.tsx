@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CircleIcon,
   LinkIcon,
+  MoreVerticalIcon,
   PauseIcon,
   PlayIcon,
   PlusIcon,
@@ -11,6 +12,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent } from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -23,12 +32,15 @@ import {
   createSection,
   updateSectionStatus,
   updateSectionTargetTempo,
+  updateSectionName,
+  updateSectionNotes,
   updatePieceTargetTempo,
   deleteSection,
 } from "@/app/(app)/repertoire/section-actions";
 import {
   createVideo,
   deleteVideo,
+  deleteTimestamp,
   getVideos,
   getTimestamps,
   updateVideoTimeRange,
@@ -47,9 +59,7 @@ import {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                            */
-/* ------------------------------------------------------------------ */
+/* ---------------------------- helpers ---------------------------- */
 
 function nextSectionLetter(sections: PieceSectionWithChildren[]): string {
   if (sections.length === 0) return "A";
@@ -93,10 +103,6 @@ function extractVideoId(input: string): string | null {
   return match ? match[1] : null;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Flat row type                                                      */
-/* ------------------------------------------------------------------ */
-
 type FlatRow = {
   section: PieceSection;
   parent: PieceSectionWithChildren;
@@ -106,7 +112,6 @@ function buildFlatRows(sections: PieceSectionWithChildren[]): FlatRow[] {
   const rows: FlatRow[] = [];
   for (const s of sections) {
     if (s.children.length > 0) {
-      // Skip parent row, show children only
       for (const child of s.children) {
         rows.push({ section: child, parent: s });
       }
@@ -117,32 +122,18 @@ function buildFlatRows(sections: PieceSectionWithChildren[]): FlatRow[] {
   return rows;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Gutter insert button                                               */
-/* ------------------------------------------------------------------ */
+/* Shared grid: status | label | name | timestamp(+play+Mark) | tempo | notes */
+const GRID_COLS =
+  "grid grid-cols-[20px_40px_minmax(120px,1.4fr)_104px_76px_minmax(160px,2fr)] items-stretch text-xs";
 
-function GutterInsert({ onClick }: { onClick: () => void }) {
-  return (
-    <div className="group/insert relative h-0 my-0">
-      <div className="absolute inset-x-0 -top-1.5 -bottom-1.5 flex items-center opacity-0 group-hover/insert:opacity-100 transition-opacity z-10">
-        <button
-          onClick={onClick}
-          className="flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground shrink-0 hover:scale-110 transition-transform"
-        >
-          <PlusIcon className="size-2.5" />
-        </button>
-        <div className="flex-1 h-px bg-primary/30" />
-      </div>
-    </div>
-  );
-}
+const CELL_BASE =
+  "flex items-center min-w-0 px-2 py-1.5 border-b border-l border-border/60";
 
-/* ------------------------------------------------------------------ */
-/*  Section Row                                                        */
-/* ------------------------------------------------------------------ */
+/* --------------------------- Section row --------------------------- */
 
 function SectionRow({
   section,
+  isFirst,
   pieceTargetTempo,
   hasVideo,
   videoId,
@@ -150,10 +141,14 @@ function SectionRow({
   playingSectionId,
   onStatusCycle,
   onDelete,
+  onAddSubsection,
   onTempoChange,
+  onNameChange,
+  onNotesChange,
   onTimestampUpdated,
 }: {
   section: PieceSection;
+  isFirst: boolean;
   pieceTargetTempo: number | null;
   hasVideo: boolean;
   videoId: string | null;
@@ -161,30 +156,130 @@ function SectionRow({
   playingSectionId: string | null;
   onStatusCycle: () => void;
   onDelete: () => void;
+  onAddSubsection: () => void;
   onTempoChange: (tempo: number | null) => void;
+  onNameChange: (name: string | null) => void;
+  onNotesChange: (notes: string | null) => void;
   onTimestampUpdated: () => void;
 }) {
   const video = useVideo();
   const { currentTime } = video;
-  const [editingTempo, setEditingTempo] = useState(false);
   const effectiveTempo = section.target_tempo ?? pieceTargetTempo;
+
+  /* Tempo */
+  const [editingTempo, setEditingTempo] = useState(false);
   const [tempoValue, setTempoValue] = useState(
     String(section.target_tempo ?? "")
   );
 
+  /* Timestamp */
   const [tsValue, setTsValue] = useState(
     formatMMSS(timestamp?.start_seconds ?? null)
   );
-
-  useEffect(() => {
+  const [prevTsStart, setPrevTsStart] = useState<number | null | undefined>(
+    timestamp?.start_seconds
+  );
+  if (timestamp?.start_seconds !== prevTsStart) {
+    setPrevTsStart(timestamp?.start_seconds);
     setTsValue(formatMMSS(timestamp?.start_seconds ?? null));
-  }, [timestamp?.start_seconds]);
+  }
 
-  const handleSaveTempo = () => {
+  /* Name */
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState(section.name ?? "");
+  const [prevServerName, setPrevServerName] = useState(section.name ?? "");
+  if ((section.name ?? "") !== prevServerName) {
+    setPrevServerName(section.name ?? "");
+    if (!editingName) setNameValue(section.name ?? "");
+  }
+
+  /* Notes */
+  const noteInputRef = useRef<HTMLInputElement>(null);
+  const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteValue, setNoteValue] = useState(section.notes ?? "");
+  const [prevServerNotes, setPrevServerNotes] = useState(section.notes ?? "");
+  if ((section.notes ?? "") !== prevServerNotes) {
+    setPrevServerNotes(section.notes ?? "");
+    if (!noteOpen) setNoteValue(section.notes ?? "");
+  }
+
+  /* Menu */
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const autoGrowNote = useCallback(() => {
+    const el = noteTextareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, []);
+
+  const isNoteOverflowing = useCallback(() => {
+    const el = noteInputRef.current;
+    if (!el) return false;
+    return el.scrollWidth > el.clientWidth;
+  }, []);
+
+  const openNotePopover = useCallback(() => {
+    setNoteOpen(true);
+    requestAnimationFrame(() => {
+      const el = noteTextareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+      autoGrowNote();
+    });
+  }, [autoGrowNote]);
+
+  const commitNotes = () => {
+    const next = noteValue.trim() ? noteValue : null;
+    if (next !== (section.notes ?? null)) onNotesChange(next);
+  };
+
+  const handleNoteOpenChange = (open: boolean) => {
+    if (!open) {
+      commitNotes();
+      setNoteOpen(false);
+    }
+  };
+
+  const handleInlineNoteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNoteValue(e.target.value);
+    requestAnimationFrame(() => {
+      if (isNoteOverflowing()) openNotePopover();
+    });
+  };
+
+  const handleInlineNoteClick = () => {
+    if (isNoteOverflowing()) openNotePopover();
+  };
+
+  const handleInlineNoteBlur = () => {
+    if (noteOpen) return;
+    commitNotes();
+  };
+
+  const handleInlineNoteKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (e.key === "Enter" || e.key === "Escape") {
+      e.preventDefault();
+      e.currentTarget.blur();
+    }
+  };
+
+  const commitTempo = () => {
     setEditingTempo(false);
     const parsed = tempoValue.trim() ? parseInt(tempoValue, 10) : null;
     const value = parsed && !isNaN(parsed) ? parsed : null;
     onTempoChange(value);
+  };
+
+  const commitName = () => {
+    setEditingName(false);
+    const trimmed = nameValue.trim();
+    const next = trimmed === "" ? null : trimmed;
+    if (next !== (section.name ?? null)) onNameChange(next);
   };
 
   const handleMark = async () => {
@@ -201,146 +296,270 @@ function SectionRow({
     if (parsed != null) {
       await upsertTimestamp(section.id, videoId, parsed, null);
       onTimestampUpdated();
+    } else if (tsValue.trim() === "" && timestamp) {
+      await deleteTimestamp(section.id, videoId);
+      onTimestampUpdated();
     }
   };
 
+  const isThisSectionPlaying = playingSectionId === section.id;
+
+  const firstBorder = isFirst && "border-t";
+
   return (
-    <div className="group/row flex items-center gap-2 py-1 px-1 rounded hover:bg-muted/50 transition-colors">
-      {/* Status dot */}
-      <Tooltip>
-        <TooltipTrigger onClick={onStatusCycle} className="shrink-0">
-          <CircleIcon
+    <div className="group/row flex items-stretch">
+      {/* Gutter — context menu */}
+      <div className="-ml-8 w-8 shrink-0 flex items-center justify-center">
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenuTrigger
             className={cn(
-              "size-3 fill-current",
-              SECTION_STATUS_DOT_COLORS[section.status]
-            )}
-          />
-        </TooltipTrigger>
-        <TooltipContent side="left">
-          <p className="text-xs">{SECTION_STATUS_LABELS[section.status]}</p>
-        </TooltipContent>
-      </Tooltip>
-
-      {/* Label */}
-      <span className="text-sm font-medium min-w-[2rem]">
-        {section.label}
-      </span>
-
-      {/* Play/pause video toggle */}
-      {hasVideo && (() => {
-        if (!timestamp) return <span className="shrink-0 w-5" />;
-        const isThisSectionPlaying = playingSectionId === section.id;
-        return (
-          <button
-            onClick={() => {
-              if (isThisSectionPlaying) {
-                video.pause();
-              } else {
-                video.seekTo(timestamp.start_seconds);
-                video.play();
-              }
-            }}
-            className={cn(
-              "shrink-0 w-5 h-5 flex items-center justify-center cursor-pointer transition-colors rounded hover:bg-muted",
-              isThisSectionPlaying
-                ? "text-primary"
-                : "text-muted-foreground/40 hover:text-foreground"
+              "flex items-center justify-center w-5 h-5 rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-all",
+              menuOpen
+                ? "opacity-100"
+                : "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100"
             )}
           >
-            {isThisSectionPlaying ? (
-              <PauseIcon className="size-3.5" />
-            ) : (
-              <PlayIcon className="size-3.5" />
-            )}
-          </button>
-        );
-      })()}
+            <MoreVerticalIcon className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="bottom" className="w-48">
+            <DropdownMenuItem onClick={onAddSubsection}>
+              <PlusIcon />
+              Add subsection below
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onClick={onDelete}>
+              <Trash2Icon />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
-      {/* Tempo */}
-      {editingTempo ? (
-        <Input
-          type="number"
-          value={tempoValue}
-          onChange={(e) => setTempoValue(e.target.value)}
-          onBlur={handleSaveTempo}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleSaveTempo();
-            if (e.key === "Escape") {
-              setEditingTempo(false);
-              setTempoValue(String(section.target_tempo ?? ""));
-            }
-          }}
-          className="w-16 h-6 text-xs"
-          autoFocus
-          min={20}
-          max={300}
-          placeholder={effectiveTempo ? String(effectiveTempo) : "—"}
-        />
-      ) : (
-        <button
-          onClick={() => {
-            setTempoValue(String(section.target_tempo ?? ""));
-            setEditingTempo(true);
-          }}
+      {/* Row grid */}
+      <div className={cn("flex-1 min-w-0", GRID_COLS)}>
+        {/* Status dot */}
+        <div
+          className={cn(CELL_BASE, firstBorder, "justify-center")}
+        >
+          <Tooltip>
+            <TooltipTrigger
+              onClick={onStatusCycle}
+              className="flex items-center justify-center"
+            >
+              <CircleIcon
+                className={cn(
+                  "size-3 fill-current",
+                  SECTION_STATUS_DOT_COLORS[section.status]
+                )}
+              />
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              <p className="text-xs">
+                {SECTION_STATUS_LABELS[section.status]}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+
+        {/* Label */}
+        <div className={cn(CELL_BASE, firstBorder)}>
+          <span className="font-medium">{section.label}</span>
+        </div>
+
+        {/* Name */}
+        <div className={cn(CELL_BASE, firstBorder)}>
+          {editingName ? (
+            <Input
+              value={nameValue}
+              onChange={(e) => setNameValue(e.target.value)}
+              onBlur={commitName}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitName();
+                if (e.key === "Escape") {
+                  setEditingName(false);
+                  setNameValue(section.name ?? "");
+                }
+              }}
+              autoFocus
+              placeholder="Name"
+              className="h-6 text-xs px-1.5"
+            />
+          ) : (
+            <button
+              onClick={() => {
+                setNameValue(section.name ?? "");
+                setEditingName(true);
+              }}
+              className={cn(
+                "w-full min-w-0 text-left truncate rounded-sm hover:bg-muted/40 transition-colors",
+                section.name
+                  ? "text-foreground"
+                  : "text-muted-foreground/50"
+              )}
+            >
+              {section.name || "—"}
+            </button>
+          )}
+        </div>
+
+        {/* Timestamp: Mark button (unset) OR play + editable value (set) */}
+        <div className={cn(CELL_BASE, firstBorder, "gap-1 justify-end")}>
+          {hasVideo ? (
+            timestamp ? (
+              <>
+                <button
+                  onClick={() => {
+                    if (isThisSectionPlaying) {
+                      video.pause();
+                    } else {
+                      video.seekTo(timestamp.start_seconds);
+                      video.play();
+                    }
+                  }}
+                  className={cn(
+                    "shrink-0 flex items-center justify-center rounded transition-colors",
+                    isThisSectionPlaying
+                      ? "text-primary"
+                      : "text-muted-foreground/40 hover:text-foreground"
+                  )}
+                >
+                  {isThisSectionPlaying ? (
+                    <PauseIcon className="size-3" />
+                  ) : (
+                    <PlayIcon className="size-3" />
+                  )}
+                </button>
+                <input
+                  value={tsValue}
+                  onChange={(e) => setTsValue(e.target.value)}
+                  onBlur={handleBlurTimestamp}
+                  placeholder="—"
+                  size={1}
+                  className="bg-transparent font-mono tabular-nums text-xs focus:outline-none placeholder:text-muted-foreground/40 [field-sizing:content] min-w-[1ch]"
+                />
+              </>
+            ) : (
+              <button
+                onClick={handleMark}
+                className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                Mark
+              </button>
+            )
+          ) : (
+            <span className="text-muted-foreground/30">—</span>
+          )}
+        </div>
+
+        {/* Tempo */}
+        <div className={cn(CELL_BASE, firstBorder, "justify-end")}>
+          {editingTempo ? (
+            <Input
+              type="number"
+              value={tempoValue}
+              onChange={(e) => setTempoValue(e.target.value)}
+              onBlur={commitTempo}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitTempo();
+                if (e.key === "Escape") {
+                  setEditingTempo(false);
+                  setTempoValue(String(section.target_tempo ?? ""));
+                }
+              }}
+              className="h-6 w-full text-xs px-1 text-right"
+              autoFocus
+              min={20}
+              max={300}
+              placeholder={effectiveTempo ? String(effectiveTempo) : "—"}
+            />
+          ) : (
+            <button
+              onClick={() => {
+                setTempoValue(String(section.target_tempo ?? ""));
+                setEditingTempo(true);
+              }}
+              className={cn(
+                "font-mono tabular-nums px-1 py-0.5 rounded hover:bg-muted transition-colors",
+                section.target_tempo
+                  ? "text-foreground"
+                  : "text-muted-foreground"
+              )}
+            >
+              {section.target_tempo
+                ? `♩ ${section.target_tempo}`
+                : effectiveTempo
+                  ? `♩ ${effectiveTempo}`
+                  : "—"}
+            </button>
+          )}
+        </div>
+
+        {/* Notes */}
+        <div
           className={cn(
-            "text-xs font-mono tabular-nums px-1 py-0.5 rounded hover:bg-muted transition-colors",
-            section.target_tempo ? "text-foreground" : "text-muted-foreground"
+            CELL_BASE,
+            firstBorder,
+            "border-r border-r-border/60"
           )}
         >
-          {section.target_tempo
-            ? `♩ ${section.target_tempo}`
-            : effectiveTempo
-              ? `♩ ${effectiveTempo}`
-              : "—"}
-        </button>
-      )}
-
-      {/* Timestamp (only when video exists) */}
-      {hasVideo && (
-        <div className="flex items-center gap-1 ml-auto">
-          <Input
-            value={tsValue}
-            onChange={(e) => setTsValue(e.target.value)}
-            onBlur={handleBlurTimestamp}
-            placeholder="—"
-            className="h-6 w-14 text-xs font-mono text-center"
-          />
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleMark}
-            className="h-6 text-xs px-1.5"
-          >
-            Mark
-          </Button>
+          <Popover open={noteOpen} onOpenChange={handleNoteOpenChange}>
+            <input
+              ref={noteInputRef}
+              type="text"
+              value={noteValue}
+              onChange={handleInlineNoteChange}
+              onClick={handleInlineNoteClick}
+              onBlur={handleInlineNoteBlur}
+              onKeyDown={handleInlineNoteKeyDown}
+              placeholder="Notes..."
+              className="block w-full min-w-0 bg-transparent text-left leading-tight focus:outline-none cursor-text text-ellipsis text-muted-foreground placeholder:text-muted-foreground/50"
+            />
+            <PopoverContent
+              anchor={noteInputRef}
+              align="start"
+              side="bottom"
+              sideOffset={-28}
+              className="min-w-[320px] max-w-[520px] p-2 gap-0"
+            >
+              <textarea
+                ref={noteTextareaRef}
+                value={noteValue}
+                onChange={(e) => {
+                  setNoteValue(e.target.value);
+                  autoGrowNote();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    handleNoteOpenChange(false);
+                  } else if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleNoteOpenChange(false);
+                  }
+                }}
+                placeholder="Notes..."
+                rows={1}
+                className="w-full bg-transparent focus:outline-none resize-none leading-tight text-xs text-foreground placeholder:text-muted-foreground/50"
+              />
+            </PopoverContent>
+          </Popover>
         </div>
-      )}
-
-      {/* Spacer when no video */}
-      {!hasVideo && <div className="flex-1" />}
-
-      {/* Delete */}
-      <button
-        onClick={onDelete}
-        className="opacity-0 group-hover/row:opacity-100 text-muted-foreground hover:text-destructive transition-all shrink-0"
-      >
-        <Trash2Icon className="size-3.5" />
-      </button>
+      </div>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Video boundary row (Start / End)                                   */
-/* ------------------------------------------------------------------ */
+/* ------------------- Video boundary row (Start / End) ------------------- */
 
 function VideoBoundaryRow({
   label,
+  isFirst,
   video,
   field,
   onUpdated,
 }: {
   label: string;
+  isFirst: boolean;
   video: PieceVideo;
   field: "start" | "end";
   onUpdated: () => void;
@@ -348,10 +567,11 @@ function VideoBoundaryRow({
   const { currentTime } = useVideo();
   const seconds = field === "start" ? video.start_seconds : video.end_seconds;
   const [value, setValue] = useState(formatMMSS(seconds));
-
-  useEffect(() => {
-    setValue(formatMMSS(field === "start" ? video.start_seconds : video.end_seconds));
-  }, [video.start_seconds, video.end_seconds, field]);
+  const [prevSeconds, setPrevSeconds] = useState<number | null>(seconds);
+  if (seconds !== prevSeconds) {
+    setPrevSeconds(seconds);
+    setValue(formatMMSS(seconds));
+  }
 
   const save = async (val: number | null) => {
     if (field === "start") {
@@ -363,7 +583,8 @@ function VideoBoundaryRow({
   };
 
   const handleMark = () => {
-    const rounded = field === "start" ? Math.floor(currentTime) : Math.ceil(currentTime);
+    const rounded =
+      field === "start" ? Math.floor(currentTime) : Math.ceil(currentTime);
     setValue(formatMMSS(rounded));
     save(rounded);
   };
@@ -372,36 +593,49 @@ function VideoBoundaryRow({
     save(parseMMSS(value));
   };
 
+  const firstBorder = isFirst && "border-t";
+
   return (
-    <div className="flex items-center gap-2 py-1 px-1 rounded hover:bg-muted/50 transition-colors">
-      <span className="text-sm font-medium min-w-[2rem] text-muted-foreground italic">
-        {label}
-      </span>
-      <div className="flex-1" />
-      <div className="flex items-center gap-1">
-        <Input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={handleBlur}
-          placeholder={field === "start" ? "0:00" : "end"}
-          className="h-6 w-14 text-xs font-mono text-center"
-        />
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={handleMark}
-          className="h-6 text-xs px-1.5"
+    <div className="flex items-stretch text-muted-foreground/70">
+      {/* gutter spacer */}
+      <div className="-ml-8 w-8 shrink-0" />
+      <div className={cn("flex-1 min-w-0", GRID_COLS)}>
+        <div className={cn(CELL_BASE, firstBorder)} />
+        <div className={cn(CELL_BASE, firstBorder)}>
+          <span className="italic">{label}</span>
+        </div>
+        <div className={cn(CELL_BASE, firstBorder)} />
+        <div
+          className={cn(CELL_BASE, firstBorder, "gap-1 justify-end")}
         >
-          Mark
-        </Button>
+          {seconds != null ? (
+            <input
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onBlur={handleBlur}
+              placeholder={field === "start" ? "0:00" : "end"}
+              size={1}
+              className="bg-transparent font-mono tabular-nums text-xs focus:outline-none placeholder:text-muted-foreground/40 [field-sizing:content] min-w-[1ch]"
+            />
+          ) : (
+            <button
+              onClick={handleMark}
+              className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded hover:bg-muted hover:text-foreground transition-colors"
+            >
+              Mark
+            </button>
+          )}
+        </div>
+        <div className={cn(CELL_BASE, firstBorder)} />
+        <div
+          className={cn(CELL_BASE, firstBorder, "border-r border-r-border/60")}
+        />
       </div>
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Main Component                                                     */
-/* ------------------------------------------------------------------ */
+/* ----------------------------- Main component ----------------------------- */
 
 export function SectionEditor({
   pieceId,
@@ -429,11 +663,9 @@ export function SectionEditor({
   const activeVideo = videos[0] ?? null;
   const hasVideo = activeVideo !== null;
 
-  // Video URL input
   const [videoUrl, setVideoUrl] = useState("");
   const [addingVideo, setAddingVideo] = useState(false);
 
-  // Determine which section is currently playing
   const playingSectionId = (() => {
     if (!videoCtx.isPlaying) return null;
     let best: { sectionId: string; start: number } | null = null;
@@ -447,7 +679,6 @@ export function SectionEditor({
     return best?.sectionId ?? null;
   })();
 
-  // Load video into context when component mounts / video changes
   useEffect(() => {
     if (activeVideo) {
       videoCtx.setVideo(
@@ -491,14 +722,12 @@ export function SectionEditor({
     setTimestamps(newTimestamps);
   }, [activeVideo]);
 
-  // Listen for cross-component section changes
   useEffect(() => {
     const handler = () => refreshSections();
     window.addEventListener("sections-changed", handler);
     return () => window.removeEventListener("sections-changed", handler);
   }, [refreshSections]);
 
-  // Optimistically apply status changes from other components (e.g. scrubber bar)
   useEffect(() => {
     const handler = (e: Event) => {
       const { sectionId, status } = (e as CustomEvent).detail;
@@ -515,14 +744,13 @@ export function SectionEditor({
       );
     };
     window.addEventListener("section-status-changed", handler);
-    return () => window.removeEventListener("section-status-changed", handler);
+    return () =>
+      window.removeEventListener("section-status-changed", handler);
   }, []);
 
   const dispatchSectionsChanged = () => {
     window.dispatchEvent(new CustomEvent("sections-changed"));
   };
-
-  /* -- Section actions -- */
 
   const handleAddSection = async () => {
     const label = nextSectionLetter(sections);
@@ -533,20 +761,30 @@ export function SectionEditor({
 
   const handleAddSubsection = async (parent: PieceSectionWithChildren) => {
     if (parent.children.length === 0) {
-      // First subsection: create A1 (inherits parent data) and A2 (blank)
-      const result1 = await createSection(pieceId, `${parent.label}1`, parent.id);
+      const result1 = await createSection(
+        pieceId,
+        `${parent.label}1`,
+        parent.id
+      );
       if (result1.success && result1.id) {
-        // Copy parent's status and tempo to A1
         if (parent.status !== 0) {
-          await updateSectionStatus(result1.id, parent.status as SectionStatus, { pieceId, skipSnapshot: true });
+          await updateSectionStatus(
+            result1.id,
+            parent.status as SectionStatus,
+            { pieceId, skipSnapshot: true }
+          );
         }
         if (parent.target_tempo !== null) {
           await updateSectionTargetTempo(result1.id, parent.target_tempo);
         }
-        // Copy parent's timestamp to A1 if one exists
         const parentTs = timestamps.find((t) => t.section_id === parent.id);
         if (parentTs && activeVideo) {
-          await upsertTimestamp(result1.id, activeVideo.id, parentTs.start_seconds, null);
+          await upsertTimestamp(
+            result1.id,
+            activeVideo.id,
+            parentTs.start_seconds,
+            null
+          );
         }
       }
       await createSection(pieceId, `${parent.label}2`, parent.id);
@@ -560,7 +798,6 @@ export function SectionEditor({
   };
 
   const handleDelete = async (sectionId: string) => {
-    // Optimistic update
     setSections((prev) =>
       prev
         .filter((s) => s.id !== sectionId)
@@ -571,22 +808,29 @@ export function SectionEditor({
     );
     await deleteSection(sectionId);
 
-    // Refresh and check for auto-collapse
     const newSections = await getSections(pieceId);
     for (const parent of newSections) {
       if (parent.children.length === 1) {
         const remaining = parent.children[0];
-        // Copy child's data to parent
-        await updateSectionStatus(parent.id, remaining.status as SectionStatus, { pieceId, skipSnapshot: true });
+        await updateSectionStatus(
+          parent.id,
+          remaining.status as SectionStatus,
+          { pieceId, skipSnapshot: true }
+        );
         await updateSectionTargetTempo(parent.id, remaining.target_tempo);
-        // Copy timestamp if exists
         if (activeVideo) {
-          const childTs = timestamps.find((t) => t.section_id === remaining.id);
+          const childTs = timestamps.find(
+            (t) => t.section_id === remaining.id
+          );
           if (childTs) {
-            await upsertTimestamp(parent.id, activeVideo.id, childTs.start_seconds, null);
+            await upsertTimestamp(
+              parent.id,
+              activeVideo.id,
+              childTs.start_seconds,
+              null
+            );
           }
         }
-        // Delete the remaining child
         await deleteSection(remaining.id);
       }
     }
@@ -610,7 +854,11 @@ export function SectionEditor({
       })
     );
     updateSectionStatus(section.id, next, { pieceId });
-    window.dispatchEvent(new CustomEvent("section-status-changed", { detail: { sectionId: section.id, status: next } }));
+    window.dispatchEvent(
+      new CustomEvent("section-status-changed", {
+        detail: { sectionId: section.id, status: next },
+      })
+    );
   };
 
   const handleTempoChange = (section: PieceSection, tempo: number | null) => {
@@ -629,6 +877,36 @@ export function SectionEditor({
     dispatchSectionsChanged();
   };
 
+  const handleNameChange = (section: PieceSection, name: string | null) => {
+    setSections((prev) =>
+      prev.map((s) => {
+        if (s.id === section.id) return { ...s, name };
+        return {
+          ...s,
+          children: s.children.map((c) =>
+            c.id === section.id ? { ...c, name } : c
+          ),
+        };
+      })
+    );
+    updateSectionName(section.id, name);
+  };
+
+  const handleNotesChange = (section: PieceSection, notes: string | null) => {
+    setSections((prev) =>
+      prev.map((s) => {
+        if (s.id === section.id) return { ...s, notes };
+        return {
+          ...s,
+          children: s.children.map((c) =>
+            c.id === section.id ? { ...c, notes } : c
+          ),
+        };
+      })
+    );
+    updateSectionNotes(section.id, notes);
+  };
+
   const handleSavePieceTempo = () => {
     setEditingTempo(false);
     const parsed = tempoValue.trim() ? parseInt(tempoValue, 10) : null;
@@ -637,8 +915,6 @@ export function SectionEditor({
     updatePieceTargetTempo(pieceId, value);
     dispatchSectionsChanged();
   };
-
-  /* -- Video actions -- */
 
   const handleAddVideo = async () => {
     const vid = extractVideoId(videoUrl);
@@ -656,9 +932,11 @@ export function SectionEditor({
     await refreshVideo();
   };
 
+  const flatRows = buildFlatRows(sections);
+
   return (
     <div className="space-y-4">
-      {/* Header: title + piece target tempo */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium">Sections</h3>
         <div className="flex items-center gap-2">
@@ -736,67 +1014,52 @@ export function SectionEditor({
         </div>
       )}
 
-      {/* Section rows — flat list with video boundary rows */}
-      {(() => {
-        const flatRows = buildFlatRows(sections);
-        return (
-          <div>
-            {/* Video start boundary */}
-            {hasVideo && (
-              <VideoBoundaryRow
-                label="Start"
-                video={activeVideo}
-                field="start"
-                onUpdated={refreshVideo}
-              />
+      {/* Rows — pl-8 makes room for the gutter's -ml-8 */}
+      <div className="pl-8">
+        {hasVideo && (
+          <VideoBoundaryRow
+            label="Start"
+            isFirst
+            video={activeVideo}
+            field="start"
+            onUpdated={refreshVideo}
+          />
+        )}
+
+        {flatRows.map((row, idx) => (
+          <SectionRow
+            key={row.section.id}
+            section={row.section}
+            isFirst={!hasVideo && idx === 0}
+            pieceTargetTempo={targetTempo}
+            hasVideo={hasVideo}
+            videoId={activeVideo?.id ?? null}
+            timestamp={timestamps.find(
+              (t) => t.section_id === row.section.id
             )}
+            playingSectionId={playingSectionId}
+            onStatusCycle={() => handleStatusCycle(row.section)}
+            onDelete={() => handleDelete(row.section.id)}
+            onAddSubsection={() => handleAddSubsection(row.parent)}
+            onTempoChange={(tempo) => handleTempoChange(row.section, tempo)}
+            onNameChange={(name) => handleNameChange(row.section, name)}
+            onNotesChange={(notes) => handleNotesChange(row.section, notes)}
+            onTimestampUpdated={refreshTimestamps}
+          />
+        ))}
 
-            {flatRows.map((row) => {
-              const insertParent = row.parent;
-              return (
-                <div key={row.section.id}>
-                  <SectionRow
-                    section={row.section}
-                    pieceTargetTempo={targetTempo}
-                    hasVideo={hasVideo}
-                    videoId={activeVideo?.id ?? null}
-                    timestamp={timestamps.find(
-                      (t) => t.section_id === row.section.id
-                    )}
-                    playingSectionId={playingSectionId}
-                    onStatusCycle={() => handleStatusCycle(row.section)}
-                    onDelete={() => handleDelete(row.section.id)}
-                    onTempoChange={(tempo) =>
-                      handleTempoChange(row.section, tempo)
-                    }
-                    onTimestampUpdated={refreshTimestamps}
-                  />
-                  <GutterInsert
-                    onClick={() => handleAddSubsection(insertParent)}
-                  />
-                </div>
-              );
-            })}
+        {hasVideo && (
+          <VideoBoundaryRow
+            label="End"
+            isFirst={false}
+            video={activeVideo}
+            field="end"
+            onUpdated={refreshVideo}
+          />
+        )}
+      </div>
 
-            {/* Video end boundary */}
-            {hasVideo && (
-              <VideoBoundaryRow
-                label="End"
-                video={activeVideo}
-                field="end"
-                onUpdated={refreshVideo}
-              />
-            )}
-          </div>
-        );
-      })()}
-
-      {/* Add section button */}
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleAddSection}
-      >
+      <Button variant="outline" size="sm" onClick={handleAddSection}>
         <PlusIcon className="size-3.5 mr-1" />
         Add Section
       </Button>
