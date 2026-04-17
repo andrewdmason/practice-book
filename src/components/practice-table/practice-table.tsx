@@ -29,7 +29,6 @@ import {
   type OptimisticTaskDelete,
 } from "@/lib/optimistic-task";
 import { localDate } from "@/lib/date-utils";
-import { formatMinutes } from "@/lib/timer-utils";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -46,6 +45,83 @@ type PieceGroup = {
   pieceKind: PieceKind | null;
   tasks: TaskWithDetails[];
 };
+
+function formatMinsShort(totalSeconds: number): string {
+  const minutes = Math.round(Math.max(0, totalSeconds) / 60);
+  if (minutes <= 0) return "0m";
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
+function AggregateTimerPill({
+  elapsedSeconds,
+  goalSeconds,
+  onClick,
+  title,
+  size = "sm",
+}: {
+  elapsedSeconds: number;
+  goalSeconds: number;
+  onClick?: () => void;
+  title?: string;
+  size?: "sm" | "md";
+}) {
+  const goalReached = goalSeconds > 0 && elapsedSeconds >= goalSeconds;
+  const interactive = !!onClick;
+  const textClass = size === "md" ? "text-sm" : "text-xs";
+
+  const content = (
+    <>
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-muted-foreground/70 transition-colors",
+          interactive &&
+            "group-hover/pill:bg-muted group-hover/pill:text-foreground"
+        )}
+      >
+        <ClockIcon className="size-3" />
+        {formatMinsShort(elapsedSeconds)}
+      </span>
+      <span className="mx-0.5 select-none text-muted-foreground/30">/</span>
+      <span
+        className={cn(
+          "rounded px-1.5 py-0.5 transition-colors",
+          goalReached
+            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+            : cn(
+                "text-muted-foreground/70",
+                interactive &&
+                  "group-hover/pill:bg-muted group-hover/pill:text-foreground"
+              )
+        )}
+      >
+        {goalSeconds > 0 ? formatMinsShort(goalSeconds) : "—"}
+      </span>
+    </>
+  );
+
+  const baseClass = cn(
+    "inline-flex items-center tabular-nums",
+    textClass
+  );
+
+  if (interactive) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title={title}
+        className={cn("group/pill", baseClass)}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={baseClass}>{content}</div>;
+}
 
 function groupTasksByPiece(tasks: TaskWithDetails[]): PieceGroup[] {
   const groups = new Map<string, PieceGroup>();
@@ -118,6 +194,11 @@ function SortablePieceGroup({
     (sum, t) => sum + Math.max(0, t.timer_seconds - t.timer_remaining_seconds),
     0
   );
+  const totalGoal = group.tasks.reduce(
+    (sum, t) => sum + Math.max(0, t.timer_seconds),
+    0
+  );
+  const showPieceTimer = totalElapsed > 0 || totalGoal > 0;
 
   return (
     <div
@@ -155,16 +236,21 @@ function SortablePieceGroup({
           <h3 className="text-sm font-medium text-muted-foreground">
             {group.pieceName}
           </h3>
-          {totalElapsed > 0 && group.pieceId && (
-            <button
-              type="button"
-              onClick={() => setSessionsOpen(true)}
-              title="Edit individual sessions"
-              className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums font-medium text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground transition-colors"
-            >
-              <ClockIcon className="size-3" />
-              {formatMinutes(totalElapsed)}
-            </button>
+          {showPieceTimer && (
+            <AggregateTimerPill
+              elapsedSeconds={totalElapsed}
+              goalSeconds={totalGoal}
+              onClick={
+                group.pieceId && totalElapsed > 0
+                  ? () => setSessionsOpen(true)
+                  : undefined
+              }
+              title={
+                group.pieceId && totalElapsed > 0
+                  ? "Edit individual sessions"
+                  : undefined
+              }
+            />
           )}
         </div>
       </div>
@@ -312,11 +398,15 @@ function DayGroup({
     (p) => !existingPieceIds.has(p.id)
   );
 
-  const totalSeconds = day.timeSummary.reduce(
-    (sum, e) => sum + e.total_seconds,
+  const dayElapsedSeconds = day.tasks.reduce(
+    (sum, t) => sum + Math.max(0, t.timer_seconds - t.timer_remaining_seconds),
     0
   );
-  const totalMinutes = Math.round(totalSeconds / 60);
+  const dayGoalSeconds = day.tasks.reduce(
+    (sum, t) => sum + Math.max(0, t.timer_seconds),
+    0
+  );
+  const showDayTimer = dayElapsedSeconds > 0 || dayGoalSeconds > 0;
   const todayStr = localDate();
   const isToday = day.date === todayStr;
 
@@ -339,10 +429,12 @@ function DayGroup({
         >
           {formatDate(day.date)}
         </h2>
-        {totalMinutes > 0 && (
-          <span className="text-sm text-muted-foreground">
-            {totalMinutes}m
-          </span>
+        {showDayTimer && (
+          <AggregateTimerPill
+            elapsedSeconds={dayElapsedSeconds}
+            goalSeconds={dayGoalSeconds}
+            size="md"
+          />
         )}
         {!focusedPieceId && (
           <DropdownMenu>
