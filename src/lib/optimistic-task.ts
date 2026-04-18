@@ -40,19 +40,74 @@ export function rollbackOptimisticTask(tempId: string): void {
   );
 }
 
+export type FocusTaskNotesDetail = { taskId: string; selectAll: boolean };
+
+export function emitFocusTaskNotes(taskId: string, selectAll: boolean): void {
+  window.dispatchEvent(
+    new CustomEvent<FocusTaskNotesDetail>("task-focus-notes", {
+      detail: { taskId, selectAll },
+    })
+  );
+}
+
+export type OptimisticTaskRename = { tempId: string; realId: string };
+
+// Stable React keys for tasks created optimistically. Once the server returns
+// the real id and we rename the row in state, we still want React to treat the
+// row as the same component instance — otherwise the unmount/remount would
+// drop focus, in-progress text edits, etc. Look up via getStableTaskKey().
+const taskKeyAliases = new Map<string, string>();
+
+export function getStableTaskKey(taskId: string): string {
+  return taskKeyAliases.get(taskId) ?? taskId;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("task-rename-optimistic", (e: Event) => {
+    const { tempId, realId } = (e as CustomEvent<OptimisticTaskRename>).detail;
+    taskKeyAliases.set(realId, tempId);
+  });
+  window.addEventListener("task-deleted-optimistic", (e: Event) => {
+    const { taskId } = (e as CustomEvent<OptimisticTaskDelete>).detail;
+    taskKeyAliases.delete(taskId);
+  });
+}
+
+export function emitOptimisticTaskRename(
+  tempId: string,
+  realId: string
+): void {
+  window.dispatchEvent(
+    new CustomEvent<OptimisticTaskRename>("task-rename-optimistic", {
+      detail: { tempId, realId },
+    })
+  );
+}
+
 export async function createTaskOptimistic(
-  input: Omit<OptimisticTaskDetail, "tempId">
+  input: Omit<OptimisticTaskDetail, "tempId"> & {
+    autoFocusNotes?: { selectAll: boolean };
+  }
 ): Promise<void> {
-  const tempId = emitOptimisticTask(input);
+  const { autoFocusNotes, ...detail } = input;
+  const tempId = emitOptimisticTask(detail);
+  if (autoFocusNotes) {
+    const selectAll = autoFocusNotes.selectAll;
+    requestAnimationFrame(() => {
+      emitFocusTaskNotes(tempId, selectAll);
+    });
+  }
   try {
-    await createTask(
-      input.pieceId,
-      input.sectionId,
-      input.metronomeSpeed,
-      input.date,
-      input.afterTaskId ?? null,
-      input.sessionNumber
+    const result = await createTask(
+      detail.pieceId,
+      detail.sectionId,
+      detail.metronomeSpeed,
+      detail.date,
+      detail.afterTaskId ?? null,
+      detail.sessionNumber,
+      detail.text
     );
+    emitOptimisticTaskRename(tempId, result.id);
   } catch (err) {
     rollbackOptimisticTask(tempId);
     throw err;

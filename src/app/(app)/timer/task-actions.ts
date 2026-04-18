@@ -68,7 +68,8 @@ export async function createTask(
   metronomeSpeed: number | null,
   date?: string,
   afterTaskId?: string | null,
-  sessionNumber?: number
+  sessionNumber?: number,
+  text?: string
 ): Promise<{ id: string; timer_seconds: number; timer_remaining_seconds: number }> {
   const supabase = await createClient();
 
@@ -136,6 +137,7 @@ export async function createTask(
       sort_order: nextOrder,
       session_number: resolvedSession,
       ...(date ? { date } : {}),
+      ...(text ? { text } : {}),
     })
     .select("id, timer_seconds, timer_remaining_seconds")
     .single();

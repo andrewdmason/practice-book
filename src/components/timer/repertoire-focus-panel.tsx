@@ -471,11 +471,13 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
                     sectionId: section.id,
                     date,
                     metronomeSpeed,
+                    text: section.notes ?? undefined,
                     pieceName: piece.name,
                     pieceComposer: piece.composer,
                     pieceKind: piece.kind,
                     sectionLabel: section.label,
                     sectionStatus: section.status,
+                    autoFocusNotes: { selectAll: !!section.notes },
                   });
                 }}
               />
