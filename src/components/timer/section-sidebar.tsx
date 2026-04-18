@@ -17,6 +17,7 @@ import type {
 import {
   SECTION_STATUS_LABELS,
   SECTION_STATUS_COLORS,
+  SECTION_STATUS_TEXT_COLORS,
   SECTION_STATUS_PERCENTAGE,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -158,21 +159,6 @@ function SectionRow({
         isActiveSection && "bg-primary/10"
       )}
     >
-      {/* Label */}
-      <button
-        onClick={() => {
-          if (tempo) startMetronome(tempo);
-        }}
-        className={cn(
-          "text-xs font-medium w-8 shrink-0 text-left cursor-pointer transition-colors",
-          isActiveSection
-            ? "text-primary font-semibold"
-            : "text-muted-foreground hover:text-foreground"
-        )}
-      >
-        {section.label}
-      </button>
-
       {/* Add task button — visible on hover, next to label */}
       {onAddTask && (
         <button
@@ -216,7 +202,7 @@ function SectionRow({
         );
       })()}
 
-      {/* Status color square — continuous column, no vertical gap */}
+      {/* Status color square with section letter — continuous column, no vertical gap */}
       <div
         onClick={() => handleStatusCycle()}
         onContextMenu={(e) => {
@@ -224,12 +210,15 @@ function SectionRow({
           handleStatusCycle(true);
         }}
         className={cn(
-          "w-5 h-6 shrink-0 transition-colors cursor-pointer hover:opacity-80",
+          "w-7 h-6 shrink-0 flex items-center justify-center text-xs font-medium tabular-nums transition-colors cursor-pointer hover:opacity-80",
           SECTION_STATUS_COLORS[section.status],
+          SECTION_STATUS_TEXT_COLORS[section.status],
           isFirst && "rounded-t-sm",
           isLast && "rounded-b-sm"
         )}
-      />
+      >
+        {section.label}
+      </div>
 
       {/* Practice tempo pill + percentage */}
       <div className="ml-1.5 shrink-0 flex items-center gap-1">
