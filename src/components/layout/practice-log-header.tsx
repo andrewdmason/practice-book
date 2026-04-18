@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { cn } from "@/lib/utils";
@@ -81,6 +81,25 @@ export function PracticeLogHeader() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [focusedPieceId, clearFocus]);
 
+  const stickyRef = useRef<HTMLDivElement>(null);
+  const [isStuck, setIsStuck] = useState(false);
+
+  useEffect(() => {
+    const el = stickyRef.current;
+    if (!el) return;
+    function checkStuck() {
+      if (!el) return;
+      setIsStuck(el.getBoundingClientRect().top <= 56);
+    }
+    checkStuck();
+    window.addEventListener("scroll", checkStuck, { passive: true });
+    window.addEventListener("resize", checkStuck);
+    return () => {
+      window.removeEventListener("scroll", checkStuck);
+      window.removeEventListener("resize", checkStuck);
+    };
+  }, []);
+
   const focusedPiece = focusedPieceId
     ? activePieces.find((p) => p.id === focusedPieceId)
     : null;
@@ -96,7 +115,13 @@ export function PracticeLogHeader() {
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         </div>
       </div>
-      <div className="sticky top-14 z-40 mt-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div
+        ref={stickyRef}
+        className={cn(
+          "sticky top-14 z-40 mt-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          !isStuck && "border-transparent"
+        )}
+      >
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
           <div className="flex flex-wrap items-center gap-1.5 py-2 pl-8">
             <button
