@@ -84,7 +84,7 @@ export function PracticeBar() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [focusedPieceId, clearFocus]);
 
-  if (isZenMode || pathname === "/" || pathname === "/lessons") return null;
+  if (isZenMode || pathname !== "/") return null;
 
   return (
     <div className="sticky top-14 z-40 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">

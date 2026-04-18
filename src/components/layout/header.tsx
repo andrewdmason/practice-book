@@ -29,6 +29,7 @@ const navItems = [
   { label: "Lessons", href: "/lessons" },
   { label: "Repertoire", href: "/repertoire" },
   { label: "Reports", href: "/reports" },
+  { label: "Recordings", href: "/recordings" },
 ];
 
 function NavLink({

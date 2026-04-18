@@ -12,6 +12,7 @@ import {
   Trash2Icon,
   MetronomeIcon,
   ArrowRightIcon,
+  AudioLinesIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -43,6 +44,7 @@ import {
   rollbackOptimisticTask,
   type FocusTaskNotesDetail,
 } from "@/lib/optimistic-task";
+import { TaskAudioDialog } from "@/components/practice-table/task-audio-dialog";
 import { localDate } from "@/lib/date-utils";
 import { practiceTempo } from "@/lib/section-utils";
 import type { PieceSection, TaskWithDetails, SectionStatus } from "@/lib/types";
@@ -149,6 +151,18 @@ export function TaskRow({
       task.piece_id ? sectionPickerCache.get(task.piece_id) ?? null : null
     );
   const [noteOpen, setNoteOpen] = useState(false);
+  const [audioDialogOpen, setAudioDialogOpen] = useState(false);
+  const [audioDialogMode, setAudioDialogMode] = useState<"record" | "playback">(
+    "record"
+  );
+  const hasAudio = !!task.audio_path;
+  const openAudioDialog = useCallback(
+    (mode: "record" | "playback") => {
+      setAudioDialogMode(mode);
+      setAudioDialogOpen(true);
+    },
+    []
+  );
   const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
   const noteInputRef = useRef<HTMLInputElement>(null);
   const metronomeRef = useRef<HTMLInputElement>(null);
@@ -449,9 +463,11 @@ export function TaskRow({
                 ? "Duplicate to tomorrow"
                 : "Duplicate to today"}
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => openAudioDialog(hasAudio ? "playback" : "record")}
+            >
               <MicIcon />
-              Record
+              {hasAudio ? "Play recording" : "Record"}
             </DropdownMenuItem>
             {daySessionNumbers
               .filter((n) => n !== task.session_number)
@@ -710,8 +726,59 @@ export function TaskRow({
               />
             </PopoverContent>
           </Popover>
+          {hasAudio && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openAudioDialog("playback");
+              }}
+              aria-label="Play task recording"
+              title="Play recording"
+              className={cn(
+                "ml-2 shrink-0 rounded p-0.5 opacity-70 hover:opacity-100 transition-opacity",
+                isActive ? "text-white" : "text-muted-foreground"
+              )}
+            >
+              <AudioLinesIcon className="size-3.5" />
+            </button>
+          )}
         </div>
       </div>
+      <TaskAudioDialog
+        taskId={task.id}
+        open={audioDialogOpen}
+        onOpenChange={setAudioDialogOpen}
+        initialMode={audioDialogMode}
+        existingAudioPath={task.audio_path}
+        existingDurationSeconds={task.audio_duration_seconds}
+        existingTrimStartSeconds={task.audio_trim_start_seconds}
+        existingTrimEndSeconds={task.audio_trim_end_seconds}
+        pieceName={task.piece_name}
+        sectionLabel={optimisticSection.label}
+        onAttached={(path, duration, trimStart, trimEnd) => {
+          emitOptimisticTaskUpdate(task.id, {
+            audio_path: path,
+            audio_duration_seconds: duration,
+            audio_trim_start_seconds: trimStart,
+            audio_trim_end_seconds: trimEnd,
+          });
+        }}
+        onTrimUpdated={(trimStart, trimEnd) => {
+          emitOptimisticTaskUpdate(task.id, {
+            audio_trim_start_seconds: trimStart,
+            audio_trim_end_seconds: trimEnd,
+          });
+        }}
+        onDeleted={() => {
+          emitOptimisticTaskUpdate(task.id, {
+            audio_path: null,
+            audio_duration_seconds: null,
+            audio_trim_start_seconds: null,
+            audio_trim_end_seconds: null,
+          });
+        }}
+      />
     </div>
   );
 }
