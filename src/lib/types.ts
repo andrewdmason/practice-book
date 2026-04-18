@@ -260,6 +260,18 @@ export const SECTION_STATUS_COLORS: Record<SectionStatus, string> = {
   8: "bg-[#22C55E]",
 };
 
+export const SECTION_STATUS_TEXT_COLORS: Record<SectionStatus, string> = {
+  0: "text-muted-foreground",
+  1: "text-slate-700",
+  2: "text-slate-700",
+  3: "text-slate-800",
+  4: "text-white",
+  5: "text-white",
+  6: "text-white",
+  7: "text-white",
+  8: "text-white",
+};
+
 export const SECTION_STATUS_DOT_COLORS: Record<SectionStatus, string> = {
   0: "text-muted-foreground",
   1: "text-[#D6E4F0]",

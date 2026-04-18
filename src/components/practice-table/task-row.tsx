@@ -41,6 +41,7 @@ import {
   emitOptimisticTask,
   emitOptimisticTaskUpdate,
   rollbackOptimisticTask,
+  type FocusTaskNotesDetail,
 } from "@/lib/optimistic-task";
 import { localDate } from "@/lib/date-utils";
 import { practiceTempo } from "@/lib/section-utils";
@@ -269,6 +270,21 @@ export function TaskRow({
     };
     window.addEventListener("task-timer-paused", handler);
     return () => window.removeEventListener("task-timer-paused", handler);
+  }, [task.id]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<FocusTaskNotesDetail>).detail;
+      if (detail.taskId !== task.id) return;
+      const el = noteInputRef.current;
+      if (!el) return;
+      el.focus();
+      if (detail.selectAll && el.value.length > 0) {
+        el.select();
+      }
+    };
+    window.addEventListener("task-focus-notes", handler);
+    return () => window.removeEventListener("task-focus-notes", handler);
   }, [task.id]);
 
   const elapsed =

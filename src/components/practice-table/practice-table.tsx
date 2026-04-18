@@ -34,7 +34,9 @@ import { getFeedPage } from "@/app/(app)/feed/actions";
 import {
   createTaskOptimistic,
   emitOptimisticTaskUpdate,
+  getStableTaskKey,
   type OptimisticTaskDetail,
+  type OptimisticTaskRename,
   type OptimisticTaskRollback,
   type OptimisticTaskUpdate,
   type OptimisticTaskDelete,
@@ -356,7 +358,7 @@ function SortablePieceGroup({
       >
         {group.tasks.map((task, index) => (
           <TaskRow
-            key={task.id}
+            key={getStableTaskKey(task.id)}
             task={task}
             isFirst={index === 0}
             onAddBelow={(afterTaskId) => onAddTask(afterTaskId)}
@@ -810,11 +812,28 @@ export function PracticeTable({
   const [days, setDays] = useState<FeedDay[]>(initialData.items);
   const [cursor, setCursor] = useState<string | null>(initialData.nextCursor);
   const [loading, setLoading] = useState(false);
+  const paginatedRef = useRef(false);
 
-  // Update when initialData changes (e.g., from server revalidation)
+  // Sync server revalidation into the loaded days. If the user has paginated
+  // past the first page, merge the fresh first page in by date so later pages
+  // (and our advanced cursor) aren't dropped — otherwise they'd flicker out and
+  // be re-fetched by the infinite-scroll sentinel.
   useEffect(() => {
-    setDays(initialData.items);
-    setCursor(initialData.nextCursor);
+    if (!paginatedRef.current) {
+      setDays(initialData.items);
+      setCursor(initialData.nextCursor);
+      return;
+    }
+    setDays((prev) => {
+      const fresh = new Map(initialData.items.map((d) => [d.date, d]));
+      const seen = new Set<string>();
+      const merged = prev.map((d) => {
+        seen.add(d.date);
+        return fresh.get(d.date) ?? d;
+      });
+      const newDays = initialData.items.filter((d) => !seen.has(d.date));
+      return [...newDays, ...merged];
+    });
   }, [initialData]);
 
   const loadMore = useCallback(async () => {
@@ -822,6 +841,7 @@ export function PracticeTable({
     setLoading(true);
     try {
       const result = await getFeedPage(cursor, 7);
+      paginatedRef.current = true;
       setDays((prev) => [...prev, ...result.items]);
       setCursor(result.nextCursor);
     } finally {
@@ -937,15 +957,32 @@ export function PracticeTable({
       );
     };
 
+    const renameHandler = (e: Event) => {
+      const { tempId, realId } = (e as CustomEvent<OptimisticTaskRename>).detail;
+      setDays((prev) =>
+        prev.map((d) => {
+          if (!d.tasks.some((t) => t.id === tempId)) return d;
+          return {
+            ...d,
+            tasks: d.tasks.map((t) =>
+              t.id === tempId ? { ...t, id: realId } : t
+            ),
+          };
+        })
+      );
+    };
+
     window.addEventListener("task-created-optimistic", addHandler);
     window.addEventListener("task-created-rollback", rollbackHandler);
     window.addEventListener("task-updated-optimistic", updateHandler);
     window.addEventListener("task-deleted-optimistic", deleteHandler);
+    window.addEventListener("task-rename-optimistic", renameHandler);
     return () => {
       window.removeEventListener("task-created-optimistic", addHandler);
       window.removeEventListener("task-created-rollback", rollbackHandler);
       window.removeEventListener("task-updated-optimistic", updateHandler);
       window.removeEventListener("task-deleted-optimistic", deleteHandler);
+      window.removeEventListener("task-rename-optimistic", renameHandler);
     };
   }, []);
 
