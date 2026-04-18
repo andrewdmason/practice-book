@@ -24,6 +24,12 @@ type PersistedState = {
   lastTickAt: string;
 };
 
+/** Identifies a specific piece-group instance in the practice table (one piece
+ * on one day in one session). Distinct from the filter state because the same
+ * piece can appear in multiple days/sessions and we only want the specific one
+ * the user clicked to render as "active". */
+type ActivePieceInstance = { pieceId: string; key: string };
+
 type TaskTimerContextValue = {
   activeTaskId: string | null;
   remainingSeconds: number;
@@ -31,9 +37,13 @@ type TaskTimerContextValue = {
   /** Total elapsed seconds for tasks today (from server data + active timer) */
   dailyElapsedSeconds: number;
   activePieces: Piece[];
-  /** Currently focused piece ID (for piece tabs / scrubber) */
+  /** Filter piece ID — drives filter-bar pill, filtered-view, and URL. */
   focusedPieceId: string | null;
   setFocusedPieceId: (id: string | null) => void;
+  /** Specific piece-group instance the user is interacting with. Primary input
+   * for the sidebar detail view; falls back to focusedPieceId when null. */
+  activePieceInstance: ActivePieceInstance | null;
+  setActivePieceInstance: (instance: ActivePieceInstance | null) => void;
   startTaskTimer: (taskId: string, seconds: number) => void;
   pauseTaskTimer: () => void;
   resetTaskTimer: (taskId: string, seconds: number) => void;
@@ -67,6 +77,8 @@ export function TaskTimerProvider({
   const [baseDailySeconds, setBaseDailySeconds] = useState(initialDailySeconds);
   const [activeTaskElapsed, setActiveTaskElapsed] = useState(0);
   const [focusedPieceId, setFocusedPieceId] = useState<string | null>(null);
+  const [activePieceInstance, setActivePieceInstance] =
+    useState<ActivePieceInstance | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeTaskStartRef = useRef<number | null>(null);
 
@@ -289,6 +301,8 @@ export function TaskTimerProvider({
         activePieces,
         focusedPieceId,
         setFocusedPieceId,
+        activePieceInstance,
+        setActivePieceInstance,
         startTaskTimer,
         pauseTaskTimer,
         resetTaskTimer,

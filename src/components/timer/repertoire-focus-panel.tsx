@@ -76,16 +76,24 @@ const sectionsCache = new Map<string, PieceSectionWithChildren[]>();
 const assignmentsCache = new Map<string, { openAssignments: Assignment[]; completedAssignments: Assignment[] }>();
 
 export function RepertoireFocusPanel() {
-  const { focusedPieceId, setFocusedPieceId, activePieces, activeTaskId } = useTaskTimer();
+  const {
+    focusedPieceId,
+    setFocusedPieceId,
+    activePieceInstance,
+    setActivePieceInstance,
+    activePieces,
+    activeTaskId,
+  } = useTaskTimer();
 
-  const activePieceId = focusedPieceId;
+  const activePieceId = activePieceInstance?.pieceId ?? focusedPieceId;
 
   const handleFocusItem = useCallback(
     (focusKey: string) => {
       setFocusedPieceId(focusKey);
+      setActivePieceInstance(null);
       window.history.replaceState(null, "", `/?focus=${focusKey}`);
     },
-    [setFocusedPieceId]
+    [setFocusedPieceId, setActivePieceInstance]
   );
 
   let content: React.ReactNode;

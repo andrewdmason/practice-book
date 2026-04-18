@@ -203,16 +203,23 @@ function formatDate(dateStr: string): string {
 
 function SortablePieceGroup({
   group,
+  dayDate,
   onAddTask,
   daySessionNumbers,
   currentSessionNumber,
 }: {
   group: PieceGroup;
+  dayDate: string;
   onAddTask: (afterTaskId: string | null) => void;
   daySessionNumbers: number[];
   currentSessionNumber: number;
 }) {
+  const { activePieceInstance } = useTaskTimer();
   const sortableId = `piece:${group.pieceId ?? "__general__"}`;
+  const groupPieceKey = group.pieceId ?? "__general__";
+  const instanceKey = `${dayDate}:${currentSessionNumber}:${groupPieceKey}`;
+  const isActive =
+    group.pieceId !== null && activePieceInstance?.key === instanceKey;
   const {
     attributes,
     listeners,
@@ -267,14 +274,23 @@ function SortablePieceGroup({
     <div
       ref={setNodeRef}
       style={style}
-      className={cn("group/piece mb-3", isDragging && "opacity-50")}
+      data-piece-group-instance={instanceKey}
+      data-piece-id={group.pieceId ?? ""}
+      className={cn(
+        "group/piece relative mb-3 -ml-8 pl-8 -mr-2 pr-2 py-1.5 rounded-lg transition-colors duration-150",
+        !isActive && "hover:bg-muted/30",
+        isActive && "bg-muted/55",
+        isDragging && "opacity-50"
+      )}
     >
       {/* Piece header with drag handle in gutter */}
-      <div className="flex items-stretch mb-1.5">
+      <div className="group/piece-header flex items-stretch mb-1.5">
         <div
           className={cn(
             "-ml-8 w-8 shrink-0 flex items-center justify-center gap-0 transition-opacity",
-            menuOpen ? "opacity-100" : "opacity-0 group-hover/piece:opacity-100"
+            menuOpen
+              ? "opacity-100"
+              : "opacity-0 group-hover/piece-header:opacity-100"
           )}
         >
           <button
@@ -541,6 +557,7 @@ function SessionBlock({
             <SortablePieceGroup
               key={group.pieceId ?? "__general__"}
               group={group}
+              dayDate={dayDate}
               onAddTask={(afterTaskId) =>
                 onAddTask(group.pieceId, sessionNumber, afterTaskId)
               }
@@ -812,9 +829,35 @@ export function PracticeTable({
 }: {
   initialData: { items: FeedDay[]; nextCursor: string | null };
 }) {
-  const { focusedPieceId, activePieces } = useTaskTimer();
+  const {
+    focusedPieceId,
+    activePieceInstance,
+    setActivePieceInstance,
+    activePieces,
+  } = useTaskTimer();
   const focusedPieceName =
     activePieces.find((p) => p.id === focusedPieceId)?.name ?? null;
+
+  const handleRootClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement;
+      const groupEl = target.closest<HTMLElement>(
+        "[data-piece-group-instance]"
+      );
+      const instanceKey = groupEl?.dataset.pieceGroupInstance ?? null;
+      const pieceId = groupEl?.dataset.pieceId ?? "";
+      if (instanceKey && pieceId) {
+        if (activePieceInstance?.key !== instanceKey) {
+          setActivePieceInstance({ pieceId, key: instanceKey });
+        }
+        return;
+      }
+      if (activePieceInstance) {
+        setActivePieceInstance(null);
+      }
+    },
+    [activePieceInstance, setActivePieceInstance]
+  );
   const [days, setDays] = useState<FeedDay[]>(initialData.items);
   const [cursor, setCursor] = useState<string | null>(initialData.nextCursor);
   const [loading, setLoading] = useState(false);
@@ -1053,7 +1096,7 @@ export function PracticeTable({
       ];
 
   return (
-    <div className="pl-8">
+    <div className="pl-8" onClick={handleRootClick}>
       {displayDays.map((day) => (
         <DayGroup
           key={day.date}
