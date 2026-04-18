@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { updateTaskField } from "@/app/(app)/timer/task-actions";
 
 type MetronomeContextValue = {
   bpm: number;
@@ -91,9 +92,12 @@ export function MetronomeProvider({ children }: { children: React.ReactNode }) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const nextBeatTimeRef = useRef(0);
   const bpmRef = useRef(bpm);
+  const activeSourceIdRef = useRef<string | null>(null);
+  const persistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Keep bpmRef in sync
+  // Keep refs in sync with state
   bpmRef.current = bpm;
+  activeSourceIdRef.current = activeSourceId;
 
   // Restore from localStorage on mount
   useEffect(() => {
@@ -237,6 +241,16 @@ export function MetronomeProvider({ children }: { children: React.ReactNode }) {
       const clamped = clampBpm(newBpm);
       setBpmState(clamped);
       bpmRef.current = clamped;
+      // If bound to a task, persist the new BPM back to that task (debounced
+      // so rapid arrow-key presses don't each trigger a revalidation).
+      const boundTaskId = activeSourceIdRef.current;
+      if (boundTaskId) {
+        if (persistTimeoutRef.current) clearTimeout(persistTimeoutRef.current);
+        persistTimeoutRef.current = setTimeout(() => {
+          void updateTaskField(boundTaskId, "metronome_speed", clamped);
+          persistTimeoutRef.current = null;
+        }, 500);
+      }
       // If active, restart scheduler to pick up new BPM immediately
       if (isActive) {
         stopScheduler();
@@ -322,6 +336,7 @@ export function MetronomeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     return () => {
       stopScheduler();
+      if (persistTimeoutRef.current) clearTimeout(persistTimeoutRef.current);
       if (audioCtxRef.current) {
         audioCtxRef.current.close();
         audioCtxRef.current = null;
