@@ -36,6 +36,7 @@ export type TimeSummaryEntry = {
   piece_name: string;
   kind: PieceKind;
   total_seconds: number;
+  day_count?: number;
 };
 
 export type LessonTimeSummary = {
@@ -101,8 +102,9 @@ export type PracticeTask = {
 
 export type LessonEntry = {
   id: string;
+  lesson_id: string;
   piece_id: string | null;
-  date: string;
+  date: string | null;
   notes: string;
   sort_order: number;
   created_at: string;
@@ -118,6 +120,26 @@ export type LessonDay = {
   date: string;
   entries: LessonEntryWithPiece[];
   timeSummary: LessonTimeSummary;
+};
+
+export type Lesson = {
+  id: string;
+  date: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LessonWithEntries = Lesson & {
+  entries: LessonEntryWithPiece[];
+  timeSummary: LessonTimeSummary;
+  previousLessonDate: string | null;
+};
+
+export type LessonIndexEntry = {
+  id: string;
+  date: string | null;
+  completed_at: string | null;
 };
 
 export type PieceSuggestion = {

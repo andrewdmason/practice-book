@@ -4,11 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PlusIcon, Trash2Icon } from "lucide-react";
 import {
   getLessonsByDate,
-  createLessonBatch,
   addLessonEntryForPiece,
   updateLessonEntry,
   deleteLessonEntry,
 } from "@/app/(app)/lessons/actions";
+import { LessonViewToggle } from "@/components/lessons/lesson-view-toggle";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { formatMinutes } from "@/lib/timer-utils";
 import type { LessonDay, LessonEntryWithPiece, Piece } from "@/lib/types";
@@ -236,7 +236,6 @@ export function LessonsList({
   const [days, setDays] = useState<LessonDay[]>(initialData.items);
   const [cursor, setCursor] = useState<string | null>(initialData.nextCursor);
   const [loading, setLoading] = useState(false);
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     setDays(initialData.items);
@@ -279,17 +278,6 @@ export function LessonsList({
     return () => observer.disconnect();
   }, [cursor, loadMore]);
 
-  const handleAddLesson = async () => {
-    if (creating) return;
-    setCreating(true);
-    try {
-      await createLessonBatch();
-      await refresh();
-    } finally {
-      setCreating(false);
-    }
-  };
-
   const handleDeleteEntry = async (id: string) => {
     setDays((prev) =>
       prev
@@ -315,15 +303,7 @@ export function LessonsList({
     <div>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold tracking-tight">Lessons</h1>
-        <button
-          type="button"
-          onClick={handleAddLesson}
-          disabled={creating}
-          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-        >
-          <PlusIcon className="size-4" />
-          {creating ? "Adding..." : "Add new lesson"}
-        </button>
+        <LessonViewToggle mode="list" />
       </div>
 
       {days.map((day) => (
@@ -350,11 +330,11 @@ export function LessonsList({
 
       {days.length === 0 && (
         <div className="py-12 text-center text-muted-foreground">
-          <p className="mb-2">No lessons yet.</p>
+          <p className="mb-2">No completed lessons yet.</p>
           <p className="text-sm">
-            Click &ldquo;Add new lesson&rdquo; to create one entry per active
-            piece{activePieceCount > 0 && ` (${activePieceCount})`} plus a
-            general notes row.
+            Switch to the single-lesson view to prepare your upcoming lesson
+            {activePieceCount > 0 && ` — ${activePieceCount} active pieces available`}
+            .
           </p>
         </div>
       )}

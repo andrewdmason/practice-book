@@ -1,15 +1,16 @@
-import { LessonsList } from "@/components/lessons/lessons-list";
-import { RepertoireFocusPanel } from "@/components/timer/repertoire-focus-panel";
-import { TwoColumnLayout } from "@/components/layout/two-column-layout";
-import { getLessonsByDate } from "@/app/(app)/lessons/actions";
+"use client";
 
-export default async function LessonsPage() {
-  const initialData = await getLessonsByDate();
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getStoredLessonViewMode } from "@/components/lessons/lesson-view-toggle";
 
-  return (
-    <TwoColumnLayout
-      left={<LessonsList initialData={initialData} />}
-      right={<RepertoireFocusPanel />}
-    />
-  );
+export default function LessonsPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const mode = getStoredLessonViewMode();
+    router.replace(mode === "list" ? "/lessons/list" : "/lessons/upcoming");
+  }, [router]);
+
+  return null;
 }

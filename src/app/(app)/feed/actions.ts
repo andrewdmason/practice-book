@@ -141,6 +141,7 @@ export async function getTimeSummaryForDateRange(
   }
 
   const groups = new Map<string, TimeSummaryEntry>();
+  const pieceDaySets = new Map<string, Set<string>>();
 
   for (const task of tasks) {
     const elapsed = task.timer_seconds - task.timer_remaining_seconds;
@@ -157,8 +158,19 @@ export async function getTimeSummaryForDateRange(
         piece_name: info?.name ?? "General",
         kind: info?.kind ?? "piece",
         total_seconds: elapsed,
+        day_count: 0,
       });
     }
+    let dateSet = pieceDaySets.get(key);
+    if (!dateSet) {
+      dateSet = new Set<string>();
+      pieceDaySets.set(key, dateSet);
+    }
+    dateSet.add(task.date);
+  }
+
+  for (const [key, entry] of groups) {
+    entry.day_count = pieceDaySets.get(key)?.size ?? 0;
   }
 
   const summaryEntries = Array.from(groups.values()).sort(
