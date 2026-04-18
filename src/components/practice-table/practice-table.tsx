@@ -175,9 +175,11 @@ function formatDate(dateStr: string): string {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = localDate(tomorrow);
 
-  if (dateStr === todayStr) return "Today";
-  if (dateStr === yesterdayStr) return "Yesterday";
-  if (dateStr === tomorrowStr) return "Tomorrow";
+  const weekday = date.toLocaleDateString("en-US", { weekday: "long" });
+
+  if (dateStr === todayStr) return `Today (${weekday})`;
+  if (dateStr === yesterdayStr) return `Yesterday (${weekday})`;
+  if (dateStr === tomorrowStr) return `Tomorrow (${weekday})`;
 
   return date.toLocaleDateString("en-US", {
     weekday: "short",
