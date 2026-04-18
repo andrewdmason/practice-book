@@ -8,6 +8,7 @@ import {
   GripVerticalIcon,
   ListPlusIcon,
   MetronomeIcon,
+  NotebookPenIcon,
   PlusIcon,
   Trash2Icon,
   VideoIcon,
@@ -59,6 +60,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { useMetronome } from "@/components/metronome/metronome-context";
 import { SectionSidebar } from "@/components/timer/section-sidebar";
+import { AddLessonNoteDialog } from "@/components/lessons/add-lesson-note-dialog";
 import { YouTubePlayer } from "@/components/video/youtube-player";
 import { useVideo } from "@/components/video/video-context";
 import type {
@@ -141,6 +143,7 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
     () => sectionsCache.get(pieceId) ?? []
   );
   const [isAddingAssignment, setIsAddingAssignment] = useState(false);
+  const [isLessonNoteOpen, setIsLessonNoteOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
@@ -395,6 +398,17 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
                 <PlusIcon className="size-3.5" />
               </button>
               {!systemPiece && (
+                <button
+                  type="button"
+                  onClick={() => setIsLessonNoteOpen(true)}
+                  className="p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  title="Add note to next lesson"
+                  aria-label="Add note to next lesson"
+                >
+                  <NotebookPenIcon className="size-3.5" />
+                </button>
+              )}
+              {!systemPiece && (
                 <Link
                   href={`/repertoire/${pieceId}`}
                   className="p-1 text-muted-foreground hover:text-foreground transition-colors"
@@ -493,6 +507,14 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
           </CardContent>
         )}
       </Card>
+      {!systemPiece && (
+        <AddLessonNoteDialog
+          open={isLessonNoteOpen}
+          onOpenChange={setIsLessonNoteOpen}
+          pieceId={pieceId}
+          pieceName={piece.name}
+        />
+      )}
     </div>
   );
 }

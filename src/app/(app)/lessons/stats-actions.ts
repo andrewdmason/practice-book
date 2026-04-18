@@ -60,6 +60,81 @@ export type LessonOverviewExtras = {
   sectionsAdvancedCount: number;
 };
 
+export type OverviewTrendPoint = {
+  label: string;
+  totalSeconds: number;
+  dayCount: number;
+  avgPerDaySeconds: number;
+  isCurrent: boolean;
+};
+
+export async function getLessonOverviewTrend(
+  lessonId: string
+): Promise<OverviewTrendPoint[]> {
+  const supabase = await createClient();
+  const tz = await getUserTimezone();
+  const today = localDate(new Date(), tz);
+
+  const { data: lesson } = await supabase
+    .from("lessons")
+    .select("date, completed_at")
+    .eq("id", lessonId)
+    .single();
+
+  const currentEnd = lesson?.date ?? today;
+  const currentIsUpcoming = !lesson?.completed_at;
+
+  let prevQuery = supabase
+    .from("lessons")
+    .select("id, date")
+    .not("date", "is", null)
+    .not("completed_at", "is", null)
+    .neq("id", lessonId);
+  if (lesson?.date) {
+    prevQuery = prevQuery.lt("date", lesson.date);
+  }
+  const { data: prevLessons } = await prevQuery
+    .order("date", { ascending: false })
+    .limit(5);
+
+  type Period = { id: string; endDate: string; isCurrent: boolean };
+  const periods: Period[] = [];
+  for (const p of (prevLessons ?? []).slice().reverse()) {
+    periods.push({ id: p.id as string, endDate: p.date as string, isCurrent: false });
+  }
+  periods.push({ id: lessonId, endDate: currentEnd, isCurrent: true });
+
+  const { data: earliestTask } = await supabase
+    .from("practice_tasks")
+    .select("date")
+    .order("date", { ascending: true })
+    .limit(1);
+  const earliestDate = earliestTask?.[0]?.date ?? null;
+
+  const points: OverviewTrendPoint[] = [];
+  for (let i = 0; i < periods.length; i++) {
+    const rangeEnd = periods[i].endDate;
+    const rangeStart =
+      i > 0 ? addDays(periods[i - 1].endDate, 1) : earliestDate ?? rangeEnd;
+    const effectiveStart = rangeStart > rangeEnd ? rangeEnd : rangeStart;
+    const summary = await getTimeSummaryForDateRange(effectiveStart, rangeEnd);
+    const avg =
+      summary.dayCount > 0
+        ? Math.round(summary.totalSeconds / summary.dayCount)
+        : 0;
+    points.push({
+      label:
+        periods[i].isCurrent && currentIsUpcoming ? "Upcoming" : rangeEnd,
+      totalSeconds: summary.totalSeconds,
+      dayCount: summary.dayCount,
+      avgPerDaySeconds: avg,
+      isCurrent: periods[i].isCurrent,
+    });
+  }
+
+  return points;
+}
+
 export async function getLessonOverviewExtras(
   lessonId: string
 ): Promise<LessonOverviewExtras> {

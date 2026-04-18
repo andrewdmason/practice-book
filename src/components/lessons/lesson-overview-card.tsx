@@ -6,8 +6,11 @@ import { formatMinutes } from "@/lib/timer-utils";
 import { useLessonView } from "./lesson-view-context";
 import {
   getLessonOverviewExtras,
+  getLessonOverviewTrend,
   type LessonOverviewExtras,
+  type OverviewTrendPoint,
 } from "@/app/(app)/lessons/stats-actions";
+import { LessonOverviewTrend } from "./lesson-overview-trend";
 import { cn } from "@/lib/utils";
 
 function daysBetween(a: string, b: string): number {
@@ -28,11 +31,15 @@ function StatRow({ label, value }: { label: string; value: React.ReactNode }) {
 export function LessonOverviewCard() {
   const { lesson, setActiveSectionId } = useLessonView();
   const [extras, setExtras] = useState<LessonOverviewExtras | null>(null);
+  const [trend, setTrend] = useState<OverviewTrendPoint[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     getLessonOverviewExtras(lesson.id).then((data) => {
       if (!cancelled) setExtras(data);
+    });
+    getLessonOverviewTrend(lesson.id).then((data) => {
+      if (!cancelled) setTrend(data);
     });
     return () => {
       cancelled = true;
@@ -152,6 +159,8 @@ export function LessonOverviewCard() {
             </div>
           </div>
         )}
+
+        {trend && trend.length > 1 && <LessonOverviewTrend points={trend} />}
       </CardContent>
     </Card>
   );

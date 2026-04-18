@@ -464,3 +464,83 @@ export async function deleteLessonEntry(id: string): Promise<void> {
   if (error) throw new Error(error.message);
   revalidatePath("/lessons", "layout");
 }
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+export async function addNoteToUpcomingLesson(
+  pieceId: string,
+  noteText: string
+): Promise<void> {
+  const trimmed = noteText.trim();
+  if (!trimmed) return;
+
+  const supabase = await createClient();
+
+  const { data: upcomingRows } = await supabase
+    .from("lessons")
+    .select("id")
+    .is("completed_at", null)
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  let upcomingId: string;
+  if (upcomingRows && upcomingRows.length > 0) {
+    upcomingId = upcomingRows[0].id;
+  } else {
+    const { data: created, error: insertErr } = await supabase
+      .from("lessons")
+      .insert({ date: null, completed_at: null })
+      .select("id")
+      .single();
+    if (insertErr || !created) throw new Error(insertErr?.message ?? "Failed to create upcoming lesson");
+    upcomingId = created.id;
+  }
+
+  const paragraphs = trimmed
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => `<p>${escapeHtml(block).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+
+  const { data: existing } = await supabase
+    .from("lesson_entries")
+    .select("id, notes")
+    .eq("lesson_id", upcomingId)
+    .eq("piece_id", pieceId)
+    .maybeSingle();
+
+  if (existing) {
+    const currentNotes = (existing.notes as string | null) ?? "";
+    const newNotes = currentNotes + paragraphs;
+    const { error } = await supabase
+      .from("lesson_entries")
+      .update({ notes: newNotes })
+      .eq("id", existing.id);
+    if (error) throw new Error(error.message);
+  } else {
+    const { data: rows } = await supabase
+      .from("lesson_entries")
+      .select("sort_order")
+      .eq("lesson_id", upcomingId)
+      .order("sort_order", { ascending: false })
+      .limit(1);
+    const nextSort = ((rows?.[0]?.sort_order as number) ?? 0) + 1;
+
+    const { error } = await supabase.from("lesson_entries").insert({
+      lesson_id: upcomingId,
+      piece_id: pieceId,
+      date: null,
+      notes: paragraphs,
+      sort_order: nextSort,
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  revalidatePath("/lessons", "layout");
+}
