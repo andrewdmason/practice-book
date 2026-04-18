@@ -683,7 +683,13 @@ function DayGroup({
     <div className="group/day mb-8">
       {isToday && hasTomorrow && <hr className="mb-8 border-border" />}
       {/* Day header */}
-      <div className="flex items-center gap-2 mb-3 px-1">
+      <div
+        {...(isToday ? { "data-today-anchor": "true" } : {})}
+        className={cn(
+          "flex items-center gap-2 mb-3 px-1",
+          isToday && "scroll-mt-24"
+        )}
+      >
         <h2
           className={cn(
             "text-lg font-semibold",
@@ -984,6 +990,22 @@ export function PracticeTable({
       window.removeEventListener("task-deleted-optimistic", deleteHandler);
       window.removeEventListener("task-rename-optimistic", renameHandler);
     };
+  }, []);
+
+  // On initial load, if the feed has tomorrow entries, scroll so Today sits
+  // at the top of the viewport instead of Tomorrow.
+  const didInitialScrollRef = useRef(false);
+  useEffect(() => {
+    if (didInitialScrollRef.current) return;
+    didInitialScrollRef.current = true;
+    const hasTomorrowInitial = initialData.items.some(
+      (d) => d.date === tomorrowStr
+    );
+    if (!hasTomorrowInitial) return;
+    const el = document.querySelector<HTMLElement>("[data-today-anchor]");
+    if (!el) return;
+    el.scrollIntoView({ block: "start", behavior: "instant" as ScrollBehavior });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Infinite scroll sentinel
