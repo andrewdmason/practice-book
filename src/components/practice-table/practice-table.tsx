@@ -485,6 +485,7 @@ function DayGroup({
   focusedPieceName,
   activePieces,
   hasTomorrow,
+  hasUnfinishedBefore,
   onReorder,
 }: {
   day: FeedDay;
@@ -492,6 +493,7 @@ function DayGroup({
   focusedPieceName: string | null;
   activePieces: Piece[];
   hasTomorrow: boolean;
+  hasUnfinishedBefore: boolean;
   onReorder: (dayDate: string, orderedIds: string[]) => void;
 }) {
   const filteredTasks = focusedPieceId
@@ -661,7 +663,7 @@ function DayGroup({
                   </DropdownMenuItem>
                 </>
               )}
-              {isToday && (
+              {isToday && hasUnfinishedBefore && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -899,6 +901,9 @@ export function PracticeTable({
     return localDate(d);
   })();
   const hasTomorrow = days.some((d) => d.date === tomorrowStr);
+  const hasUnfinishedBefore = days.some(
+    (d) => d.date < localDate() && d.tasks.some((t) => !t.completed)
+  );
 
   // Always include today in the displayed list so we can render an empty state
   // even when nothing has been logged yet.
@@ -921,6 +926,7 @@ export function PracticeTable({
           focusedPieceName={focusedPieceName}
           activePieces={activePieces}
           hasTomorrow={hasTomorrow}
+          hasUnfinishedBefore={hasUnfinishedBefore}
           onReorder={handleReorder}
         />
       ))}
