@@ -32,7 +32,6 @@ import {
   updateTaskField,
   updateTaskSection,
   updateTaskSession,
-  getSectionPickerData,
   deleteTask,
   duplicateTask,
   completeTask,
@@ -45,36 +44,17 @@ import {
   type FocusTaskNotesDetail,
 } from "@/lib/optimistic-task";
 import { TaskAudioDialog } from "@/components/practice-table/task-audio-dialog";
+import { FollowUpDialog } from "@/components/practice-table/follow-up-dialog";
+import {
+  getCachedSectionPickerData,
+  loadSectionPickerData,
+  type SectionPickerData,
+} from "@/lib/section-picker-cache";
 import { localDate } from "@/lib/date-utils";
 import { practiceTempo } from "@/lib/section-utils";
 import type { PieceSection, TaskWithDetails, SectionStatus } from "@/lib/types";
 import { SECTION_STATUS_DOT_COLORS } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-type SectionPickerData = {
-  sections: PieceSection[];
-  pieceTargetTempo: number | null;
-};
-
-const sectionPickerCache = new Map<string, SectionPickerData>();
-const sectionPickerInflight = new Map<string, Promise<SectionPickerData>>();
-
-function loadSectionPickerData(pieceId: string): Promise<SectionPickerData> {
-  const cached = sectionPickerCache.get(pieceId);
-  if (cached) return Promise.resolve(cached);
-  const inflight = sectionPickerInflight.get(pieceId);
-  if (inflight) return inflight;
-  const p = getSectionPickerData(pieceId)
-    .then((data) => {
-      sectionPickerCache.set(pieceId, data);
-      return data;
-    })
-    .finally(() => {
-      sectionPickerInflight.delete(pieceId);
-    });
-  sectionPickerInflight.set(pieceId, p);
-  return p;
-}
 
 export function TaskRow({
   task,
@@ -148,13 +128,14 @@ export function TaskRow({
   const [sectionPickerOpen, setSectionPickerOpen] = useState(false);
   const [sectionPickerData, setSectionPickerData] =
     useState<SectionPickerData | null>(
-      task.piece_id ? sectionPickerCache.get(task.piece_id) ?? null : null
+      task.piece_id ? getCachedSectionPickerData(task.piece_id) : null
     );
   const [noteOpen, setNoteOpen] = useState(false);
   const [audioDialogOpen, setAudioDialogOpen] = useState(false);
   const [audioDialogMode, setAudioDialogMode] = useState<"record" | "playback">(
     "record"
   );
+  const [followUpOpen, setFollowUpOpen] = useState(false);
   const hasAudio = !!task.audio_path;
   const openAudioDialog = useCallback(
     (mode: "record" | "playback") => {
@@ -349,12 +330,30 @@ export function TaskRow({
     const nextValue = !optimisticCompleted;
     setOptimisticCompleted(nextValue);
     if (nextValue) {
-      if (isActive) pauseTaskTimer();
+      const wasActive = isActive;
+      if (wasActive) pauseTaskTimer();
       void completeTask(task.id);
+      if (wasActive) {
+        window.dispatchEvent(
+          new CustomEvent("task-auto-advance", {
+            detail: { completedTaskId: task.id, dayDate: task.date },
+          })
+        );
+      }
+      // Kick off section data fetch in parallel with dialog open so the
+      // picker is warm by the time the user reaches for it.
+      if (task.piece_id) void loadSectionPickerData(task.piece_id);
+      setFollowUpOpen(true);
     } else {
       void uncompleteTask(task.id);
     }
   };
+
+  const tomorrowDate = (() => {
+    const d = new Date(task.date + "T12:00:00");
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  })();
 
   const handleSectionPickerOpenChange = (open: boolean) => {
     setSectionPickerOpen(open);
@@ -745,6 +744,23 @@ export function TaskRow({
           )}
         </div>
       </div>
+      <FollowUpDialog
+        open={followUpOpen}
+        onOpenChange={setFollowUpOpen}
+        tomorrowDate={tomorrowDate}
+        defaults={{
+          pieceId: task.piece_id,
+          pieceName: task.piece_name,
+          pieceComposer: task.piece_composer,
+          pieceKind: task.piece_kind,
+          sectionId: optimisticSection.sectionId,
+          sectionLabel: optimisticSection.label,
+          sectionStatus: optimisticSection.status,
+          metronomeSpeed: optimisticMetronomeSpeed,
+          timerSeconds: optimisticGoalSeconds,
+          text: text,
+        }}
+      />
       <TaskAudioDialog
         taskId={task.id}
         open={audioDialogOpen}

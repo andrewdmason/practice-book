@@ -69,7 +69,8 @@ export async function createTask(
   date?: string,
   afterTaskId?: string | null,
   sessionNumber?: number,
-  text?: string
+  text?: string,
+  timerSeconds?: number
 ): Promise<{ id: string; timer_seconds: number; timer_remaining_seconds: number }> {
   const supabase = await createClient();
 
@@ -138,6 +139,9 @@ export async function createTask(
       session_number: resolvedSession,
       ...(date ? { date } : {}),
       ...(text ? { text } : {}),
+      ...(timerSeconds !== undefined
+        ? { timer_seconds: timerSeconds, timer_remaining_seconds: timerSeconds }
+        : {}),
     })
     .select("id, timer_seconds, timer_remaining_seconds")
     .single();
