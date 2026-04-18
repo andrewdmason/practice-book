@@ -84,7 +84,6 @@ export function TaskRow({
   } = useTaskTimer();
 
   const isActive = activeTaskId === task.id;
-  const elapsed = task.timer_seconds - (isActive ? remainingSeconds : task.timer_remaining_seconds);
 
   const activeRowBg = "bg-red-500";
   const activeBorderClasses =
@@ -132,6 +131,9 @@ export function TaskRow({
   const [optimisticMetronomeSpeed, setOptimisticMetronomeSpeed] = useState<
     number | null
   >(task.metronome_speed);
+  const [optimisticRemaining, setOptimisticRemaining] = useState(
+    task.timer_remaining_seconds
+  );
   const [sectionPickerOpen, setSectionPickerOpen] = useState(false);
   const [sectionPickerData, setSectionPickerData] =
     useState<SectionPickerData | null>(
@@ -175,6 +177,12 @@ export function TaskRow({
     setOptimisticMetronomeSpeed(task.metronome_speed);
     setMetronome(task.metronome_speed?.toString() ?? "");
   }, [task.metronome_speed]);
+  // Adopt the server's remaining only when the server value itself changes.
+  // If this also ran on isActive transitions, stopping the timer would briefly
+  // revert to a stale prop before revalidation lands.
+  useEffect(() => {
+    setOptimisticRemaining(task.timer_remaining_seconds);
+  }, [task.timer_remaining_seconds]);
 
   // Adopt the server's text when it changes — but not while the user is editing.
   const [prevServerText, setPrevServerText] = useState(task.text);
@@ -243,20 +251,27 @@ export function TaskRow({
 
   useEffect(() => {
     const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
+      const detail = (e as CustomEvent).detail as {
+        taskId: string;
+        remainingSeconds: number;
+      };
       if (detail.taskId === task.id) {
-        // Force re-render with updated remaining
+        setOptimisticRemaining(detail.remainingSeconds);
       }
     };
     window.addEventListener("task-timer-paused", handler);
     return () => window.removeEventListener("task-timer-paused", handler);
   }, [task.id]);
 
+  const elapsed =
+    optimisticGoalSeconds -
+    (isActive ? remainingSeconds : optimisticRemaining);
+
   const handleTimerClick = () => {
     if (isActive) {
       pauseTaskTimer();
     } else {
-      startTaskTimer(task.id, task.timer_remaining_seconds);
+      startTaskTimer(task.id, optimisticRemaining);
     }
   };
 

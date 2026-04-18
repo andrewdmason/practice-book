@@ -343,12 +343,15 @@ export async function startTaskTimer(taskId: string) {
     .eq("id", taskId);
 }
 
-export async function stopTaskTimer(taskId: string) {
+export async function stopTaskTimer(taskId: string, remainingSeconds: number) {
   const supabase = await createClient();
 
   await supabase
     .from("practice_tasks")
-    .update({ ended_at: new Date().toISOString() })
+    .update({
+      timer_remaining_seconds: remainingSeconds,
+      ended_at: new Date().toISOString(),
+    })
     .eq("id", taskId);
 
   revalidatePath("/");

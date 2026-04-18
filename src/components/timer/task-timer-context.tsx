@@ -72,14 +72,21 @@ export function TaskTimerProvider({
 
   const dailyElapsedSeconds = baseDailySeconds + activeTaskElapsed;
 
-  const persistTaskRemaining = useCallback((taskId: string, seconds: number) => {
-    void updateTaskRemaining(taskId, seconds).catch(() => {});
+  const announceRemaining = useCallback((taskId: string, seconds: number) => {
     window.dispatchEvent(
       new CustomEvent("task-timer-paused", {
         detail: { taskId, remainingSeconds: seconds },
       })
     );
   }, []);
+
+  const persistTaskRemaining = useCallback(
+    (taskId: string, seconds: number) => {
+      void updateTaskRemaining(taskId, seconds).catch(() => {});
+      announceRemaining(taskId, seconds);
+    },
+    [announceRemaining]
+  );
 
   // Restore from localStorage on mount
   useEffect(() => {
@@ -235,7 +242,12 @@ export function TaskTimerProvider({
 
   const pauseTaskTimer = useCallback(() => {
     if (!activeTaskId) return;
-    persistTaskRemaining(activeTaskId, remainingSeconds);
+    const pausedTaskId = activeTaskId;
+    const finalRemaining = remainingSeconds;
+
+    // Announce the final remaining synchronously so rows can update their
+    // optimistic copy before isActive flips to false in the same render.
+    announceRemaining(pausedTaskId, finalRemaining);
 
     // Add elapsed to base daily total
     if (activeTaskStartRef.current) {
@@ -245,14 +257,15 @@ export function TaskTimerProvider({
       setBaseDailySeconds((prev) => prev + elapsed);
     }
 
-    // Record ended_at on server
-    void stopTaskTimerAction(activeTaskId).catch(() => {});
+    // Atomically persist remaining + ended_at so a subsequent revalidate
+    // can't race and read a stale timer_remaining_seconds.
+    void stopTaskTimerAction(pausedTaskId, finalRemaining).catch(() => {});
 
     localStorage.removeItem(STORAGE_KEY);
     setActiveTaskId(null);
     setActiveTaskElapsed(0);
     activeTaskStartRef.current = null;
-  }, [activeTaskId, remainingSeconds, persistTaskRemaining]);
+  }, [activeTaskId, remainingSeconds, announceRemaining]);
 
   const resetTaskTimer = useCallback(
     (taskId: string, seconds: number) => {
