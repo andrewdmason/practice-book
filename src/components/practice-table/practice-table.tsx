@@ -15,11 +15,11 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ClockIcon, GripVerticalIcon, PlusIcon } from "lucide-react";
+import { ArrowUpFromLineIcon, ClockIcon, GripVerticalIcon, PlusIcon } from "lucide-react";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { TaskRow } from "@/components/practice-table/task-row";
 import { PieceSessionsDialog } from "@/components/practice-table/piece-sessions-dialog";
-import { reorderTasks } from "@/app/(app)/timer/task-actions";
+import { reorderTasks, rollOverUnfinishedTasks } from "@/app/(app)/timer/task-actions";
 import { getFeedPage } from "@/app/(app)/feed/actions";
 import {
   createTaskOptimistic,
@@ -658,6 +658,19 @@ function DayGroup({
                   <DropdownMenuItem onClick={handleAddSession}>
                     <PlusIcon />
                     <span className="text-sm">New session</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+              {isToday && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      void rollOverUnfinishedTasks();
+                    }}
+                  >
+                    <ArrowUpFromLineIcon />
+                    <span className="text-sm">Roll over unfinished</span>
                   </DropdownMenuItem>
                 </>
               )}
