@@ -161,6 +161,19 @@ export async function updateTaskSession(taskId: string, sessionNumber: number) {
     .eq("id", taskId);
 }
 
+export async function updateTasksSession(
+  taskIds: string[],
+  sessionNumber: number
+) {
+  if (taskIds.length === 0) return;
+  const supabase = await createClient();
+
+  await supabase
+    .from("practice_tasks")
+    .update({ session_number: sessionNumber })
+    .in("id", taskIds);
+}
+
 export async function updateTaskField(
   taskId: string,
   field: "text" | "metronome_speed" | "timer_seconds" | "timer_remaining_seconds",
@@ -393,6 +406,66 @@ export async function getNextTaskForToday(
   const { data } = await query;
 
   return ((data ?? [])[0] as PracticeTask) ?? null;
+}
+
+export async function rollOverUnfinishedTasks(): Promise<number> {
+  const supabase = await createClient();
+  const tz = await getUserTimezone();
+  const today = localDate(new Date(), tz);
+
+  const { data: priorDay } = await supabase
+    .from("practice_tasks")
+    .select("date")
+    .lt("date", today)
+    .eq("completed", false)
+    .order("date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!priorDay) return 0;
+
+  const { data: toRoll } = await supabase
+    .from("practice_tasks")
+    .select("id")
+    .eq("date", priorDay.date)
+    .eq("completed", false);
+
+  if (!toRoll || toRoll.length === 0) return 0;
+
+  const [sessRes, sortRes] = await Promise.all([
+    supabase
+      .from("practice_tasks")
+      .select("session_number")
+      .eq("date", today)
+      .order("session_number", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("practice_tasks")
+      .select("sort_order")
+      .eq("date", today)
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  const targetSession = sessRes.data?.session_number ?? 1;
+  let nextSort = (sortRes.data?.sort_order ?? -1) + 1;
+
+  await Promise.all(
+    toRoll.map((row) =>
+      supabase
+        .from("practice_tasks")
+        .update({
+          date: today,
+          session_number: targetSession,
+          sort_order: nextSort++,
+        })
+        .eq("id", row.id)
+    )
+  );
+
+  revalidatePath("/");
+  return toRoll.length;
 }
 
 export async function reorderTasks(taskIds: string[]) {

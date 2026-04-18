@@ -15,14 +15,25 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ClockIcon, GripVerticalIcon, PlusIcon } from "lucide-react";
+import {
+  ArrowRightIcon,
+  ArrowUpFromLineIcon,
+  ClockIcon,
+  GripVerticalIcon,
+  PlusIcon,
+} from "lucide-react";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { TaskRow } from "@/components/practice-table/task-row";
 import { PieceSessionsDialog } from "@/components/practice-table/piece-sessions-dialog";
-import { reorderTasks } from "@/app/(app)/timer/task-actions";
+import {
+  reorderTasks,
+  rollOverUnfinishedTasks,
+  updateTasksSession,
+} from "@/app/(app)/timer/task-actions";
 import { getFeedPage } from "@/app/(app)/feed/actions";
 import {
   createTaskOptimistic,
+  emitOptimisticTaskUpdate,
   getStableTaskKey,
   type OptimisticTaskDetail,
   type OptimisticTaskRename,
@@ -177,9 +188,11 @@ function formatDate(dateStr: string): string {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = localDate(tomorrow);
 
-  if (dateStr === todayStr) return "Today";
-  if (dateStr === yesterdayStr) return "Yesterday";
-  if (dateStr === tomorrowStr) return "Tomorrow";
+  const weekday = date.toLocaleDateString("en-US", { weekday: "long" });
+
+  if (dateStr === todayStr) return `Today (${weekday})`;
+  if (dateStr === yesterdayStr) return `Yesterday (${weekday})`;
+  if (dateStr === tomorrowStr) return `Tomorrow (${weekday})`;
 
   return date.toLocaleDateString("en-US", {
     weekday: "short",
@@ -192,10 +205,12 @@ function SortablePieceGroup({
   group,
   onAddTask,
   daySessionNumbers,
+  currentSessionNumber,
 }: {
   group: PieceGroup;
   onAddTask: (afterTaskId: string | null) => void;
   daySessionNumbers: number[];
+  currentSessionNumber: number;
 }) {
   const sortableId = `piece:${group.pieceId ?? "__general__"}`;
   const {
@@ -213,6 +228,30 @@ function SortablePieceGroup({
   };
 
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const gripButtonRef = useRef<HTMLButtonElement>(null);
+  const gripPointerStart = useRef<{ x: number; y: number } | null>(null);
+
+  const handleGripPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    gripPointerStart.current = { x: e.clientX, y: e.clientY };
+    listeners?.onPointerDown?.(e);
+  };
+
+  const handleGripPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const start = gripPointerStart.current;
+    gripPointerStart.current = null;
+    if (!start) return;
+    const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y) >= 5;
+    if (!moved) setMenuOpen((prev) => !prev);
+  };
+
+  const moveAllTasksToSession = (n: number) => {
+    const taskIds = group.tasks.map((t) => t.id);
+    for (const id of taskIds) {
+      emitOptimisticTaskUpdate(id, { session_number: n });
+    }
+    void updateTasksSession(taskIds, n);
+  };
 
   const totalElapsed = group.tasks.reduce(
     (sum, t) => sum + Math.max(0, t.timer_seconds - t.timer_remaining_seconds),
@@ -235,7 +274,7 @@ function SortablePieceGroup({
         <div
           className={cn(
             "-ml-8 w-8 shrink-0 flex items-center justify-center gap-0 transition-opacity",
-            "opacity-0 group-hover/piece:opacity-100"
+            menuOpen ? "opacity-100" : "opacity-0 group-hover/piece:opacity-100"
           )}
         >
           <button
@@ -247,14 +286,47 @@ function SortablePieceGroup({
             <PlusIcon className="size-3.5" />
           </button>
           <button
+            ref={gripButtonRef}
             type="button"
             {...attributes}
-            {...listeners}
+            onPointerDown={handleGripPointerDown}
+            onPointerUp={handleGripPointerUp}
             className="flex items-center justify-center w-4 h-6 cursor-grab rounded-sm text-muted-foreground/60 hover:text-foreground hover:bg-muted transition-colors"
-            title="Drag to reorder"
           >
             <GripVerticalIcon className="size-3.5" />
           </button>
+          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+            <DropdownMenuContent
+              anchor={gripButtonRef}
+              align="start"
+              side="bottom"
+              className="w-48"
+            >
+              {daySessionNumbers
+                .filter((n) => n !== currentSessionNumber)
+                .map((n) => (
+                  <DropdownMenuItem
+                    key={n}
+                    onClick={() => moveAllTasksToSession(n)}
+                  >
+                    <ArrowRightIcon />
+                    Move to session {n}
+                  </DropdownMenuItem>
+                ))}
+              <DropdownMenuItem
+                onClick={() => {
+                  const next =
+                    (daySessionNumbers.length > 0
+                      ? Math.max(...daySessionNumbers)
+                      : currentSessionNumber) + 1;
+                  moveAllTasksToSession(next);
+                }}
+              >
+                <PlusIcon />
+                Move to new session
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <div className="flex items-center gap-1.5 px-1">
           <h3 className="text-sm font-medium text-foreground">
@@ -473,6 +545,7 @@ function SessionBlock({
                 onAddTask(group.pieceId, sessionNumber, afterTaskId)
               }
               daySessionNumbers={daySessionNumbers}
+              currentSessionNumber={sessionNumber}
             />
           ))}
         </SortableContext>
@@ -487,6 +560,7 @@ function DayGroup({
   focusedPieceName,
   activePieces,
   hasTomorrow,
+  hasUnfinishedBefore,
   onReorder,
 }: {
   day: FeedDay;
@@ -494,6 +568,7 @@ function DayGroup({
   focusedPieceName: string | null;
   activePieces: Piece[];
   hasTomorrow: boolean;
+  hasUnfinishedBefore: boolean;
   onReorder: (dayDate: string, orderedIds: string[]) => void;
 }) {
   const filteredTasks = focusedPieceId
@@ -660,6 +735,19 @@ function DayGroup({
                   <DropdownMenuItem onClick={handleAddSession}>
                     <PlusIcon />
                     <span className="text-sm">New session</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+              {isToday && hasUnfinishedBefore && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      void rollOverUnfinishedTasks();
+                    }}
+                  >
+                    <ArrowUpFromLineIcon />
+                    <span className="text-sm">Roll over unfinished</span>
                   </DropdownMenuItem>
                 </>
               )}
@@ -923,6 +1011,9 @@ export function PracticeTable({
     return localDate(d);
   })();
   const hasTomorrow = days.some((d) => d.date === tomorrowStr);
+  const hasUnfinishedBefore = days.some(
+    (d) => d.date < localDate() && d.tasks.some((t) => !t.completed)
+  );
 
   // Always include today in the displayed list so we can render an empty state
   // even when nothing has been logged yet.
@@ -945,6 +1036,7 @@ export function PracticeTable({
           focusedPieceName={focusedPieceName}
           activePieces={activePieces}
           hasTomorrow={hasTomorrow}
+          hasUnfinishedBefore={hasUnfinishedBefore}
           onReorder={handleReorder}
         />
       ))}
