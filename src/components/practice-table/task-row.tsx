@@ -273,6 +273,10 @@ export function TaskRow({
   const isMetronomeActiveForThisTask =
     metronomeCtx.isActive && metronomeCtx.activeSourceId === task.id;
 
+  const displayedMetronomeSpeed = isMetronomeActiveForThisTask
+    ? metronomeCtx.bpm
+    : optimisticMetronomeSpeed;
+
   const handleMetronomePillClick = () => {
     if (!optimisticMetronomeSpeed) return;
     if (isMetronomeActiveForThisTask) {
@@ -503,7 +507,7 @@ export function TaskRow({
               }}
               className={cn(
                 "inline-flex items-center gap-1 rounded-full px-2 py-0.5 tabular-nums transition-colors",
-                optimisticMetronomeSpeed
+                displayedMetronomeSpeed
                   ? isActive
                     ? "bg-white/20 text-white hover:bg-white/30"
                     : isMetronomeActiveForThisTask
@@ -513,7 +517,7 @@ export function TaskRow({
               )}
             >
               <MetronomeIcon className="size-3" />
-              {optimisticMetronomeSpeed ?? "—"}
+              {displayedMetronomeSpeed ?? "—"}
             </button>
           )}
         </div>
