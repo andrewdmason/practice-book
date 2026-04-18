@@ -15,6 +15,8 @@ export function PracticeLogHeader() {
     activePieces,
     focusedPieceId,
     setFocusedPieceId,
+    activePieceInstance,
+    setActivePieceInstance,
   } = useTaskTimer();
 
   useEffect(() => {
@@ -52,6 +54,9 @@ export function PracticeLogHeader() {
   );
 
   const handlePillClick = (pieceId: string | null) => {
+    // Pills drive the filter. Always clear the active instance so the sidebar
+    // reflects the filter selection, not a stale click on a specific group.
+    setActivePieceInstance(null);
     if (pieceId === null) {
       setFocusedPieceId(null);
       setFocusUrl(null);
@@ -68,18 +73,35 @@ export function PracticeLogHeader() {
 
   const clearFocus = useCallback(() => {
     setFocusedPieceId(null);
+    setActivePieceInstance(null);
     setFocusUrl(null);
-  }, [setFocusedPieceId, setFocusUrl]);
+  }, [setFocusedPieceId, setActivePieceInstance, setFocusUrl]);
+
+  const handleHeaderClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("button")) return;
+      // Header chrome clicks only deactivate the specific piece instance;
+      // they leave the filter intact.
+      if (activePieceInstance) setActivePieceInstance(null);
+    },
+    [activePieceInstance, setActivePieceInstance]
+  );
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && focusedPieceId) {
-        clearFocus();
+      if (e.key !== "Escape") return;
+      // Escape clears whichever is most "active" — the specific instance first,
+      // then the filter.
+      if (activePieceInstance) {
+        setActivePieceInstance(null);
+        return;
       }
+      if (focusedPieceId) clearFocus();
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [focusedPieceId, clearFocus]);
+  }, [activePieceInstance, focusedPieceId, clearFocus, setActivePieceInstance]);
 
   const stickyRef = useRef<HTMLDivElement>(null);
   const [isStuck, setIsStuck] = useState(false);
@@ -109,7 +131,7 @@ export function PracticeLogHeader() {
     : "Practice Log";
 
   return (
-    <>
+    <div onClick={handleHeaderClick}>
       <div className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6">
         <div className="pl-8">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
@@ -155,6 +177,6 @@ export function PracticeLogHeader() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
