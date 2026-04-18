@@ -652,6 +652,15 @@ function DayGroup({
                   </div>
                 </DropdownMenuItem>
               ))}
+              {filteredTasks.length > 0 && pendingEmptySession === null && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleAddSession}>
+                    <PlusIcon />
+                    <span className="text-sm">New session</span>
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -674,20 +683,6 @@ function DayGroup({
           onAddPiece={handleAddPiece}
         />
       ))}
-
-      {/* Add session button */}
-      {!focusedPieceId &&
-        filteredTasks.length > 0 &&
-        pendingEmptySession === null && (
-          <button
-            type="button"
-            onClick={handleAddSession}
-            className="flex items-center gap-1.5 px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <PlusIcon className="size-3" />
-            Session
-          </button>
-        )}
 
       {/* Empty state for today when the current view has no tasks */}
       {isToday &&
