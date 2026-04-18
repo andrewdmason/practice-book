@@ -15,11 +15,11 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ClockIcon, GripVerticalIcon, PlusIcon } from "lucide-react";
+import { ArrowUpFromLineIcon, ClockIcon, GripVerticalIcon, PlusIcon } from "lucide-react";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { TaskRow } from "@/components/practice-table/task-row";
 import { PieceSessionsDialog } from "@/components/practice-table/piece-sessions-dialog";
-import { reorderTasks } from "@/app/(app)/timer/task-actions";
+import { reorderTasks, rollOverUnfinishedTasks } from "@/app/(app)/timer/task-actions";
 import { getFeedPage } from "@/app/(app)/feed/actions";
 import {
   createTaskOptimistic,
@@ -485,6 +485,7 @@ function DayGroup({
   focusedPieceName,
   activePieces,
   hasTomorrow,
+  hasUnfinishedBefore,
   onReorder,
 }: {
   day: FeedDay;
@@ -492,6 +493,7 @@ function DayGroup({
   focusedPieceName: string | null;
   activePieces: Piece[];
   hasTomorrow: boolean;
+  hasUnfinishedBefore: boolean;
   onReorder: (dayDate: string, orderedIds: string[]) => void;
 }) {
   const filteredTasks = focusedPieceId
@@ -658,6 +660,19 @@ function DayGroup({
                   <DropdownMenuItem onClick={handleAddSession}>
                     <PlusIcon />
                     <span className="text-sm">New session</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+              {isToday && hasUnfinishedBefore && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      void rollOverUnfinishedTasks();
+                    }}
+                  >
+                    <ArrowUpFromLineIcon />
+                    <span className="text-sm">Roll over unfinished</span>
                   </DropdownMenuItem>
                 </>
               )}
@@ -886,6 +901,9 @@ export function PracticeTable({
     return localDate(d);
   })();
   const hasTomorrow = days.some((d) => d.date === tomorrowStr);
+  const hasUnfinishedBefore = days.some(
+    (d) => d.date < localDate() && d.tasks.some((t) => !t.completed)
+  );
 
   // Always include today in the displayed list so we can render an empty state
   // even when nothing has been logged yet.
@@ -908,6 +926,7 @@ export function PracticeTable({
           focusedPieceName={focusedPieceName}
           activePieces={activePieces}
           hasTomorrow={hasTomorrow}
+          hasUnfinishedBefore={hasUnfinishedBefore}
           onReorder={handleReorder}
         />
       ))}
