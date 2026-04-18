@@ -91,6 +91,10 @@ export type PracticeTask = {
   ended_at: string | null;
   sort_order: number;
   session_number: number;
+  audio_path: string | null;
+  audio_duration_seconds: number | null;
+  audio_trim_start_seconds: number | null;
+  audio_trim_end_seconds: number | null;
   created_at: string;
   updated_at: string;
 };
