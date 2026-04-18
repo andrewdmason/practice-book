@@ -105,7 +105,8 @@ export async function createTaskOptimistic(
       detail.date,
       detail.afterTaskId ?? null,
       detail.sessionNumber,
-      detail.text
+      detail.text,
+      detail.timerSeconds
     );
     emitOptimisticTaskRename(tempId, result.id);
   } catch (err) {

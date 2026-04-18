@@ -23,6 +23,7 @@ import {
   PlusIcon,
 } from "lucide-react";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
+import { useMetronome } from "@/components/metronome/metronome-context";
 import { TaskRow } from "@/components/practice-table/task-row";
 import { PieceSessionsDialog } from "@/components/practice-table/piece-sessions-dialog";
 import {
@@ -812,7 +813,8 @@ export function PracticeTable({
 }: {
   initialData: { items: FeedDay[]; nextCursor: string | null };
 }) {
-  const { focusedPieceId, activePieces } = useTaskTimer();
+  const { focusedPieceId, activePieces, startTaskTimer } = useTaskTimer();
+  const metronomeCtx = useMetronome();
   const focusedPieceName =
     activePieces.find((p) => p.id === focusedPieceId)?.name ?? null;
   const [days, setDays] = useState<FeedDay[]>(initialData.items);
@@ -994,6 +996,56 @@ export function PracticeTable({
       window.removeEventListener("task-deleted-optimistic", deleteHandler);
       window.removeEventListener("task-rename-optimistic", renameHandler);
     };
+  }, []);
+
+  // Auto-advance: when a task is completed while its timer is running, start
+  // the timer for the next incomplete task in the same day (matching the
+  // visible piece filter), and rebind the metronome to it if it's playing.
+  // Uses a ref so the always-attached listener sees the latest state without
+  // re-attaching every render.
+  const advanceContextRef = useRef({
+    days,
+    focusedPieceId,
+    startTaskTimer,
+    metronomeCtx,
+  });
+  advanceContextRef.current = {
+    days,
+    focusedPieceId,
+    startTaskTimer,
+    metronomeCtx,
+  };
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { completedTaskId, dayDate } = (e as CustomEvent<{
+        completedTaskId: string;
+        dayDate: string;
+      }>).detail;
+      const {
+        days,
+        focusedPieceId,
+        startTaskTimer,
+        metronomeCtx,
+      } = advanceContextRef.current;
+
+      const day = days.find((d) => d.date === dayDate);
+      if (!day) return;
+      const tasksInView = focusedPieceId
+        ? day.tasks.filter((t) => t.piece_id === focusedPieceId)
+        : day.tasks;
+      const idx = tasksInView.findIndex((t) => t.id === completedTaskId);
+      if (idx === -1) return;
+
+      const nextTask = tasksInView[idx + 1] ?? null;
+      if (!nextTask) return;
+
+      startTaskTimer(nextTask.id, nextTask.timer_remaining_seconds);
+      if (metronomeCtx.isActive && nextTask.metronome_speed != null) {
+        metronomeCtx.start(nextTask.metronome_speed, nextTask.id);
+      }
+    };
+    window.addEventListener("task-auto-advance", handler);
+    return () => window.removeEventListener("task-auto-advance", handler);
   }, []);
 
   // On initial load, if the feed has tomorrow entries, scroll so Today sits
