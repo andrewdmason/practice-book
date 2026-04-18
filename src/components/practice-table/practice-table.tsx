@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useId, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   DndContext,
   closestCenter,
@@ -579,6 +580,7 @@ function DayGroup({
   activePieces,
   hasTomorrow,
   hasUnfinishedBefore,
+  isNextSessionView,
   onReorder,
 }: {
   day: FeedDay;
@@ -587,13 +589,26 @@ function DayGroup({
   activePieces: Piece[];
   hasTomorrow: boolean;
   hasUnfinishedBefore: boolean;
+  isNextSessionView: boolean;
   onReorder: (dayDate: string, orderedIds: string[]) => void;
 }) {
   const filteredTasks = focusedPieceId
     ? day.tasks.filter((t) => t.piece_id === focusedPieceId)
     : day.tasks;
 
-  const sessionGroups = groupTasksBySession(filteredTasks);
+  const allSessionGroups = groupTasksBySession(filteredTasks);
+  const sessionGroups = isNextSessionView
+    ? (() => {
+        const first = allSessionGroups.find((s) =>
+          s.pieces.some((p) => p.tasks.some((t) => !t.completed))
+        );
+        return first ? [first] : [];
+      })()
+    : allSessionGroups;
+  const nextSessionAllComplete =
+    isNextSessionView &&
+    allSessionGroups.length > 0 &&
+    sessionGroups.length === 0;
   const [pendingNewSession, setPendingNewSession] = useState<number | null>(
     null
   );
@@ -753,15 +768,17 @@ function DayGroup({
                   </div>
                 </DropdownMenuItem>
               ))}
-              {filteredTasks.length > 0 && pendingEmptySession === null && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleAddSession}>
-                    <PlusIcon />
-                    <span className="text-sm">New session</span>
-                  </DropdownMenuItem>
-                </>
-              )}
+              {filteredTasks.length > 0 &&
+                pendingEmptySession === null &&
+                !isNextSessionView && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleAddSession}>
+                      <PlusIcon />
+                      <span className="text-sm">New session</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
               {isToday && hasUnfinishedBefore && (
                 <>
                   <DropdownMenuSeparator />
@@ -801,7 +818,8 @@ function DayGroup({
       {/* Empty state for today when the current view has no tasks */}
       {isToday &&
         sessionGroups.length === 0 &&
-        pendingEmptySession === null && (
+        pendingEmptySession === null &&
+        !nextSessionAllComplete && (
           <div className="mb-3">
             {focusedPieceId && focusedPieceName && (
               <div className="flex items-center gap-1.5 mb-1.5 px-1">
@@ -819,6 +837,12 @@ function DayGroup({
             </button>
           </div>
         )}
+
+      {nextSessionAllComplete && (
+        <div className="mb-3 px-2 py-1.5 text-xs text-muted-foreground">
+          All of today&apos;s sessions are complete.
+        </div>
+      )}
 
       {isToday && <hr className="mt-8 border-border" />}
     </div>
@@ -838,6 +862,8 @@ export function PracticeTable({
     startTaskTimer,
   } = useTaskTimer();
   const metronomeCtx = useMetronome();
+  const searchParams = useSearchParams();
+  const isNextSessionView = searchParams.get("view") === "next-session";
   const focusedPieceName =
     activePieces.find((p) => p.id === focusedPieceId)?.name ?? null;
 
@@ -1148,22 +1174,27 @@ export function PracticeTable({
         ...days.filter((d) => d.date < todayStr),
       ];
 
+  const visibleDays = isNextSessionView
+    ? displayDays.filter((d) => d.date === todayStr)
+    : displayDays;
+
   return (
     <div className="pl-8" onClick={handleRootClick}>
-      {displayDays.map((day) => (
+      {visibleDays.map((day) => (
         <DayGroup
           key={day.date}
           day={day}
           focusedPieceId={focusedPieceId}
           focusedPieceName={focusedPieceName}
           activePieces={activePieces}
-          hasTomorrow={hasTomorrow}
+          hasTomorrow={hasTomorrow && !isNextSessionView}
           hasUnfinishedBefore={hasUnfinishedBefore}
+          isNextSessionView={isNextSessionView}
           onReorder={handleReorder}
         />
       ))}
 
-      {cursor && (
+      {cursor && !isNextSessionView && (
         <div id="load-more-sentinel" className="py-4 text-center">
           {loading && (
             <span className="text-sm text-muted-foreground">Loading...</span>
