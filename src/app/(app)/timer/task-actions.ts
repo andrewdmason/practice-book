@@ -159,6 +159,19 @@ export async function updateTaskSession(taskId: string, sessionNumber: number) {
     .eq("id", taskId);
 }
 
+export async function updateTasksSession(
+  taskIds: string[],
+  sessionNumber: number
+) {
+  if (taskIds.length === 0) return;
+  const supabase = await createClient();
+
+  await supabase
+    .from("practice_tasks")
+    .update({ session_number: sessionNumber })
+    .in("id", taskIds);
+}
+
 export async function updateTaskField(
   taskId: string,
   field: "text" | "metronome_speed" | "timer_seconds" | "timer_remaining_seconds",
