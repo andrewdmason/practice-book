@@ -15,6 +15,7 @@ export type OptimisticTaskDetail = {
   sectionLabel: string | null;
   sectionStatus: SectionStatus | null;
   afterTaskId?: string | null;
+  sessionNumber?: number;
 };
 
 export type OptimisticTaskRollback = { tempId: string };
@@ -49,7 +50,8 @@ export async function createTaskOptimistic(
       input.sectionId,
       input.metronomeSpeed,
       input.date,
-      input.afterTaskId ?? null
+      input.afterTaskId ?? null,
+      input.sessionNumber
     );
   } catch (err) {
     rollbackOptimisticTask(tempId);

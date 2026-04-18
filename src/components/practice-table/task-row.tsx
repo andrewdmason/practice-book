@@ -11,6 +11,7 @@ import {
   MicIcon,
   Trash2Icon,
   MetronomeIcon,
+  ArrowRightIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -29,13 +30,18 @@ import { TimerCell } from "@/components/practice-table/timer-cell";
 import {
   updateTaskField,
   updateTaskSection,
+  updateTaskSession,
   getSectionPickerData,
   deleteTask,
   duplicateTask,
   completeTask,
   uncompleteTask,
 } from "@/app/(app)/timer/task-actions";
-import { emitOptimisticTask, rollbackOptimisticTask } from "@/lib/optimistic-task";
+import {
+  emitOptimisticTask,
+  emitOptimisticTaskUpdate,
+  rollbackOptimisticTask,
+} from "@/lib/optimistic-task";
 import { localDate } from "@/lib/date-utils";
 import { practiceTempo } from "@/lib/section-utils";
 import type { PieceSection, TaskWithDetails, SectionStatus } from "@/lib/types";
@@ -71,10 +77,12 @@ export function TaskRow({
   task,
   isFirst,
   onAddBelow,
+  daySessionNumbers,
 }: {
   task: TaskWithDetails;
   isFirst: boolean;
   onAddBelow: (afterTaskId: string) => void;
+  daySessionNumbers: number[];
 }) {
   const {
     activeTaskId,
@@ -413,6 +421,37 @@ export function TaskRow({
             <DropdownMenuItem>
               <MicIcon />
               Record
+            </DropdownMenuItem>
+            {daySessionNumbers
+              .filter((n) => n !== task.session_number)
+              .map((n) => (
+                <DropdownMenuItem
+                  key={n}
+                  onClick={() => {
+                    emitOptimisticTaskUpdate(task.id, {
+                      session_number: n,
+                    });
+                    void updateTaskSession(task.id, n);
+                  }}
+                >
+                  <ArrowRightIcon />
+                  Move to session {n}
+                </DropdownMenuItem>
+              ))}
+            <DropdownMenuItem
+              onClick={() => {
+                const next =
+                  (daySessionNumbers.length > 0
+                    ? Math.max(...daySessionNumbers)
+                    : task.session_number) + 1;
+                emitOptimisticTaskUpdate(task.id, {
+                  session_number: next,
+                });
+                void updateTaskSession(task.id, next);
+              }}
+            >
+              <PlusIcon />
+              Move to new session
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem

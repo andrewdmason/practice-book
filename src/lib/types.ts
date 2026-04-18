@@ -90,6 +90,7 @@ export type PracticeTask = {
   started_at: string | null;
   ended_at: string | null;
   sort_order: number;
+  session_number: number;
   created_at: string;
   updated_at: string;
 };
