@@ -90,40 +90,46 @@ export function PracticeLogHeader() {
     : "Practice Log";
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6">
-      <div className="pl-8">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        <button
-          onClick={() => handlePillClick(null)}
-          className={cn(
-            "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
-            focusedPieceId === null
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-          )}
-        >
-          All
-        </button>
-        {activePieces.map((piece) => {
-          const isActive = focusedPieceId === piece.id;
-          return (
+    <>
+      <div className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6">
+        <div className="pl-8">
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        </div>
+      </div>
+      <div className="sticky top-14 z-40 mt-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
+          <div className="flex flex-wrap items-center gap-1.5 py-2 pl-8">
             <button
-              key={piece.id}
-              onClick={() => handlePillClick(piece.id)}
+              onClick={() => handlePillClick(null)}
               className={cn(
                 "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
-                isActive
+                focusedPieceId === null
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
               )}
             >
-              {piece.name}
+              All
             </button>
-          );
-        })}
+            {activePieces.map((piece) => {
+              const isActive = focusedPieceId === piece.id;
+              return (
+                <button
+                  key={piece.id}
+                  onClick={() => handlePillClick(piece.id)}
+                  className={cn(
+                    "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                  )}
+                >
+                  {piece.name}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
