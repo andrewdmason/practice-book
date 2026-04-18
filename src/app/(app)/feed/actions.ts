@@ -189,6 +189,7 @@ async function getTasksWithDetailsForDates(
     .select("*, pieces(name, composer, kind), piece_sections(label, status)")
     .in("date", dates)
     .order("date", { ascending: false })
+    .order("session_number", { ascending: true })
     .order("sort_order", { ascending: true })
     .order("created_at", { ascending: true });
 

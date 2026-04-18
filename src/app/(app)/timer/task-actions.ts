@@ -67,23 +67,26 @@ export async function createTask(
   sectionId: string | null,
   metronomeSpeed: number | null,
   date?: string,
-  afterTaskId?: string | null
+  afterTaskId?: string | null,
+  sessionNumber?: number
 ): Promise<{ id: string; timer_seconds: number; timer_remaining_seconds: number }> {
   const supabase = await createClient();
 
   let nextOrder: number;
+  let resolvedSession = sessionNumber ?? 1;
 
   if (afterTaskId) {
     // Insert directly below the given task: shift later siblings down by 1.
     const { data: target } = await supabase
       .from("practice_tasks")
-      .select("sort_order, piece_id, date")
+      .select("sort_order, piece_id, date, session_number")
       .eq("id", afterTaskId)
       .single();
 
     if (!target) throw new Error("Anchor task not found");
 
     nextOrder = target.sort_order + 1;
+    if (sessionNumber === undefined) resolvedSession = target.session_number;
 
     let shiftQuery = supabase
       .from("practice_tasks")
@@ -131,6 +134,7 @@ export async function createTask(
       section_id: sectionId,
       metronome_speed: metronomeSpeed,
       sort_order: nextOrder,
+      session_number: resolvedSession,
       ...(date ? { date } : {}),
     })
     .select("id, timer_seconds, timer_remaining_seconds")
@@ -144,6 +148,15 @@ export async function createTask(
     timer_seconds: data.timer_seconds,
     timer_remaining_seconds: data.timer_remaining_seconds,
   };
+}
+
+export async function updateTaskSession(taskId: string, sessionNumber: number) {
+  const supabase = await createClient();
+
+  await supabase
+    .from("practice_tasks")
+    .update({ session_number: sessionNumber })
+    .eq("id", taskId);
 }
 
 export async function updateTaskField(

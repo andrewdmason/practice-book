@@ -46,6 +46,11 @@ type PieceGroup = {
   tasks: TaskWithDetails[];
 };
 
+type SessionGroup = {
+  sessionNumber: number;
+  pieces: PieceGroup[];
+};
+
 function formatMinsShort(totalSeconds: number): string {
   const minutes = Math.round(Math.max(0, totalSeconds) / 60);
   if (minutes <= 0) return "0m";
@@ -142,6 +147,21 @@ function groupTasksByPiece(tasks: TaskWithDetails[]): PieceGroup[] {
   return Array.from(groups.values());
 }
 
+function groupTasksBySession(tasks: TaskWithDetails[]): SessionGroup[] {
+  const bySession = new Map<number, TaskWithDetails[]>();
+  for (const task of tasks) {
+    const sess = task.session_number ?? 1;
+    if (!bySession.has(sess)) bySession.set(sess, []);
+    bySession.get(sess)!.push(task);
+  }
+  return Array.from(bySession.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([sessionNumber, sessionTasks]) => ({
+      sessionNumber,
+      pieces: groupTasksByPiece(sessionTasks),
+    }));
+}
+
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
   const today = new Date();
@@ -169,9 +189,11 @@ function formatDate(dateStr: string): string {
 function SortablePieceGroup({
   group,
   onAddTask,
+  daySessionNumbers,
 }: {
   group: PieceGroup;
   onAddTask: (afterTaskId: string | null) => void;
+  daySessionNumbers: number[];
 }) {
   const sortableId = `piece:${group.pieceId ?? "__general__"}`;
   const {
@@ -233,7 +255,7 @@ function SortablePieceGroup({
           </button>
         </div>
         <div className="flex items-center gap-1.5 px-1">
-          <h3 className="text-sm font-medium text-muted-foreground">
+          <h3 className="text-sm font-medium text-foreground">
             {group.pieceName}
           </h3>
           {showPieceTimer && (
@@ -266,6 +288,7 @@ function SortablePieceGroup({
             task={task}
             isFirst={index === 0}
             onAddBelow={(afterTaskId) => onAddTask(afterTaskId)}
+            daySessionNumbers={daySessionNumbers}
           />
         ))}
       </SortableContext>
@@ -277,6 +300,181 @@ function SortablePieceGroup({
           tasks={group.tasks}
         />
       )}
+    </div>
+  );
+}
+
+function SessionBlock({
+  sessionNumber,
+  pieces,
+  showHeader,
+  isFirst,
+  dayDate,
+  daySessionNumbers,
+  focusedPieceId,
+  activePieces,
+  onReorder,
+  onAddTask,
+  onAddPiece,
+}: {
+  sessionNumber: number;
+  pieces: PieceGroup[];
+  showHeader: boolean;
+  isFirst: boolean;
+  dayDate: string;
+  daySessionNumbers: number[];
+  focusedPieceId: string | null;
+  activePieces: Piece[];
+  onReorder: (dayDate: string, orderedIds: string[]) => void;
+  onAddTask: (
+    pieceId: string | null,
+    sessionNumber: number,
+    afterTaskId?: string | null
+  ) => void;
+  onAddPiece: (piece: Piece, sessionNumber: number) => void;
+}) {
+  const dndId = useId();
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+
+      const activeId = String(active.id);
+      const overId = String(over.id);
+
+      if (activeId.startsWith("piece:")) {
+        const pieceKey = (g: PieceGroup) =>
+          `piece:${g.pieceId ?? "__general__"}`;
+        const oldIndex = pieces.findIndex((g) => pieceKey(g) === activeId);
+        const newIndex = overId.startsWith("piece:")
+          ? pieces.findIndex((g) => pieceKey(g) === overId)
+          : pieces.findIndex((g) => g.tasks.some((t) => t.id === overId));
+        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+        const reordered = [...pieces];
+        const [moved] = reordered.splice(oldIndex, 1);
+        reordered.splice(newIndex, 0, moved);
+        const reorderedTaskIds = reordered.flatMap((g) =>
+          g.tasks.map((t) => t.id)
+        );
+        if (reorderedTaskIds.length === 0) return;
+        onReorder(dayDate, reorderedTaskIds);
+        void reorderTasks(reorderedTaskIds);
+        return;
+      }
+
+      for (const group of pieces) {
+        const taskIds = group.tasks.map((t) => t.id);
+        const oldIndex = taskIds.indexOf(activeId);
+        const newIndex = taskIds.indexOf(overId);
+
+        if (oldIndex !== -1 && newIndex !== -1) {
+          const reordered = [...taskIds];
+          reordered.splice(oldIndex, 1);
+          reordered.splice(newIndex, 0, activeId);
+          onReorder(dayDate, reordered);
+          void reorderTasks(reordered);
+          break;
+        }
+      }
+    },
+    [pieces, dayDate, onReorder]
+  );
+
+  const sessionElapsed = pieces
+    .flatMap((p) => p.tasks)
+    .reduce(
+      (sum, t) => sum + Math.max(0, t.timer_seconds - t.timer_remaining_seconds),
+      0
+    );
+  const sessionGoal = pieces
+    .flatMap((p) => p.tasks)
+    .reduce((sum, t) => sum + Math.max(0, t.timer_seconds), 0);
+  const showSessionTimer = sessionElapsed > 0 || sessionGoal > 0;
+
+  const existingPieceIds = new Set(
+    pieces.map((g) => g.pieceId).filter((id): id is string => id !== null)
+  );
+  const addablePieces = activePieces.filter(
+    (p) => !existingPieceIds.has(p.id)
+  );
+
+  return (
+    <div className={cn("mb-5", !isFirst && showHeader && "mt-6")}>
+      {showHeader && (
+        <div className="group/session flex items-center gap-3 mb-3 px-1">
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground/70">
+            Session {sessionNumber}
+          </span>
+          <div className="h-px flex-1 bg-border/60" />
+          {showSessionTimer && (
+            <AggregateTimerPill
+              elapsedSeconds={sessionElapsed}
+              goalSeconds={sessionGoal}
+              size="sm"
+            />
+          )}
+          {!focusedPieceId && (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className="inline-flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground size-5 opacity-0 group-hover/session:opacity-100 data-[state=open]:opacity-100 transition-opacity"
+                title="Add to session"
+              >
+                <PlusIcon className="size-3.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem
+                  onClick={() => onAddTask(null, sessionNumber)}
+                >
+                  <span className="text-sm">General note</span>
+                </DropdownMenuItem>
+                {addablePieces.length > 0 && <DropdownMenuSeparator />}
+                {addablePieces.map((piece) => (
+                  <DropdownMenuItem
+                    key={piece.id}
+                    onClick={() => onAddPiece(piece, sessionNumber)}
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-sm">{piece.name}</span>
+                      {piece.composer && (
+                        <span className="text-xs text-muted-foreground">
+                          {piece.composer}
+                        </span>
+                      )}
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      )}
+      <DndContext
+        id={dndId}
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext
+          items={pieces.map((g) => `piece:${g.pieceId ?? "__general__"}`)}
+          strategy={verticalListSortingStrategy}
+        >
+          {pieces.map((group) => (
+            <SortablePieceGroup
+              key={group.pieceId ?? "__general__"}
+              group={group}
+              onAddTask={(afterTaskId) =>
+                onAddTask(group.pieceId, sessionNumber, afterTaskId)
+              }
+              daySessionNumbers={daySessionNumbers}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
     </div>
   );
 }
@@ -296,73 +494,49 @@ function DayGroup({
   hasTomorrow: boolean;
   onReorder: (dayDate: string, orderedIds: string[]) => void;
 }) {
-  const dndId = useId();
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
-  );
-
   const filteredTasks = focusedPieceId
     ? day.tasks.filter((t) => t.piece_id === focusedPieceId)
     : day.tasks;
 
-  const pieceGroups = groupTasksByPiece(filteredTasks);
-
-  const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-
-      const activeId = String(active.id);
-      const overId = String(over.id);
-
-      // Piece-level reorder: active id is prefixed with "piece:"
-      if (activeId.startsWith("piece:")) {
-        const pieceKey = (g: PieceGroup) =>
-          `piece:${g.pieceId ?? "__general__"}`;
-        const oldIndex = pieceGroups.findIndex((g) => pieceKey(g) === activeId);
-        const newIndex = overId.startsWith("piece:")
-          ? pieceGroups.findIndex((g) => pieceKey(g) === overId)
-          : pieceGroups.findIndex((g) =>
-              g.tasks.some((t) => t.id === overId)
-            );
-        if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
-
-        const reorderedGroups = [...pieceGroups];
-        const [moved] = reorderedGroups.splice(oldIndex, 1);
-        reorderedGroups.splice(newIndex, 0, moved);
-        const reorderedTaskIds = reorderedGroups.flatMap((g) =>
-          g.tasks.map((t) => t.id)
-        );
-        if (reorderedTaskIds.length === 0) return;
-        onReorder(day.date, reorderedTaskIds);
-        void reorderTasks(reorderedTaskIds);
-        return;
-      }
-
-      // Task-level reorder within a piece group
-      for (const group of pieceGroups) {
-        const taskIds = group.tasks.map((t) => t.id);
-        const oldIndex = taskIds.indexOf(activeId);
-        const newIndex = taskIds.indexOf(overId);
-
-        if (oldIndex !== -1 && newIndex !== -1) {
-          const reordered = [...taskIds];
-          reordered.splice(oldIndex, 1);
-          reordered.splice(newIndex, 0, activeId);
-          onReorder(day.date, reordered);
-          void reorderTasks(reordered);
-          break;
-        }
-      }
-    },
-    [pieceGroups, day.date, onReorder]
+  const sessionGroups = groupTasksBySession(filteredTasks);
+  const [pendingNewSession, setPendingNewSession] = useState<number | null>(
+    null
   );
+
+  const maxExistingSession = sessionGroups.reduce(
+    (m, s) => Math.max(m, s.sessionNumber),
+    0
+  );
+
+  // Treat a pending session as active only while no real session with that
+  // number exists. Once a task is added, the real session takes over and the
+  // pending slot disappears naturally without needing to reset state.
+  const pendingEmptySession =
+    pendingNewSession !== null &&
+    !sessionGroups.some((s) => s.sessionNumber === pendingNewSession)
+      ? pendingNewSession
+      : null;
+
+  const defaultAddSession =
+    pendingEmptySession ?? (maxExistingSession > 0 ? maxExistingSession : 1);
+
+  const sessionsToRender: SessionGroup[] = [
+    ...sessionGroups,
+    ...(pendingEmptySession !== null
+      ? [{ sessionNumber: pendingEmptySession, pieces: [] }]
+      : []),
+  ];
+  const showSessionHeaders = sessionsToRender.length > 1;
 
   const handleAddTask = async (
     pieceId: string | null,
+    sessionNumber: number,
     afterTaskId: string | null = null
   ) => {
-    const group = pieceGroups.find((g) => g.pieceId === pieceId);
+    const session = sessionGroups.find(
+      (s) => s.sessionNumber === sessionNumber
+    );
+    const group = session?.pieces.find((g) => g.pieceId === pieceId);
     await createTaskOptimistic({
       pieceId,
       sectionId: null,
@@ -376,10 +550,11 @@ function DayGroup({
       sectionLabel: null,
       sectionStatus: null,
       afterTaskId,
+      sessionNumber,
     });
   };
 
-  const handleAddPiece = async (piece: Piece) => {
+  const handleAddPiece = async (piece: Piece, sessionNumber: number) => {
     await createTaskOptimistic({
       pieceId: piece.id,
       sectionId: null,
@@ -390,16 +565,22 @@ function DayGroup({
       pieceKind: piece.kind,
       sectionLabel: null,
       sectionStatus: null,
+      sessionNumber,
     });
   };
 
-  const existingPieceIds = new Set(
-    pieceGroups
-      .map((g) => g.pieceId)
+  const handleAddSession = () => {
+    const base = Math.max(maxExistingSession, pendingEmptySession ?? 0);
+    setPendingNewSession(base + 1);
+  };
+
+  const dayExistingPieceIds = new Set(
+    filteredTasks
+      .map((t) => t.piece_id)
       .filter((id): id is string => id !== null)
   );
-  const addablePieces = activePieces.filter(
-    (p) => !existingPieceIds.has(p.id)
+  const dayAddablePieces = activePieces.filter(
+    (p) => !dayExistingPieceIds.has(p.id)
   );
 
   const dayElapsedSeconds = day.tasks.reduce(
@@ -414,15 +595,16 @@ function DayGroup({
   const todayStr = localDate();
   const isToday = day.date === todayStr;
 
-  // Always render the "Today" group (with an empty state when no tasks);
-  // hide other days that would be empty under the current filter.
-  if (pieceGroups.length === 0 && !isToday) return null;
+  if (
+    sessionGroups.length === 0 &&
+    pendingEmptySession === null &&
+    !isToday
+  )
+    return null;
 
   return (
     <div className="group/day mb-8">
-      {isToday && hasTomorrow && (
-        <hr className="mb-8 border-border" />
-      )}
+      {isToday && hasTomorrow && <hr className="mb-8 border-border" />}
       {/* Day header */}
       <div className="flex items-center gap-2 mb-3 px-1">
         <h2
@@ -449,14 +631,16 @@ function DayGroup({
               <PlusIcon className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => handleAddTask(null)}>
+              <DropdownMenuItem
+                onClick={() => handleAddTask(null, defaultAddSession)}
+              >
                 <span className="text-sm">General note</span>
               </DropdownMenuItem>
-              {addablePieces.length > 0 && <DropdownMenuSeparator />}
-              {addablePieces.map((piece) => (
+              {dayAddablePieces.length > 0 && <DropdownMenuSeparator />}
+              {dayAddablePieces.map((piece) => (
                 <DropdownMenuItem
                   key={piece.id}
-                  onClick={() => handleAddPiece(piece)}
+                  onClick={() => handleAddPiece(piece, defaultAddSession)}
                 >
                   <div className="flex flex-col">
                     <span className="text-sm">{piece.name}</span>
@@ -468,55 +652,59 @@ function DayGroup({
                   </div>
                 </DropdownMenuItem>
               ))}
+              {filteredTasks.length > 0 && pendingEmptySession === null && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleAddSession}>
+                    <PlusIcon />
+                    <span className="text-sm">New session</span>
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
       </div>
 
-      {/* Piece groups */}
-      <DndContext
-        id={dndId}
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={pieceGroups.map(
-            (g) => `piece:${g.pieceId ?? "__general__"}`
-          )}
-          strategy={verticalListSortingStrategy}
-        >
-          {pieceGroups.map((group) => (
-            <SortablePieceGroup
-              key={group.pieceId ?? "__general__"}
-              group={group}
-              onAddTask={(afterTaskId) =>
-                handleAddTask(group.pieceId, afterTaskId)
-              }
-            />
-          ))}
-        </SortableContext>
-      </DndContext>
+      {/* Session blocks */}
+      {sessionsToRender.map((session, index) => (
+        <SessionBlock
+          key={session.sessionNumber}
+          sessionNumber={session.sessionNumber}
+          pieces={session.pieces}
+          showHeader={showSessionHeaders}
+          isFirst={index === 0}
+          dayDate={day.date}
+          daySessionNumbers={sessionsToRender.map((s) => s.sessionNumber)}
+          focusedPieceId={focusedPieceId}
+          activePieces={activePieces}
+          onReorder={onReorder}
+          onAddTask={handleAddTask}
+          onAddPiece={handleAddPiece}
+        />
+      ))}
 
       {/* Empty state for today when the current view has no tasks */}
-      {isToday && pieceGroups.length === 0 && (
-        <div className="mb-3">
-          {focusedPieceId && focusedPieceName && (
-            <div className="flex items-center gap-1.5 mb-1.5 px-1">
-              <h3 className="text-sm font-medium text-muted-foreground">
-                {focusedPieceName}
-              </h3>
-            </div>
-          )}
-          <button
-            onClick={() => handleAddTask(focusedPieceId)}
-            className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <PlusIcon className="size-3" />
-            No practice yet today. Hit record or add a task.
-          </button>
-        </div>
-      )}
+      {isToday &&
+        sessionGroups.length === 0 &&
+        pendingEmptySession === null && (
+          <div className="mb-3">
+            {focusedPieceId && focusedPieceName && (
+              <div className="flex items-center gap-1.5 mb-1.5 px-1">
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  {focusedPieceName}
+                </h3>
+              </div>
+            )}
+            <button
+              onClick={() => handleAddTask(focusedPieceId, 1)}
+              className="flex items-center gap-2 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <PlusIcon className="size-3" />
+              No practice yet today. Hit record or add a task.
+            </button>
+          </div>
+        )}
 
       {isToday && <hr className="mt-8 border-border" />}
     </div>
@@ -592,6 +780,7 @@ export function PracticeTable({
         started_at: null,
         ended_at: null,
         sort_order: Number.MAX_SAFE_INTEGER,
+        session_number: detail.sessionNumber ?? 1,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         piece_name: detail.pieceName,
