@@ -601,27 +601,33 @@ function DayGroup({
   // Keep the currently-shown session visible while a follow-up dialog is open
   // for this day. Without this, completing the last task in the session would
   // filter the session out and unmount the TaskRow that owns the dialog,
-  // dismissing the modal before the user can interact with it.
+  // dismissing the modal before the user can interact with it. We also track
+  // the specific task so the Focus filter can keep just that completed task
+  // visible without revealing others.
   const [pinnedSessionNumber, setPinnedSessionNumber] = useState<number | null>(
     null
   );
+  const [pinnedTaskId, setPinnedTaskId] = useState<string | null>(null);
   const allSessionGroupsRef = useRef(allSessionGroups);
   useEffect(() => {
     allSessionGroupsRef.current = allSessionGroups;
   });
   useEffect(() => {
     const onOpen = (e: Event) => {
-      const detail = (e as CustomEvent<{ dayDate: string }>).detail;
+      const detail = (e as CustomEvent<{ dayDate: string; taskId?: string }>)
+        .detail;
       if (detail?.dayDate !== day.date) return;
       const current = allSessionGroupsRef.current.find((s) =>
         s.pieces.some((p) => p.tasks.some((t) => !t.completed))
       );
       if (current) setPinnedSessionNumber(current.sessionNumber);
+      setPinnedTaskId(detail.taskId ?? null);
     };
     const onClose = (e: Event) => {
       const detail = (e as CustomEvent<{ dayDate: string }>).detail;
       if (detail?.dayDate !== day.date) return;
       setPinnedSessionNumber(null);
+      setPinnedTaskId(null);
     };
     window.addEventListener("follow-up-dialog-opened", onOpen);
     window.addEventListener("follow-up-dialog-closed", onClose);
@@ -642,7 +648,20 @@ function DayGroup({
         const target = allSessionGroups.find(
           (s) => s.sessionNumber === targetNumber
         );
-        return target ? [target] : [];
+        if (!target) return [];
+        // Hide completed tasks, but keep the pinned task (the one that owns
+        // an open follow-up dialog) mounted so the modal stays interactive.
+        const filteredPieces = target.pieces
+          .map((p) => ({
+            ...p,
+            tasks: p.tasks.filter(
+              (t) => !t.completed || t.id === pinnedTaskId
+            ),
+          }))
+          .filter((p) => p.tasks.length > 0);
+        return filteredPieces.length > 0
+          ? [{ ...target, pieces: filteredPieces }]
+          : [];
       })()
     : allSessionGroups;
   const nextSessionAllComplete =

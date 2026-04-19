@@ -363,7 +363,7 @@ export function TaskRow({
       setFollowUpOpen(true);
       window.dispatchEvent(
         new CustomEvent("follow-up-dialog-opened", {
-          detail: { dayDate: task.date },
+          detail: { dayDate: task.date, taskId: task.id },
         })
       );
     } else {

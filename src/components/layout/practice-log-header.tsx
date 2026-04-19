@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { cn } from "@/lib/utils";
 
-const NEXT_SESSION_VIEW = "next-session";
+const FOCUS_VIEW = "next-session";
 
 export function PracticeLogHeader() {
   const router = useRouter();
@@ -13,7 +13,7 @@ export function PracticeLogHeader() {
   const searchParams = useSearchParams();
   const focusParam = searchParams.get("focus");
   const viewParam = searchParams.get("view");
-  const isNextSession = viewParam === NEXT_SESSION_VIEW;
+  const isFocusView = viewParam === FOCUS_VIEW;
 
   const {
     activePieces,
@@ -61,7 +61,7 @@ export function PracticeLogHeader() {
     [pathname, router, buildUrl]
   );
 
-  const currentView = isNextSession ? NEXT_SESSION_VIEW : null;
+  const currentView = isFocusView ? FOCUS_VIEW : null;
 
   const handleAllClick = () => {
     setActivePieceInstance(null);
@@ -69,10 +69,10 @@ export function PracticeLogHeader() {
     setUrlState(null, null);
   };
 
-  const handleNextSessionClick = () => {
+  const handleFocusClick = useCallback(() => {
     setActivePieceInstance(null);
-    setUrlState(focusedPieceId, isNextSession ? null : NEXT_SESSION_VIEW);
-  };
+    setUrlState(focusedPieceId, isFocusView ? null : FOCUS_VIEW);
+  }, [focusedPieceId, isFocusView, setActivePieceInstance, setUrlState]);
 
   const handlePieceClick = (pieceId: string) => {
     setActivePieceInstance(null);
@@ -103,20 +103,35 @@ export function PracticeLogHeader() {
   );
 
   useEffect(() => {
+    function isTypingTarget(target: EventTarget | null) {
+      if (!(target instanceof HTMLElement)) return false;
+      if (target.isContentEditable) return true;
+      const tag = target.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    }
+
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
-      // Escape clears whichever is most "active" — the specific instance first,
-      // then piece focus, then the view filter.
-      if (activePieceInstance) {
-        setActivePieceInstance(null);
+      if (e.key === "Escape") {
+        // Escape clears whichever is most "active" — the specific instance
+        // first, then piece focus, then the view filter.
+        if (activePieceInstance) {
+          setActivePieceInstance(null);
+          return;
+        }
+        if (focusedPieceId) {
+          clearFocus();
+          return;
+        }
+        if (isFocusView) {
+          setUrlState(null, null);
+        }
         return;
       }
-      if (focusedPieceId) {
-        clearFocus();
-        return;
-      }
-      if (isNextSession) {
-        setUrlState(null, null);
+      if (e.key === "f" || e.key === "F") {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        if (isTypingTarget(e.target)) return;
+        e.preventDefault();
+        handleFocusClick();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -124,8 +139,9 @@ export function PracticeLogHeader() {
   }, [
     activePieceInstance,
     focusedPieceId,
-    isNextSession,
+    isFocusView,
     clearFocus,
+    handleFocusClick,
     setActivePieceInstance,
     setUrlState,
   ]);
@@ -177,7 +193,7 @@ export function PracticeLogHeader() {
               onClick={handleAllClick}
               className={cn(
                 "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
-                focusedPieceId === null && !isNextSession
+                focusedPieceId === null && !isFocusView
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
               )}
@@ -185,15 +201,16 @@ export function PracticeLogHeader() {
               All
             </button>
             <button
-              onClick={handleNextSessionClick}
+              onClick={handleFocusClick}
+              title="Focus (F)"
               className={cn(
                 "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
-                isNextSession
+                isFocusView
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
               )}
             >
-              Next Session
+              Focus
             </button>
             {activePieces.map((piece) => {
               const isActive = focusedPieceId === piece.id;
