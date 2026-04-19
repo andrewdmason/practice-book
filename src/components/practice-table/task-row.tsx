@@ -344,6 +344,11 @@ export function TaskRow({
       // picker is warm by the time the user reaches for it.
       if (task.piece_id) void loadSectionPickerData(task.piece_id);
       setFollowUpOpen(true);
+      window.dispatchEvent(
+        new CustomEvent("follow-up-dialog-opened", {
+          detail: { dayDate: task.date },
+        })
+      );
     } else {
       void uncompleteTask(task.id);
     }
@@ -746,7 +751,16 @@ export function TaskRow({
       </div>
       <FollowUpDialog
         open={followUpOpen}
-        onOpenChange={setFollowUpOpen}
+        onOpenChange={(open) => {
+          setFollowUpOpen(open);
+          if (!open) {
+            window.dispatchEvent(
+              new CustomEvent("follow-up-dialog-closed", {
+                detail: { dayDate: task.date },
+              })
+            );
+          }
+        }}
         tomorrowDate={tomorrowDate}
         defaults={{
           pieceId: task.piece_id,
