@@ -51,11 +51,13 @@ export function FollowUpDialog({
   onOpenChange,
   defaults,
   tomorrowDate,
+  dayAfterDate,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaults: FollowUpDefaults;
   tomorrowDate: string;
+  dayAfterDate: string;
 }) {
   const [text, setText] = useState(defaults.text);
   const [metronomeSpeed, setMetronomeSpeed] = useState<number | null>(
@@ -65,6 +67,7 @@ export function FollowUpDialog({
     defaults.metronomeSpeed?.toString() ?? ""
   );
   const [timerSeconds, setTimerSeconds] = useState(defaults.timerSeconds);
+  const [targetDate, setTargetDate] = useState<string>(tomorrowDate);
   const [section, setSection] = useState<{
     sectionId: string | null;
     sectionLabel: string | null;
@@ -99,6 +102,7 @@ export function FollowUpDialog({
       sectionStatus: d.sectionStatus,
     });
     setSectionPickerData(d.pieceId ? getCachedSectionPickerData(d.pieceId) : null);
+    setTargetDate(tomorrowDate);
     // base-ui's focus trap initializes after the open transition; defer focus
     // until after that so our textarea wins over the dialog's default target.
     // Select the carried-over note so the user can replace it by typing or
@@ -110,7 +114,7 @@ export function FollowUpDialog({
       if (el.value.length > 0) el.select();
     }, 60);
     return () => clearTimeout(t);
-  }, [open]);
+  }, [open, tomorrowDate]);
 
   // Lazy-load sections for the picker
   useEffect(() => {
@@ -156,7 +160,7 @@ export function FollowUpDialog({
     void createTaskOptimistic({
       pieceId: defaults.pieceId,
       sectionId: section.sectionId,
-      date: tomorrowDate,
+      date: targetDate,
       text,
       metronomeSpeed,
       timerSeconds,
@@ -172,7 +176,7 @@ export function FollowUpDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Plan a follow-up for tomorrow</DialogTitle>
+          <DialogTitle>Plan a follow-up</DialogTitle>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
@@ -229,6 +233,36 @@ export function FollowUpDialog({
                 aria-label="Metronome BPM"
                 className="w-12 bg-transparent text-xs tabular-nums focus:outline-none"
               />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs text-muted-foreground">When</span>
+            <div className="flex flex-wrap gap-1">
+              <button
+                type="button"
+                onClick={() => setTargetDate(tomorrowDate)}
+                className={cn(
+                  "rounded px-2 py-1 text-xs transition-colors",
+                  targetDate === tomorrowDate
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground"
+                )}
+              >
+                Tomorrow
+              </button>
+              <button
+                type="button"
+                onClick={() => setTargetDate(dayAfterDate)}
+                className={cn(
+                  "rounded px-2 py-1 text-xs transition-colors",
+                  targetDate === dayAfterDate
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground"
+                )}
+              >
+                Day after
+              </button>
             </div>
           </div>
 
@@ -293,7 +327,9 @@ export function FollowUpDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Skip
           </Button>
-          <Button onClick={handleAdd}>Add to tomorrow</Button>
+          <Button onClick={handleAdd}>
+            {targetDate === dayAfterDate ? "Add to day after" : "Add to tomorrow"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
