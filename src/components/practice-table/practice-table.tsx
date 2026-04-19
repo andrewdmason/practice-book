@@ -597,12 +597,52 @@ function DayGroup({
     : day.tasks;
 
   const allSessionGroups = groupTasksBySession(filteredTasks);
+
+  // Keep the currently-shown session visible while a follow-up dialog is open
+  // for this day. Without this, completing the last task in the session would
+  // filter the session out and unmount the TaskRow that owns the dialog,
+  // dismissing the modal before the user can interact with it.
+  const [pinnedSessionNumber, setPinnedSessionNumber] = useState<number | null>(
+    null
+  );
+  const allSessionGroupsRef = useRef(allSessionGroups);
+  useEffect(() => {
+    allSessionGroupsRef.current = allSessionGroups;
+  });
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<{ dayDate: string }>).detail;
+      if (detail?.dayDate !== day.date) return;
+      const current = allSessionGroupsRef.current.find((s) =>
+        s.pieces.some((p) => p.tasks.some((t) => !t.completed))
+      );
+      if (current) setPinnedSessionNumber(current.sessionNumber);
+    };
+    const onClose = (e: Event) => {
+      const detail = (e as CustomEvent<{ dayDate: string }>).detail;
+      if (detail?.dayDate !== day.date) return;
+      setPinnedSessionNumber(null);
+    };
+    window.addEventListener("follow-up-dialog-opened", onOpen);
+    window.addEventListener("follow-up-dialog-closed", onClose);
+    return () => {
+      window.removeEventListener("follow-up-dialog-opened", onOpen);
+      window.removeEventListener("follow-up-dialog-closed", onClose);
+    };
+  }, [day.date]);
+
   const sessionGroups = isNextSessionView
     ? (() => {
-        const first = allSessionGroups.find((s) =>
+        const firstIncomplete = allSessionGroups.find((s) =>
           s.pieces.some((p) => p.tasks.some((t) => !t.completed))
         );
-        return first ? [first] : [];
+        const targetNumber =
+          pinnedSessionNumber ?? firstIncomplete?.sessionNumber ?? null;
+        if (targetNumber == null) return [];
+        const target = allSessionGroups.find(
+          (s) => s.sessionNumber === targetNumber
+        );
+        return target ? [target] : [];
       })()
     : allSessionGroups;
   const nextSessionAllComplete =
