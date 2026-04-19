@@ -636,7 +636,7 @@ function DayGroup({
       ? [{ sessionNumber: pendingEmptySession, pieces: [] }]
       : []),
   ];
-  const showSessionHeaders = sessionsToRender.length > 1;
+  const showSessionHeaders = sessionsToRender.length > 1 || isNextSessionView;
 
   const handleAddTask = async (
     pieceId: string | null,
