@@ -376,6 +376,11 @@ export function TaskRow({
     d.setDate(d.getDate() + 1);
     return d.toISOString().slice(0, 10);
   })();
+  const dayAfterDate = (() => {
+    const d = new Date(task.date + "T12:00:00");
+    d.setDate(d.getDate() + 2);
+    return d.toISOString().slice(0, 10);
+  })();
 
   const handleSectionPickerOpenChange = (open: boolean) => {
     setSectionPickerOpen(open);
@@ -784,6 +789,7 @@ export function TaskRow({
           }
         }}
         tomorrowDate={tomorrowDate}
+        dayAfterDate={dayAfterDate}
         defaults={{
           pieceId: task.piece_id,
           pieceName: task.piece_name,
