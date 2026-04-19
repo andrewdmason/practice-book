@@ -255,17 +255,8 @@ export function TaskTimerProvider({
 
     if (!activeTaskId) return;
 
-    const tickingTaskId = activeTaskId;
     intervalRef.current = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        const next = prev - 1;
-        if (prev > 0 && next <= 0) {
-          // Transition to goal-reached once, then keep counting into negatives.
-          setIsExpired(true);
-          persistTaskRemaining(tickingTaskId, 0);
-        }
-        return next;
-      });
+      setRemainingSeconds((prev) => prev - 1);
       // Update active task elapsed for daily total
       if (activeTaskStartRef.current) {
         setActiveTaskElapsed(
@@ -280,7 +271,17 @@ export function TaskTimerProvider({
         intervalRef.current = null;
       }
     };
-  }, [activeTaskId, persistTaskRemaining]);
+  }, [activeTaskId]);
+
+  // Fire goal-reached side effects outside the setState updater so the
+  // synchronous `task-timer-paused` dispatch doesn't violate React 19's
+  // rule against updating other components from within another updater.
+  useEffect(() => {
+    if (!activeTaskId || isExpired) return;
+    if (remainingSeconds > 0) return;
+    setIsExpired(true);
+    persistTaskRemaining(activeTaskId, 0);
+  }, [activeTaskId, isExpired, remainingSeconds, persistTaskRemaining]);
 
   // Persist every 10 seconds while running (including past the soft goal, so
   // overtime is reflected on reload via the server's daily summary).
