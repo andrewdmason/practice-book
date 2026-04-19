@@ -14,14 +14,31 @@ import {
   startTaskTimer as startTaskTimerAction,
   stopTaskTimer as stopTaskTimerAction,
 } from "@/app/(app)/timer/task-actions";
-import type { Piece } from "@/lib/types";
+import type { Piece, PieceKind, SectionStatus } from "@/lib/types";
 
 const STORAGE_KEY = "practice-task-timer-state";
+
+export type ActiveTaskMeta = {
+  pieceId: string | null;
+  pieceName: string | null;
+  pieceComposer: string | null;
+  pieceKind: PieceKind | null;
+  sectionLabel: string | null;
+  sectionStatus: SectionStatus | null;
+  text: string;
+  goalSeconds: number;
+  metronomeSpeed: number | null;
+  date: string;
+};
 
 type PersistedState = {
   taskId: string;
   remainingSeconds: number;
   lastTickAt: string;
+  meta?: ActiveTaskMeta;
+  /** "running" (default) counts down from lastTickAt; "loaded" holds the
+   * remaining value as-is so the user can resume a paused task from the bar. */
+  status?: "running" | "loaded";
 };
 
 /** Identifies a specific piece-group instance in the practice table (one piece
@@ -32,6 +49,7 @@ type ActivePieceInstance = { pieceId: string; key: string };
 
 type TaskTimerContextValue = {
   activeTaskId: string | null;
+  activeTaskMeta: ActiveTaskMeta | null;
   remainingSeconds: number;
   isExpired: boolean;
   /** Total elapsed seconds for tasks today (from server data + active timer) */
@@ -44,7 +62,12 @@ type TaskTimerContextValue = {
    * for the sidebar detail view; falls back to focusedPieceId when null. */
   activePieceInstance: ActivePieceInstance | null;
   setActivePieceInstance: (instance: ActivePieceInstance | null) => void;
-  startTaskTimer: (taskId: string, seconds: number) => void;
+  /** Paused-but-loaded task, so the transport bar can offer to resume it. */
+  loadedTaskId: string | null;
+  loadedTaskMeta: ActiveTaskMeta | null;
+  loadedRemaining: number;
+  unloadLoadedTask: () => void;
+  startTaskTimer: (taskId: string, seconds: number, meta?: ActiveTaskMeta) => void;
   pauseTaskTimer: () => void;
   resetTaskTimer: (taskId: string, seconds: number) => void;
   /** Refresh the daily total from server data */
@@ -71,6 +94,9 @@ export function TaskTimerProvider({
   children: ReactNode;
 }) {
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [activeTaskMeta, setActiveTaskMeta] = useState<ActiveTaskMeta | null>(
+    null
+  );
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [isExpired, setIsExpired] = useState(false);
   const [restored, setRestored] = useState(false);
@@ -79,6 +105,11 @@ export function TaskTimerProvider({
   const [focusedPieceId, setFocusedPieceId] = useState<string | null>(null);
   const [activePieceInstance, setActivePieceInstance] =
     useState<ActivePieceInstance | null>(null);
+  const [loadedTaskId, setLoadedTaskId] = useState<string | null>(null);
+  const [loadedTaskMeta, setLoadedTaskMeta] = useState<ActiveTaskMeta | null>(
+    null
+  );
+  const [loadedRemaining, setLoadedRemaining] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activeTaskStartRef = useRef<number | null>(null);
 
@@ -102,34 +133,84 @@ export function TaskTimerProvider({
 
   // Restore from localStorage on mount
   useEffect(() => {
+    let restoredTaskId: string | null = null;
+    let restoredHadMeta = false;
+    let restoredStatus: "running" | "loaded" = "running";
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const state: PersistedState = JSON.parse(raw);
-        const elapsed = Math.floor(
-          (Date.now() - new Date(state.lastTickAt).getTime()) / 1000
-        );
-        // Remaining can go negative once the soft goal has been passed.
-        const remaining = state.remainingSeconds - elapsed;
-        setActiveTaskId(state.taskId);
-        setRemainingSeconds(remaining);
-        setIsExpired(remaining <= 0);
-        activeTaskStartRef.current = Date.now() - elapsed * 1000;
+        restoredStatus = state.status ?? "running";
+        if (restoredStatus === "loaded") {
+          // Paused-but-loaded: hold the remaining value without counting down.
+          setLoadedTaskId(state.taskId);
+          setLoadedTaskMeta(state.meta ?? null);
+          setLoadedRemaining(state.remainingSeconds);
+        } else {
+          const elapsed = Math.floor(
+            (Date.now() - new Date(state.lastTickAt).getTime()) / 1000
+          );
+          // Remaining can go negative once the soft goal has been passed.
+          const remaining = state.remainingSeconds - elapsed;
+          setActiveTaskId(state.taskId);
+          setActiveTaskMeta(state.meta ?? null);
+          setRemainingSeconds(remaining);
+          setIsExpired(remaining <= 0);
+          activeTaskStartRef.current = Date.now() - elapsed * 1000;
+        }
+        restoredTaskId = state.taskId;
+        restoredHadMeta = !!state.meta;
       }
     } catch {
       // Ignore corrupt localStorage
     }
     setRestored(true);
+
+    // If we restored a task but don't have meta (e.g. persisted under an
+    // older version of this context), fetch the task details so the transport
+    // bar can show piece/section/goal correctly.
+    if (restoredTaskId && !restoredHadMeta) {
+      const statusAtRestore = restoredStatus;
+      void (async () => {
+        try {
+          const { getTaskWithDetails } = await import(
+            "@/app/(app)/timer/task-actions"
+          );
+          const task = await getTaskWithDetails(restoredTaskId!);
+          if (!task) return;
+          const meta: ActiveTaskMeta = {
+            pieceId: task.piece_id,
+            pieceName: task.piece_name,
+            pieceComposer: task.piece_composer,
+            pieceKind: task.piece_kind,
+            sectionLabel: task.section_label,
+            sectionStatus: task.section_status,
+            text: task.text,
+            goalSeconds: task.timer_seconds,
+            metronomeSpeed: task.metronome_speed,
+            date: task.date,
+          };
+          if (statusAtRestore === "loaded") {
+            setLoadedTaskMeta(meta);
+          } else {
+            setActiveTaskMeta(meta);
+          }
+        } catch {
+          // Ignore — the bar will just show a stripped-down view.
+        }
+      })();
+    }
   }, []);
 
   const persist = useCallback(
-    (taskId: string | null, seconds: number) => {
+    (taskId: string | null, seconds: number, meta: ActiveTaskMeta | null) => {
       if (!restored) return;
       if (taskId) {
         const state: PersistedState = {
           taskId,
           remainingSeconds: seconds,
           lastTickAt: new Date().toISOString(),
+          meta: meta ?? undefined,
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       } else {
@@ -174,17 +255,8 @@ export function TaskTimerProvider({
 
     if (!activeTaskId) return;
 
-    const tickingTaskId = activeTaskId;
     intervalRef.current = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        const next = prev - 1;
-        if (prev > 0 && next <= 0) {
-          // Transition to goal-reached once, then keep counting into negatives.
-          setIsExpired(true);
-          persistTaskRemaining(tickingTaskId, 0);
-        }
-        return next;
-      });
+      setRemainingSeconds((prev) => prev - 1);
       // Update active task elapsed for daily total
       if (activeTaskStartRef.current) {
         setActiveTaskElapsed(
@@ -199,7 +271,17 @@ export function TaskTimerProvider({
         intervalRef.current = null;
       }
     };
-  }, [activeTaskId, persistTaskRemaining]);
+  }, [activeTaskId]);
+
+  // Fire goal-reached side effects outside the setState updater so the
+  // synchronous `task-timer-paused` dispatch doesn't violate React 19's
+  // rule against updating other components from within another updater.
+  useEffect(() => {
+    if (!activeTaskId || isExpired) return;
+    if (remainingSeconds > 0) return;
+    setIsExpired(true);
+    persistTaskRemaining(activeTaskId, 0);
+  }, [activeTaskId, isExpired, remainingSeconds, persistTaskRemaining]);
 
   // Persist every 10 seconds while running (including past the soft goal, so
   // overtime is reflected on reload via the server's daily summary).
@@ -211,10 +293,10 @@ export function TaskTimerProvider({
     }
     tickCount.current++;
     if (tickCount.current % 10 === 0) {
-      persist(activeTaskId, remainingSeconds);
+      persist(activeTaskId, remainingSeconds, activeTaskMeta);
       void updateTaskRemaining(activeTaskId, remainingSeconds).catch(() => {});
     }
-  }, [remainingSeconds, activeTaskId, persist]);
+  }, [remainingSeconds, activeTaskId, activeTaskMeta, persist]);
 
   const refreshDailyTotal = useCallback(async () => {
     try {
@@ -228,7 +310,7 @@ export function TaskTimerProvider({
   }, []);
 
   const startTaskTimer = useCallback(
-    (taskId: string, seconds: number) => {
+    (taskId: string, seconds: number, meta?: ActiveTaskMeta) => {
       if (activeTaskId && activeTaskId !== taskId) {
         persistTaskRemaining(activeTaskId, remainingSeconds);
         // Add the elapsed time from the previous task to the base total
@@ -239,12 +321,19 @@ export function TaskTimerProvider({
           setBaseDailySeconds((prev) => prev + prevElapsed);
         }
       }
+      const nextMeta = meta ?? null;
       setActiveTaskId(taskId);
+      setActiveTaskMeta(nextMeta);
       setRemainingSeconds(seconds);
       setIsExpired(seconds <= 0);
       setActiveTaskElapsed(0);
       activeTaskStartRef.current = Date.now();
-      persist(taskId, seconds);
+      // Starting a task clears any loaded-but-paused task — the new one
+      // takes over the transport bar.
+      setLoadedTaskId(null);
+      setLoadedTaskMeta(null);
+      setLoadedRemaining(0);
+      persist(taskId, seconds, nextMeta);
 
       // Record started_at on server
       void startTaskTimerAction(taskId).catch(() => {});
@@ -255,6 +344,7 @@ export function TaskTimerProvider({
   const pauseTaskTimer = useCallback(() => {
     if (!activeTaskId) return;
     const pausedTaskId = activeTaskId;
+    const pausedMeta = activeTaskMeta;
     const finalRemaining = remainingSeconds;
 
     // Announce the final remaining synchronously so rows can update their
@@ -273,11 +363,44 @@ export function TaskTimerProvider({
     // can't race and read a stale timer_remaining_seconds.
     void stopTaskTimerAction(pausedTaskId, finalRemaining).catch(() => {});
 
-    localStorage.removeItem(STORAGE_KEY);
+    // Hold the task in "loaded" state so the transport bar can offer to
+    // resume it without re-picking the piece.
+    setLoadedTaskId(pausedTaskId);
+    setLoadedTaskMeta(pausedMeta);
+    setLoadedRemaining(finalRemaining);
+    const loadedState: PersistedState = {
+      taskId: pausedTaskId,
+      remainingSeconds: finalRemaining,
+      lastTickAt: new Date().toISOString(),
+      meta: pausedMeta ?? undefined,
+      status: "loaded",
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(loadedState));
+
     setActiveTaskId(null);
+    setActiveTaskMeta(null);
     setActiveTaskElapsed(0);
     activeTaskStartRef.current = null;
-  }, [activeTaskId, remainingSeconds, announceRemaining]);
+  }, [activeTaskId, activeTaskMeta, remainingSeconds, announceRemaining]);
+
+  const unloadLoadedTask = useCallback(() => {
+    setLoadedTaskId(null);
+    setLoadedTaskMeta(null);
+    setLoadedRemaining(0);
+    // Only clear storage if it holds a loaded state; don't clobber a running
+    // task's persisted state.
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const state: PersistedState = JSON.parse(raw);
+        if (state.status === "loaded") {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
 
   const resetTaskTimer = useCallback(
     (taskId: string, seconds: number) => {
@@ -286,15 +409,16 @@ export function TaskTimerProvider({
       setIsExpired(false);
       setActiveTaskElapsed(0);
       activeTaskStartRef.current = Date.now();
-      persist(taskId, seconds);
+      persist(taskId, seconds, activeTaskMeta);
     },
-    [persist]
+    [persist, activeTaskMeta]
   );
 
   return (
     <TaskTimerContext.Provider
       value={{
         activeTaskId,
+        activeTaskMeta,
         remainingSeconds,
         isExpired,
         dailyElapsedSeconds,
@@ -303,6 +427,10 @@ export function TaskTimerProvider({
         setFocusedPieceId,
         activePieceInstance,
         setActivePieceInstance,
+        loadedTaskId,
+        loadedTaskMeta,
+        loadedRemaining,
+        unloadLoadedTask,
         startTaskTimer,
         pauseTaskTimer,
         resetTaskTimer,

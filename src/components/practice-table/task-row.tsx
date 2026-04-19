@@ -72,6 +72,8 @@ export function TaskRow({
     remainingSeconds,
     startTaskTimer,
     pauseTaskTimer,
+    loadedTaskId,
+    unloadLoadedTask,
   } = useTaskTimer();
 
   const isActive = activeTaskId === task.id;
@@ -290,7 +292,18 @@ export function TaskRow({
     if (isActive) {
       pauseTaskTimer();
     } else {
-      startTaskTimer(task.id, optimisticRemaining);
+      startTaskTimer(task.id, optimisticRemaining, {
+        pieceId: task.piece_id,
+        pieceName: task.piece_name,
+        pieceComposer: task.piece_composer,
+        pieceKind: task.piece_kind,
+        sectionLabel: optimisticSection.label,
+        sectionStatus: optimisticSection.status,
+        text: text,
+        goalSeconds: optimisticGoalSeconds,
+        metronomeSpeed: optimisticMetronomeSpeed,
+        date: task.date,
+      });
     }
   };
 
@@ -332,6 +345,10 @@ export function TaskRow({
     if (nextValue) {
       const wasActive = isActive;
       if (wasActive) pauseTaskTimer();
+      // If this task is the one the transport bar has loaded (either the
+      // running task we just paused, or a previously-paused task), clear
+      // it so the bar doesn't offer to resume a completed task.
+      if (loadedTaskId === task.id || wasActive) unloadLoadedTask();
       void completeTask(task.id);
       if (wasActive) {
         window.dispatchEvent(
@@ -554,6 +571,11 @@ export function TaskRow({
             onToggleTimer={handleTimerClick}
             onChangeGoal={(seconds) => {
               setOptimisticGoalSeconds(seconds);
+              // Server resets timer_remaining_seconds to match the new goal
+              // (see updateTaskField). Mirror that optimistically so the
+              // transport bar and row show consistent numbers before
+              // revalidation lands.
+              setOptimisticRemaining(seconds);
               void updateTaskField(task.id, "timer_seconds", seconds);
             }}
           />

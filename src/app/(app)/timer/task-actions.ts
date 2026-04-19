@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getUserTimezone } from "@/lib/date-utils";
 import { localDate } from "@/lib/date-utils";
-import type { PieceSection, PracticeTask } from "@/lib/types";
+import type {
+  PieceKind,
+  PieceSection,
+  PracticeTask,
+  SectionStatus,
+} from "@/lib/types";
 
 export type TaskWithPiece = PracticeTask & {
   piece_name: string | null;
@@ -40,6 +45,47 @@ export async function getTasksForPiece(pieceId: string): Promise<PracticeTask[]>
     .order("created_at", { ascending: true });
 
   return (data ?? []) as PracticeTask[];
+}
+
+export async function getTaskWithDetails(
+  taskId: string
+): Promise<(PracticeTask & {
+  piece_name: string | null;
+  piece_composer: string | null;
+  piece_kind: PieceKind | null;
+  section_label: string | null;
+  section_status: SectionStatus | null;
+}) | null> {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from("practice_tasks")
+    .select(
+      "*, pieces(name, composer, kind), piece_sections(label, status)"
+    )
+    .eq("id", taskId)
+    .maybeSingle();
+
+  if (!data) return null;
+  const row = data as Record<string, unknown> & {
+    pieces?: {
+      name: string | null;
+      composer: string | null;
+      kind: PieceKind | null;
+    } | null;
+    piece_sections?: {
+      label: string | null;
+      status: SectionStatus | null;
+    } | null;
+  };
+  return {
+    ...(row as unknown as PracticeTask),
+    piece_name: row.pieces?.name ?? null,
+    piece_composer: row.pieces?.composer ?? null,
+    piece_kind: row.pieces?.kind ?? null,
+    section_label: row.piece_sections?.label ?? null,
+    section_status: row.piece_sections?.status ?? null,
+  };
 }
 
 export async function getTasksForDate(date: string): Promise<TaskWithPiece[]> {
