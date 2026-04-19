@@ -1,5 +1,6 @@
 import { Header } from "@/components/layout/header";
 import { PracticeBar } from "@/components/layout/practice-bar";
+import { TransportBar } from "@/components/layout/transport-bar";
 import { MetronomeProvider } from "@/components/metronome/metronome-context";
 import { TaskTimerProvider } from "@/components/timer/task-timer-context";
 import { VideoProvider } from "@/components/video/video-context";
@@ -48,6 +49,7 @@ export default async function AppLayout({
                 <Header />
                 <PracticeBar />
                 <div className="flex flex-1 flex-col">{children}</div>
+                <TransportBar />
               </TaskTimerProvider>
             </VideoProvider>
           </div>

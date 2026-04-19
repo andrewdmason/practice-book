@@ -1149,7 +1149,18 @@ export function PracticeTable({
       const nextTask = tasksInView[idx + 1] ?? null;
       if (!nextTask) return;
 
-      startTaskTimer(nextTask.id, nextTask.timer_remaining_seconds);
+      startTaskTimer(nextTask.id, nextTask.timer_remaining_seconds, {
+        pieceId: nextTask.piece_id,
+        pieceName: nextTask.piece_name,
+        pieceComposer: nextTask.piece_composer,
+        pieceKind: nextTask.piece_kind,
+        sectionLabel: nextTask.section_label,
+        sectionStatus: nextTask.section_status,
+        text: nextTask.text,
+        goalSeconds: nextTask.timer_seconds,
+        metronomeSpeed: nextTask.metronome_speed,
+        date: nextTask.date,
+      });
       if (metronomeCtx.isActive && nextTask.metronome_speed != null) {
         metronomeCtx.start(nextTask.metronome_speed, nextTask.id);
       }

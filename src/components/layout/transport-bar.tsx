@@ -1,0 +1,318 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { usePathname } from "next/navigation";
+import { PauseIcon, PlayIcon, CheckIcon } from "lucide-react";
+import { useTaskTimer } from "@/components/timer/task-timer-context";
+import { MetronomeControl } from "@/components/metronome/metronome-control";
+import { Popover, PopoverContent } from "@/components/ui/popover";
+import { formatElapsed } from "@/lib/timer-utils";
+import {
+  createTask,
+  getNextTaskForToday,
+} from "@/app/(app)/timer/task-actions";
+import { localDate } from "@/lib/date-utils";
+import {
+  emitOptimisticTask,
+  rollbackOptimisticTask,
+} from "@/lib/optimistic-task";
+import type { Piece } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+const BAR_HEIGHT_PX = 72;
+
+function formatSigned(seconds: number): string {
+  const abs = Math.abs(seconds);
+  const formatted = formatElapsed(abs);
+  return seconds < 0 ? `+${formatted}` : formatted;
+}
+
+export function TransportBar() {
+  const pathname = usePathname();
+  const {
+    activeTaskId,
+    activeTaskMeta,
+    remainingSeconds,
+    isExpired,
+    startTaskTimer,
+    pauseTaskTimer,
+    focusedPieceId,
+    activePieces,
+    loadedTaskId,
+    loadedTaskMeta,
+    loadedRemaining,
+  } = useTaskTimer();
+
+  const [piecePickerOpen, setPiecePickerOpen] = useState(false);
+  const playButtonRef = useRef<HTMLButtonElement>(null);
+
+  if (pathname !== "/") return null;
+
+  const isActive = activeTaskId !== null;
+  const isLoaded = !isActive && loadedTaskId !== null;
+  const focusedPiece = focusedPieceId
+    ? activePieces.find((p) => p.id === focusedPieceId) ?? null
+    : null;
+
+  const startTimerForPiece = async (piece: Piece) => {
+    const existing = await getNextTaskForToday(piece.id);
+    if (existing) {
+      startTaskTimer(existing.id, existing.timer_remaining_seconds, {
+        pieceId: piece.id,
+        pieceName: piece.name,
+        pieceComposer: piece.composer,
+        pieceKind: piece.kind,
+        sectionLabel: null,
+        sectionStatus: null,
+        text: existing.text,
+        goalSeconds: existing.timer_seconds,
+        metronomeSpeed: existing.metronome_speed,
+        date: existing.date,
+      });
+      return;
+    }
+    const today = localDate();
+    const tempId = emitOptimisticTask({
+      pieceId: piece.id,
+      sectionId: null,
+      date: today,
+      metronomeSpeed: null,
+      pieceName: piece.name,
+      pieceComposer: piece.composer,
+      pieceKind: piece.kind,
+      sectionLabel: null,
+      sectionStatus: null,
+    });
+    try {
+      const { id, timer_seconds, timer_remaining_seconds } = await createTask(
+        piece.id,
+        null,
+        null,
+        today
+      );
+      startTaskTimer(id, timer_remaining_seconds, {
+        pieceId: piece.id,
+        pieceName: piece.name,
+        pieceComposer: piece.composer,
+        pieceKind: piece.kind,
+        sectionLabel: null,
+        sectionStatus: null,
+        text: "",
+        goalSeconds: timer_seconds,
+        metronomeSpeed: null,
+        date: today,
+      });
+    } catch (err) {
+      rollbackOptimisticTask(tempId);
+      throw err;
+    }
+  };
+
+  const handlePlayPauseClick = async () => {
+    if (isActive) {
+      pauseTaskTimer();
+      return;
+    }
+    if (isLoaded && loadedTaskId && loadedTaskMeta) {
+      startTaskTimer(loadedTaskId, loadedRemaining, loadedTaskMeta);
+      return;
+    }
+    if (focusedPiece) {
+      await startTimerForPiece(focusedPiece);
+      return;
+    }
+    setPiecePickerOpen(true);
+  };
+
+  const handlePickPiece = async (piece: Piece) => {
+    setPiecePickerOpen(false);
+    await startTimerForPiece(piece);
+  };
+
+  const displayMeta = activeTaskMeta ?? loadedTaskMeta;
+  const displayRemaining = isActive ? remainingSeconds : loadedRemaining;
+  const pieceName = displayMeta?.pieceName ?? null;
+  const sectionLabel = displayMeta?.sectionLabel ?? null;
+  const text = displayMeta?.text ?? "";
+  const goalSeconds = displayMeta?.goalSeconds ?? 0;
+  const elapsed =
+    goalSeconds > 0 ? Math.max(0, goalSeconds - displayRemaining) : 0;
+  const progressPct =
+    goalSeconds > 0 ? Math.min(100, (elapsed / goalSeconds) * 100) : 0;
+  const hasTask = isActive || isLoaded;
+
+  return (
+    <>
+      <div aria-hidden style={{ height: BAR_HEIGHT_PX }} />
+      <div
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-40 border-t transition-colors",
+          isExpired
+            ? "border-emerald-400/60 bg-emerald-500 text-white shadow-[0_-8px_24px_-12px_rgba(16,185,129,0.45)]"
+            : "border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80"
+        )}
+        style={{ height: BAR_HEIGHT_PX }}
+        role="region"
+        aria-label="Practice transport"
+      >
+        <div className="mx-auto flex h-full max-w-7xl items-center gap-3 px-4 sm:gap-4 sm:px-6">
+          <button
+            ref={playButtonRef}
+            onClick={handlePlayPauseClick}
+            className={cn(
+              "flex size-11 shrink-0 items-center justify-center rounded-full transition-colors",
+              !isActive &&
+                "bg-muted text-foreground hover:bg-muted-foreground/20",
+              isActive && !isExpired && "bg-red-500 text-white hover:bg-red-600",
+              isActive &&
+                isExpired &&
+                "bg-white text-emerald-700 hover:bg-white/90"
+            )}
+            aria-label={
+              isActive
+                ? "Pause practice timer"
+                : isLoaded
+                  ? "Resume practice timer"
+                  : "Start practice timer"
+            }
+          >
+            {isActive ? (
+              <PauseIcon className="size-5 fill-current" />
+            ) : (
+              <PlayIcon className="size-5 fill-current" />
+            )}
+          </button>
+
+          <Popover open={piecePickerOpen} onOpenChange={setPiecePickerOpen}>
+            <PopoverContent
+              anchor={playButtonRef}
+              align="start"
+              side="top"
+              sideOffset={8}
+              className="w-56 p-1 gap-0"
+            >
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                What are you practicing?
+              </div>
+              <ul className="flex max-h-72 flex-col overflow-auto">
+                {activePieces.map((piece) => (
+                  <li key={piece.id}>
+                    <button
+                      type="button"
+                      onClick={() => handlePickPiece(piece)}
+                      className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm text-left hover:bg-muted"
+                    >
+                      {piece.name}
+                    </button>
+                  </li>
+                ))}
+                {activePieces.length === 0 && (
+                  <li className="px-2 py-1.5 text-xs text-muted-foreground">
+                    No active pieces.
+                  </li>
+                )}
+              </ul>
+            </PopoverContent>
+          </Popover>
+
+          <div className="min-w-0 flex-1">
+            {hasTask ? (
+              <>
+                <div className="flex items-baseline gap-1.5 text-sm">
+                  <span
+                    className={cn(
+                      "truncate font-medium",
+                      isLoaded && "text-muted-foreground"
+                    )}
+                  >
+                    {pieceName ?? "Practice"}
+                  </span>
+                  {sectionLabel && (
+                    <span
+                      className={cn(
+                        "shrink-0 text-xs",
+                        isExpired ? "text-white/80" : "text-muted-foreground"
+                      )}
+                    >
+                      · {sectionLabel}
+                    </span>
+                  )}
+                  {text && (
+                    <span
+                      className={cn(
+                        "hidden truncate text-xs italic sm:inline",
+                        isExpired ? "text-white/70" : "text-muted-foreground"
+                      )}
+                    >
+                      — {text}
+                    </span>
+                  )}
+                  {isActive && isExpired && (
+                    <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-xs font-medium uppercase tracking-wide">
+                      <CheckIcon className="size-3.5" />
+                      Goal reached
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1.5 flex items-center gap-2.5">
+                  <span
+                    className={cn(
+                      "font-mono text-sm tabular-nums",
+                      isLoaded && "text-muted-foreground"
+                    )}
+                  >
+                    {formatElapsed(elapsed)}
+                  </span>
+                  <div
+                    className={cn(
+                      "relative h-1.5 flex-1 overflow-hidden rounded-full",
+                      isExpired ? "bg-white/25" : "bg-muted"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "h-full transition-[width] duration-1000 ease-linear",
+                        isExpired
+                          ? "bg-white"
+                          : isLoaded
+                            ? "bg-muted-foreground/40"
+                            : "bg-red-500"
+                      )}
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
+                  <span
+                    className={cn(
+                      "font-mono text-sm tabular-nums",
+                      isExpired && "font-semibold",
+                      isLoaded && "text-muted-foreground"
+                    )}
+                  >
+                    {isExpired
+                      ? `${formatSigned(displayRemaining)} over`
+                      : `${formatSigned(displayRemaining)} left`}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-baseline gap-1.5 text-sm">
+                <span className="font-medium text-muted-foreground">
+                  Ready to practice
+                </span>
+                {focusedPiece && (
+                  <span className="truncate text-xs text-muted-foreground">
+                    · {focusedPiece.name}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="shrink-0">
+            <MetronomeControl />
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
