@@ -13,6 +13,7 @@ import {
   MetronomeIcon,
   ArrowRightIcon,
   AudioLinesIcon,
+  CalendarArrowUpIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -34,11 +35,14 @@ import {
   updateTaskSession,
   deleteTask,
   duplicateTask,
+  moveTaskToDate,
   completeTask,
   uncompleteTask,
 } from "@/app/(app)/timer/task-actions";
 import {
   emitOptimisticTask,
+  emitOptimisticTaskDelete,
+  emitOptimisticTaskRename,
   emitOptimisticTaskUpdate,
   rollbackOptimisticTask,
   type FocusTaskNotesDetail,
@@ -488,6 +492,46 @@ export function TaskRow({
               {task.date === localDate()
                 ? "Duplicate to tomorrow"
                 : "Duplicate to today"}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={async () => {
+                const today = localDate();
+                const isToday = task.date === today;
+                let targetDate: string;
+                if (isToday) {
+                  const d = new Date(task.date + "T12:00:00");
+                  d.setDate(d.getDate() + 1);
+                  targetDate = d.toISOString().slice(0, 10);
+                } else {
+                  targetDate = today;
+                }
+                emitOptimisticTaskDelete(task.id);
+                const tempId = emitOptimisticTask({
+                  pieceId: task.piece_id,
+                  sectionId: task.section_id,
+                  date: targetDate,
+                  text: task.text,
+                  metronomeSpeed: task.metronome_speed,
+                  timerSeconds: task.timer_seconds,
+                  pieceName: task.piece_name,
+                  pieceComposer: task.piece_composer,
+                  pieceKind: task.piece_kind,
+                  sectionLabel: task.section_label,
+                  sectionStatus: task.section_status,
+                });
+                try {
+                  await moveTaskToDate(task.id, targetDate);
+                  emitOptimisticTaskRename(tempId, task.id);
+                } catch (err) {
+                  rollbackOptimisticTask(tempId);
+                  throw err;
+                }
+              }}
+            >
+              <CalendarArrowUpIcon />
+              {task.date === localDate()
+                ? "Move to tomorrow"
+                : "Move to today"}
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => openAudioDialog(hasAudio ? "playback" : "record")}
