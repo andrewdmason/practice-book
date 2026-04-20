@@ -403,6 +403,80 @@ export async function duplicateTask(
   return { id: newTask.id, date: targetDate };
 }
 
+export async function moveTaskToDate(
+  taskId: string,
+  targetDate: string
+): Promise<void> {
+  const supabase = await createClient();
+
+  const { data: source } = await supabase
+    .from("practice_tasks")
+    .select("piece_id")
+    .eq("id", taskId)
+    .single();
+
+  if (!source) throw new Error("Task not found");
+
+  let sortQuery = supabase
+    .from("practice_tasks")
+    .select("sort_order")
+    .eq("date", targetDate)
+    .order("sort_order", { ascending: false })
+    .limit(1);
+
+  if (source.piece_id) {
+    sortQuery = sortQuery.eq("piece_id", source.piece_id);
+  } else {
+    sortQuery = sortQuery.is("piece_id", null);
+  }
+
+  const { data: maxRow } = await sortQuery.maybeSingle();
+  const nextOrder = (maxRow?.sort_order ?? -1) + 1;
+
+  await supabase
+    .from("practice_tasks")
+    .update({
+      date: targetDate,
+      session_number: 1,
+      sort_order: nextOrder,
+    })
+    .eq("id", taskId);
+
+  revalidatePath("/");
+}
+
+export async function moveTasksToDate(
+  taskIds: string[],
+  targetDate: string
+): Promise<void> {
+  if (taskIds.length === 0) return;
+  const supabase = await createClient();
+
+  const { data: maxRow } = await supabase
+    .from("practice_tasks")
+    .select("sort_order")
+    .eq("date", targetDate)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let nextSort = (maxRow?.sort_order ?? -1) + 1;
+
+  await Promise.all(
+    taskIds.map((id) =>
+      supabase
+        .from("practice_tasks")
+        .update({
+          date: targetDate,
+          session_number: 1,
+          sort_order: nextSort++,
+        })
+        .eq("id", id)
+    )
+  );
+
+  revalidatePath("/");
+}
+
 export async function updateTaskRemaining(taskId: string, remainingSeconds: number) {
   const supabase = await createClient();
 

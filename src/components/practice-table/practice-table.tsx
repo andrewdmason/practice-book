@@ -19,6 +19,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   ArrowRightIcon,
   ArrowUpFromLineIcon,
+  CalendarArrowUpIcon,
   ClockIcon,
   GripVerticalIcon,
   PlusIcon,
@@ -28,6 +29,7 @@ import { useMetronome } from "@/components/metronome/metronome-context";
 import { TaskRow } from "@/components/practice-table/task-row";
 import { PieceSessionsDialog } from "@/components/practice-table/piece-sessions-dialog";
 import {
+  moveTasksToDate,
   reorderTasks,
   rollOverUnfinishedTasks,
   updateTasksSession,
@@ -35,8 +37,12 @@ import {
 import { getFeedPage } from "@/app/(app)/feed/actions";
 import {
   createTaskOptimistic,
+  emitOptimisticTask,
+  emitOptimisticTaskDelete,
+  emitOptimisticTaskRename,
   emitOptimisticTaskUpdate,
   getStableTaskKey,
+  rollbackOptimisticTask,
   type OptimisticTaskDetail,
   type OptimisticTaskRename,
   type OptimisticTaskRollback,
@@ -262,6 +268,54 @@ function SortablePieceGroup({
     void updateTasksSession(taskIds, n);
   };
 
+  const moveAllTasksToDate = async (targetDate: string) => {
+    const tasks = group.tasks;
+    const taskIds = tasks.map((t) => t.id);
+    const rollbacks: { tempId: string; realId: string }[] = [];
+    for (const t of tasks) {
+      emitOptimisticTaskDelete(t.id);
+      const tempId = emitOptimisticTask({
+        pieceId: t.piece_id,
+        sectionId: t.section_id,
+        date: targetDate,
+        text: t.text,
+        metronomeSpeed: t.metronome_speed,
+        timerSeconds: t.timer_seconds,
+        pieceName: t.piece_name,
+        pieceComposer: t.piece_composer,
+        pieceKind: t.piece_kind,
+        sectionLabel: t.section_label,
+        sectionStatus: t.section_status,
+      });
+      rollbacks.push({ tempId, realId: t.id });
+    }
+    try {
+      await moveTasksToDate(taskIds, targetDate);
+      for (const { tempId, realId } of rollbacks) {
+        emitOptimisticTaskRename(tempId, realId);
+      }
+    } catch (err) {
+      for (const { tempId } of rollbacks) rollbackOptimisticTask(tempId);
+      throw err;
+    }
+  };
+
+  const moveToDateLabel = (() => {
+    const today = localDate();
+    if (dayDate === today) return "Move to tomorrow";
+    return "Move to today";
+  })();
+
+  const moveToDateTarget = (() => {
+    const today = localDate();
+    if (dayDate === today) {
+      const d = new Date(dayDate + "T12:00:00");
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().slice(0, 10);
+    }
+    return today;
+  })();
+
   const totalElapsed = group.tasks.reduce(
     (sum, t) => sum + Math.max(0, t.timer_seconds - t.timer_remaining_seconds),
     0
@@ -320,6 +374,14 @@ function SortablePieceGroup({
               side="bottom"
               className="w-48"
             >
+              <DropdownMenuItem
+                onClick={() => {
+                  void moveAllTasksToDate(moveToDateTarget);
+                }}
+              >
+                <CalendarArrowUpIcon />
+                {moveToDateLabel}
+              </DropdownMenuItem>
               {daySessionNumbers
                 .filter((n) => n !== currentSessionNumber)
                 .map((n) => (
