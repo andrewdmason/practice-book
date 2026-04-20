@@ -65,11 +65,18 @@ type PieceGroup = {
   pieceName: string;
   pieceKind: PieceKind | null;
   tasks: TaskWithDetails[];
+  // Full task set used for aggregate timers. Differs from `tasks` only in
+  // focus view, where `tasks` is filtered for display but timers should still
+  // reflect all tasks (including completed ones).
+  aggregateTasks?: TaskWithDetails[];
 };
 
 type SessionGroup = {
   sessionNumber: number;
   pieces: PieceGroup[];
+  // Full unfiltered pieces for aggregate timers, for the same reason as
+  // PieceGroup.aggregateTasks. Includes pieces whose tasks were all hidden.
+  aggregatePieces?: PieceGroup[];
 };
 
 function formatMinsShort(totalSeconds: number): string {
@@ -316,11 +323,12 @@ function SortablePieceGroup({
     return today;
   })();
 
-  const totalElapsed = group.tasks.reduce(
+  const aggregateTasks = group.aggregateTasks ?? group.tasks;
+  const totalElapsed = aggregateTasks.reduce(
     (sum, t) => sum + Math.max(0, t.timer_seconds - t.timer_remaining_seconds),
     0
   );
-  const totalGoal = group.tasks.reduce(
+  const totalGoal = aggregateTasks.reduce(
     (sum, t) => sum + Math.max(0, t.timer_seconds),
     0
   );
@@ -451,7 +459,7 @@ function SortablePieceGroup({
           open={sessionsOpen}
           onOpenChange={setSessionsOpen}
           title={group.pieceName}
-          tasks={group.tasks}
+          tasks={aggregateTasks}
         />
       )}
     </div>
@@ -461,6 +469,7 @@ function SortablePieceGroup({
 function SessionBlock({
   sessionNumber,
   pieces,
+  aggregatePieces,
   showHeader,
   isFirst,
   dayDate,
@@ -473,6 +482,7 @@ function SessionBlock({
 }: {
   sessionNumber: number;
   pieces: PieceGroup[];
+  aggregatePieces?: PieceGroup[];
   showHeader: boolean;
   isFirst: boolean;
   dayDate: string;
@@ -539,15 +549,17 @@ function SessionBlock({
     [pieces, dayDate, onReorder]
   );
 
-  const sessionElapsed = pieces
-    .flatMap((p) => p.tasks)
-    .reduce(
-      (sum, t) => sum + Math.max(0, t.timer_seconds - t.timer_remaining_seconds),
-      0
-    );
-  const sessionGoal = pieces
-    .flatMap((p) => p.tasks)
-    .reduce((sum, t) => sum + Math.max(0, t.timer_seconds), 0);
+  const aggregateSessionTasks = (aggregatePieces ?? pieces).flatMap((p) =>
+    p.aggregateTasks ?? p.tasks
+  );
+  const sessionElapsed = aggregateSessionTasks.reduce(
+    (sum, t) => sum + Math.max(0, t.timer_seconds - t.timer_remaining_seconds),
+    0
+  );
+  const sessionGoal = aggregateSessionTasks.reduce(
+    (sum, t) => sum + Math.max(0, t.timer_seconds),
+    0
+  );
   const showSessionTimer = sessionElapsed > 0 || sessionGoal > 0;
 
   const existingPieceIds = new Set(
@@ -713,16 +725,26 @@ function DayGroup({
         if (!target) return [];
         // Hide completed tasks, but keep the pinned task (the one that owns
         // an open follow-up dialog) mounted so the modal stays interactive.
+        // Preserve the unfiltered tasks on each piece so aggregate timers in
+        // the session header still reflect the full session, including time
+        // spent on tasks that have been checked off and hidden.
         const filteredPieces = target.pieces
           .map((p) => ({
             ...p,
             tasks: p.tasks.filter(
               (t) => !t.completed || t.id === pinnedTaskId
             ),
+            aggregateTasks: p.tasks,
           }))
           .filter((p) => p.tasks.length > 0);
         return filteredPieces.length > 0
-          ? [{ ...target, pieces: filteredPieces }]
+          ? [
+              {
+                ...target,
+                pieces: filteredPieces,
+                aggregatePieces: target.pieces,
+              },
+            ]
           : [];
       })()
     : allSessionGroups;
@@ -924,6 +946,7 @@ function DayGroup({
           key={session.sessionNumber}
           sessionNumber={session.sessionNumber}
           pieces={session.pieces}
+          aggregatePieces={session.aggregatePieces}
           showHeader={showSessionHeaders}
           isFirst={index === 0}
           dayDate={day.date}
