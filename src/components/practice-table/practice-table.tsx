@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useId, useRef } from "react";
+import { useState, useCallback, useEffect, useId, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   DndContext,
@@ -222,12 +222,14 @@ function SortablePieceGroup({
   onAddTask,
   daySessionNumbers,
   currentSessionNumber,
+  sessionNumbersByDate,
 }: {
   group: PieceGroup;
   dayDate: string;
   onAddTask: (afterTaskId: string | null) => void;
   daySessionNumbers: number[];
   currentSessionNumber: number;
+  sessionNumbersByDate: Record<string, number[]>;
 }) {
   const { activePieceInstance } = useTaskTimer();
   const sortableId = `piece:${group.pieceId ?? "__general__"}`;
@@ -451,6 +453,7 @@ function SortablePieceGroup({
             isFirst={index === 0}
             onAddBelow={(afterTaskId) => onAddTask(afterTaskId)}
             daySessionNumbers={daySessionNumbers}
+            sessionNumbersByDate={sessionNumbersByDate}
           />
         ))}
       </SortableContext>
@@ -479,6 +482,7 @@ function SessionBlock({
   onReorder,
   onAddTask,
   onAddPiece,
+  sessionNumbersByDate,
 }: {
   sessionNumber: number;
   pieces: PieceGroup[];
@@ -496,6 +500,7 @@ function SessionBlock({
     afterTaskId?: string | null
   ) => void;
   onAddPiece: (piece: Piece, sessionNumber: number) => void;
+  sessionNumbersByDate: Record<string, number[]>;
 }) {
   const dndId = useId();
   const sensors = useSensors(
@@ -639,6 +644,7 @@ function SessionBlock({
               }
               daySessionNumbers={daySessionNumbers}
               currentSessionNumber={sessionNumber}
+              sessionNumbersByDate={sessionNumbersByDate}
             />
           ))}
         </SortableContext>
@@ -656,6 +662,7 @@ function DayGroup({
   hasUnfinishedBefore,
   isNextSessionView,
   onReorder,
+  sessionNumbersByDate,
 }: {
   day: FeedDay;
   focusedPieceId: string | null;
@@ -665,6 +672,7 @@ function DayGroup({
   hasUnfinishedBefore: boolean;
   isNextSessionView: boolean;
   onReorder: (dayDate: string, orderedIds: string[]) => void;
+  sessionNumbersByDate: Record<string, number[]>;
 }) {
   const filteredTasks = focusedPieceId
     ? day.tasks.filter((t) => t.piece_id === focusedPieceId)
@@ -956,6 +964,7 @@ function DayGroup({
           onReorder={onReorder}
           onAddTask={handleAddTask}
           onAddPiece={handleAddPiece}
+          sessionNumbersByDate={sessionNumbersByDate}
         />
       ))}
 
@@ -1333,6 +1342,16 @@ export function PracticeTable({
     ? displayDays.filter((d) => d.date === todayStr)
     : displayDays;
 
+  const sessionNumbersByDate = useMemo(() => {
+    const map: Record<string, number[]> = {};
+    for (const d of days) {
+      const unique = new Set<number>();
+      for (const t of d.tasks) unique.add(t.session_number ?? 1);
+      map[d.date] = Array.from(unique).sort((a, b) => a - b);
+    }
+    return map;
+  }, [days]);
+
   return (
     <div className="pl-8" onClick={handleRootClick}>
       {visibleDays.map((day) => (
@@ -1346,6 +1365,7 @@ export function PracticeTable({
           hasUnfinishedBefore={hasUnfinishedBefore}
           isNextSessionView={isNextSessionView}
           onReorder={handleReorder}
+          sessionNumbersByDate={sessionNumbersByDate}
         />
       ))}
 

@@ -65,11 +65,13 @@ export function TaskRow({
   isFirst,
   onAddBelow,
   daySessionNumbers,
+  sessionNumbersByDate,
 }: {
   task: TaskWithDetails;
   isFirst: boolean;
   onAddBelow: (afterTaskId: string) => void;
   daySessionNumbers: number[];
+  sessionNumbersByDate: Record<string, number[]>;
 }) {
   const {
     activeTaskId,
@@ -834,6 +836,9 @@ export function TaskRow({
         }}
         tomorrowDate={tomorrowDate}
         dayAfterDate={dayAfterDate}
+        tomorrowSessions={sessionNumbersByDate[tomorrowDate] ?? []}
+        dayAfterSessions={sessionNumbersByDate[dayAfterDate] ?? []}
+        defaultSessionNumber={task.session_number}
         defaults={{
           pieceId: task.piece_id,
           pieceName: task.piece_name,

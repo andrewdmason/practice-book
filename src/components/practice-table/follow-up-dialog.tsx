@@ -52,12 +52,18 @@ export function FollowUpDialog({
   defaults,
   tomorrowDate,
   dayAfterDate,
+  tomorrowSessions,
+  dayAfterSessions,
+  defaultSessionNumber,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaults: FollowUpDefaults;
   tomorrowDate: string;
   dayAfterDate: string;
+  tomorrowSessions: number[];
+  dayAfterSessions: number[];
+  defaultSessionNumber: number;
 }) {
   const [text, setText] = useState(defaults.text);
   const [metronomeSpeed, setMetronomeSpeed] = useState<number | null>(
@@ -68,6 +74,9 @@ export function FollowUpDialog({
   );
   const [timerSeconds, setTimerSeconds] = useState(defaults.timerSeconds);
   const [targetDate, setTargetDate] = useState<string>(tomorrowDate);
+  const [sessionNumber, setSessionNumber] = useState<number>(
+    defaultSessionNumber
+  );
   const [section, setSection] = useState<{
     sectionId: string | null;
     sectionLabel: string | null;
@@ -103,6 +112,7 @@ export function FollowUpDialog({
     });
     setSectionPickerData(d.pieceId ? getCachedSectionPickerData(d.pieceId) : null);
     setTargetDate(tomorrowDate);
+    setSessionNumber(defaultSessionNumber);
     // base-ui's focus trap initializes after the open transition; defer focus
     // until after that so our textarea wins over the dialog's default target.
     // Select the carried-over note so the user can replace it by typing or
@@ -114,7 +124,7 @@ export function FollowUpDialog({
       if (el.value.length > 0) el.select();
     }, 60);
     return () => clearTimeout(t);
-  }, [open, tomorrowDate]);
+  }, [open, tomorrowDate, defaultSessionNumber]);
 
   // Lazy-load sections for the picker
   useEffect(() => {
@@ -155,6 +165,21 @@ export function FollowUpDialog({
     setMetronomeSpeed(Number.isNaN(num) ? null : num);
   };
 
+  const targetSessions =
+    targetDate === dayAfterDate ? dayAfterSessions : tomorrowSessions;
+  const maxExistingSession = targetSessions.length > 0
+    ? Math.max(...targetSessions)
+    : 0;
+  const sessionPickerCount = Math.max(
+    maxExistingSession + 1,
+    sessionNumber,
+    1
+  );
+  const sessionPickerNumbers = Array.from(
+    { length: sessionPickerCount },
+    (_, i) => i + 1
+  );
+
   const handleAdd = () => {
     onOpenChange(false);
     void createTaskOptimistic({
@@ -169,6 +194,7 @@ export function FollowUpDialog({
       pieceKind: defaults.pieceKind,
       sectionLabel: section.sectionLabel,
       sectionStatus: section.sectionStatus,
+      sessionNumber,
     });
   };
 
@@ -263,6 +289,27 @@ export function FollowUpDialog({
               >
                 Day after
               </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs text-muted-foreground">Session</span>
+            <div className="flex flex-wrap gap-1">
+              {sessionPickerNumbers.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setSessionNumber(n)}
+                  className={cn(
+                    "rounded px-2 py-1 text-xs tabular-nums transition-colors",
+                    sessionNumber === n
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted-foreground/20 hover:text-foreground"
+                  )}
+                >
+                  {n}
+                </button>
+              ))}
             </div>
           </div>
 
