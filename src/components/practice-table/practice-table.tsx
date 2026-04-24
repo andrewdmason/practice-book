@@ -1231,12 +1231,16 @@ export function PracticeTable({
     focusedPieceId,
     startTaskTimer,
     metronomeCtx,
+    activePieceInstance,
+    setActivePieceInstance,
   });
   advanceContextRef.current = {
     days,
     focusedPieceId,
     startTaskTimer,
     metronomeCtx,
+    activePieceInstance,
+    setActivePieceInstance,
   };
   useEffect(() => {
     const handler = (e: Event) => {
@@ -1249,6 +1253,8 @@ export function PracticeTable({
         focusedPieceId,
         startTaskTimer,
         metronomeCtx,
+        activePieceInstance,
+        setActivePieceInstance,
       } = advanceContextRef.current;
 
       const day = days.find((d) => d.date === dayDate);
@@ -1274,6 +1280,16 @@ export function PracticeTable({
         metronomeSpeed: nextTask.metronome_speed,
         date: nextTask.date,
       });
+      if (
+        nextTask.piece_id &&
+        activePieceInstance &&
+        activePieceInstance.pieceId !== nextTask.piece_id
+      ) {
+        setActivePieceInstance({
+          pieceId: nextTask.piece_id,
+          key: `${nextTask.date}:${nextTask.session_number}:${nextTask.piece_id}`,
+        });
+      }
       if (metronomeCtx.isActive && nextTask.metronome_speed != null) {
         metronomeCtx.start(nextTask.metronome_speed, nextTask.id);
       }
