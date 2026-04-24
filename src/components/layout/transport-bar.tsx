@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { PauseIcon, PlayIcon, CheckIcon } from "lucide-react";
+import { SquareIcon, PlayIcon, CheckIcon } from "lucide-react";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { MetronomeControl } from "@/components/metronome/metronome-control";
 import { Popover, PopoverContent } from "@/components/ui/popover";
@@ -170,14 +170,14 @@ export function TransportBar() {
             )}
             aria-label={
               isActive
-                ? "Pause practice timer"
+                ? "Stop practice timer"
                 : isLoaded
                   ? "Resume practice timer"
                   : "Start practice timer"
             }
           >
             {isActive ? (
-              <PauseIcon className="size-5 fill-current" />
+              <SquareIcon className="size-5 fill-current" />
             ) : (
               <PlayIcon className="size-5 fill-current" />
             )}
