@@ -548,13 +548,17 @@ export async function rollOverUnfinishedTasks(): Promise<number> {
 
   if (!priorDay) return 0;
 
-  const { data: toRoll } = await supabase
+  const { data: candidates } = await supabase
     .from("practice_tasks")
-    .select("id")
+    .select("id, timer_seconds, timer_remaining_seconds")
     .eq("date", priorDay.date)
     .eq("completed", false);
 
-  if (!toRoll || toRoll.length === 0) return 0;
+  const toRoll = (candidates ?? []).filter(
+    (row) => row.timer_remaining_seconds >= row.timer_seconds
+  );
+
+  if (toRoll.length === 0) return 0;
 
   const [sessRes, sortRes] = await Promise.all([
     supabase
