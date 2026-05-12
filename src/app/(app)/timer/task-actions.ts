@@ -157,21 +157,20 @@ export async function createTask(
       );
     }
   } else {
-    // No anchor: append at end of the piece group.
-    let sortQuery = supabase
+    // No anchor: append at end of the day. Piece grouping is by piece_id, so
+    // a new task for an existing piece still lands inside its group; a task
+    // for a piece not yet on the day becomes a new group at the bottom.
+    const resolvedDate =
+      date ?? localDate(new Date(), await getUserTimezone());
+
+    const { data: maxRow } = await supabase
       .from("practice_tasks")
       .select("sort_order")
-      .eq("completed", false)
+      .eq("date", resolvedDate)
       .order("sort_order", { ascending: false })
-      .limit(1);
+      .limit(1)
+      .maybeSingle();
 
-    if (pieceId) {
-      sortQuery = sortQuery.eq("piece_id", pieceId);
-    } else {
-      sortQuery = sortQuery.is("piece_id", null);
-    }
-
-    const { data: maxRow } = await sortQuery.single();
     nextOrder = (maxRow?.sort_order ?? -1) + 1;
   }
 
