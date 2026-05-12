@@ -96,6 +96,7 @@ export type PracticeTask = {
   audio_duration_seconds: number | null;
   audio_trim_start_seconds: number | null;
   audio_trim_end_seconds: number | null;
+  audio_title: string | null;
   created_at: string;
   updated_at: string;
 };

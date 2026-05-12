@@ -30,7 +30,8 @@ export async function attachTaskAudio(
   audioPath: string,
   durationSeconds: number,
   trimStartSeconds: number | null,
-  trimEndSeconds: number | null
+  trimEndSeconds: number | null,
+  audioTitle: string | null
 ): Promise<void> {
   const supabase = await createClient();
 
@@ -52,10 +53,25 @@ export async function attachTaskAudio(
       audio_duration_seconds: Math.max(0, Math.round(durationSeconds)),
       audio_trim_start_seconds: trimStartSeconds,
       audio_trim_end_seconds: trimEndSeconds,
+      audio_title: audioTitle,
     })
     .eq("id", taskId);
   if (error) throw new Error(error.message);
   revalidatePath("/");
+}
+
+export async function updateTaskAudioTitle(
+  taskId: string,
+  audioTitle: string | null
+): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("practice_tasks")
+    .update({ audio_title: audioTitle })
+    .eq("id", taskId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+  revalidatePath("/recordings");
 }
 
 export async function updateTaskAudioTrim(
@@ -108,6 +124,7 @@ export async function deleteTaskAudio(taskId: string): Promise<void> {
       audio_duration_seconds: null,
       audio_trim_start_seconds: null,
       audio_trim_end_seconds: null,
+      audio_title: null,
     })
     .eq("id", taskId);
   if (error) throw new Error(error.message);

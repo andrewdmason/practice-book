@@ -861,14 +861,16 @@ export function TaskRow({
         existingDurationSeconds={task.audio_duration_seconds}
         existingTrimStartSeconds={task.audio_trim_start_seconds}
         existingTrimEndSeconds={task.audio_trim_end_seconds}
+        existingAudioTitle={task.audio_title}
         pieceName={task.piece_name}
         sectionLabel={optimisticSection.label}
-        onAttached={(path, duration, trimStart, trimEnd) => {
+        onAttached={(path, duration, trimStart, trimEnd, audioTitle) => {
           emitOptimisticTaskUpdate(task.id, {
             audio_path: path,
             audio_duration_seconds: duration,
             audio_trim_start_seconds: trimStart,
             audio_trim_end_seconds: trimEnd,
+            audio_title: audioTitle,
           });
         }}
         onTrimUpdated={(trimStart, trimEnd) => {
@@ -877,12 +879,16 @@ export function TaskRow({
             audio_trim_end_seconds: trimEnd,
           });
         }}
+        onTitleUpdated={(audioTitle) => {
+          emitOptimisticTaskUpdate(task.id, { audio_title: audioTitle });
+        }}
         onDeleted={() => {
           emitOptimisticTaskUpdate(task.id, {
             audio_path: null,
             audio_duration_seconds: null,
             audio_trim_start_seconds: null,
             audio_trim_end_seconds: null,
+            audio_title: null,
           });
         }}
       />

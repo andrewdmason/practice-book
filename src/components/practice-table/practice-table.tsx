@@ -1124,6 +1124,7 @@ export function PracticeTable({
         audio_duration_seconds: null,
         audio_trim_start_seconds: null,
         audio_trim_end_seconds: null,
+        audio_title: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         piece_name: detail.pieceName,
