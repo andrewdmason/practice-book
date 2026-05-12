@@ -70,6 +70,10 @@ type TaskTimerContextValue = {
   startTaskTimer: (taskId: string, seconds: number, meta?: ActiveTaskMeta) => void;
   pauseTaskTimer: () => void;
   resetTaskTimer: (taskId: string, seconds: number) => void;
+  /** Sync the goal for a task that is currently active or loaded in the bar.
+   * Server-side, changing the goal also resets remaining to match — mirror
+   * that here so the bar updates without waiting for revalidation. */
+  setTaskGoal: (taskId: string, goalSeconds: number) => void;
   /** Refresh the daily total from server data */
   refreshDailyTotal: () => void;
 };
@@ -402,6 +406,64 @@ export function TaskTimerProvider({
     }
   }, []);
 
+  const setTaskGoal = useCallback(
+    (taskId: string, goalSeconds: number) => {
+      if (activeTaskId === taskId) {
+        // Preserve accrued time: only the goal changes. Remaining shifts by
+        // the same delta so elapsed stays put. Don't touch activeTaskStartRef
+        // or activeTaskElapsed — the daily total keeps ticking.
+        const oldGoal = activeTaskMeta?.goalSeconds ?? goalSeconds;
+        const newRemaining = remainingSeconds + (goalSeconds - oldGoal);
+        setRemainingSeconds(newRemaining);
+        setIsExpired(newRemaining <= 0);
+        const nextMeta = activeTaskMeta
+          ? { ...activeTaskMeta, goalSeconds }
+          : null;
+        setActiveTaskMeta(nextMeta);
+        persist(taskId, newRemaining, nextMeta);
+        return;
+      }
+      if (loadedTaskId === taskId) {
+        const oldGoal = loadedTaskMeta?.goalSeconds ?? goalSeconds;
+        const newLoadedRemaining =
+          loadedRemaining + (goalSeconds - oldGoal);
+        const nextMeta = loadedTaskMeta
+          ? { ...loadedTaskMeta, goalSeconds }
+          : null;
+        setLoadedTaskMeta(nextMeta);
+        setLoadedRemaining(newLoadedRemaining);
+        // Update the persisted loaded state so a reload doesn't resurrect
+        // the old goal.
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const state: PersistedState = JSON.parse(raw);
+            if (state.taskId === taskId && state.status === "loaded") {
+              const nextState: PersistedState = {
+                ...state,
+                remainingSeconds: newLoadedRemaining,
+                lastTickAt: new Date().toISOString(),
+                meta: nextMeta ?? undefined,
+              };
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+            }
+          }
+        } catch {
+          // Ignore
+        }
+      }
+    },
+    [
+      activeTaskId,
+      activeTaskMeta,
+      loadedTaskId,
+      loadedTaskMeta,
+      loadedRemaining,
+      remainingSeconds,
+      persist,
+    ]
+  );
+
   const resetTaskTimer = useCallback(
     (taskId: string, seconds: number) => {
       setActiveTaskId(taskId);
@@ -434,6 +496,7 @@ export function TaskTimerProvider({
         startTaskTimer,
         pauseTaskTimer,
         resetTaskTimer,
+        setTaskGoal,
         refreshDailyTotal,
       }}
     >

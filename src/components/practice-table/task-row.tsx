@@ -31,6 +31,7 @@ import { useMetronome } from "@/components/metronome/metronome-context";
 import { TimerCell } from "@/components/practice-table/timer-cell";
 import {
   updateTaskField,
+  updateTaskRemaining,
   updateTaskSection,
   updateTaskSession,
   deleteTask,
@@ -80,6 +81,7 @@ export function TaskRow({
     pauseTaskTimer,
     loadedTaskId,
     unloadLoadedTask,
+    setTaskGoal,
   } = useTaskTimer();
 
   const isActive = activeTaskId === task.id;
@@ -621,13 +623,18 @@ export function TaskRow({
             isCompleted={optimisticCompleted}
             onToggleTimer={handleTimerClick}
             onChangeGoal={(seconds) => {
+              // Preserve accrued elapsed time when the goal changes —
+              // only the goal moves; remaining shifts by the same delta.
+              const liveRemaining = isActive
+                ? remainingSeconds
+                : optimisticRemaining;
+              const newRemaining =
+                liveRemaining + (seconds - optimisticGoalSeconds);
               setOptimisticGoalSeconds(seconds);
-              // Server resets timer_remaining_seconds to match the new goal
-              // (see updateTaskField). Mirror that optimistically so the
-              // transport bar and row show consistent numbers before
-              // revalidation lands.
-              setOptimisticRemaining(seconds);
+              setOptimisticRemaining(newRemaining);
+              setTaskGoal(task.id, seconds);
               void updateTaskField(task.id, "timer_seconds", seconds);
+              void updateTaskRemaining(task.id, newRemaining);
             }}
           />
         </div>

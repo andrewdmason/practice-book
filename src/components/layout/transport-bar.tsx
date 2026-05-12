@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { SquareIcon, PlayIcon, CheckIcon } from "lucide-react";
+import { SquareIcon, PlayIcon } from "lucide-react";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { MetronomeControl } from "@/components/metronome/metronome-control";
 import { Popover, PopoverContent } from "@/components/ui/popover";
@@ -147,9 +147,14 @@ export function TransportBar() {
       <div
         className={cn(
           "fixed inset-x-0 bottom-0 z-40 border-t transition-colors",
-          isExpired
-            ? "border-emerald-400/60 bg-emerald-500 text-white shadow-[0_-8px_24px_-12px_rgba(16,185,129,0.45)]"
-            : "border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80"
+          isActive &&
+            !isExpired &&
+            "border-red-400/60 bg-red-500 text-white shadow-[0_-8px_24px_-12px_rgba(220,38,38,0.45)]",
+          isActive &&
+            isExpired &&
+            "border-red-400/60 text-white shadow-[0_-8px_24px_-12px_rgba(220,38,38,0.45)] animate-transport-pulse",
+          !isActive &&
+            "border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80"
         )}
         style={{ height: BAR_HEIGHT_PX }}
         role="region"
@@ -163,10 +168,7 @@ export function TransportBar() {
               "flex size-11 shrink-0 items-center justify-center rounded-full transition-colors",
               !isActive &&
                 "bg-muted text-foreground hover:bg-muted-foreground/20",
-              isActive && !isExpired && "bg-red-500 text-white hover:bg-red-600",
-              isActive &&
-                isExpired &&
-                "bg-white text-emerald-700 hover:bg-white/90"
+              isActive && "bg-white text-red-600 hover:bg-white/90 shadow-sm"
             )}
             aria-label={
               isActive
@@ -231,7 +233,7 @@ export function TransportBar() {
                     <span
                       className={cn(
                         "shrink-0 text-xs",
-                        isExpired ? "text-white/80" : "text-muted-foreground"
+                        isActive ? "text-white/80" : "text-muted-foreground"
                       )}
                     >
                       · {sectionLabel}
@@ -241,16 +243,10 @@ export function TransportBar() {
                     <span
                       className={cn(
                         "hidden truncate text-xs italic sm:inline",
-                        isExpired ? "text-white/70" : "text-muted-foreground"
+                        isActive ? "text-white/70" : "text-muted-foreground"
                       )}
                     >
                       — {text}
-                    </span>
-                  )}
-                  {isActive && isExpired && (
-                    <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-xs font-medium uppercase tracking-wide">
-                      <CheckIcon className="size-3.5" />
-                      Goal reached
                     </span>
                   )}
                 </div>
@@ -266,17 +262,17 @@ export function TransportBar() {
                   <div
                     className={cn(
                       "relative h-1.5 flex-1 overflow-hidden rounded-full",
-                      isExpired ? "bg-white/25" : "bg-muted"
+                      isActive ? "bg-white/25" : "bg-muted"
                     )}
                   >
                     <div
                       className={cn(
                         "h-full transition-[width] duration-1000 ease-linear",
                         isExpired
-                          ? "bg-white"
-                          : isLoaded
-                            ? "bg-muted-foreground/40"
-                            : "bg-red-500"
+                          ? "bg-emerald-500"
+                          : isActive
+                            ? "bg-white"
+                            : "bg-muted-foreground/40"
                       )}
                       style={{ width: `${progressPct}%` }}
                     />
@@ -309,7 +305,7 @@ export function TransportBar() {
           </div>
 
           <div className="shrink-0">
-            <MetronomeControl />
+            <MetronomeControl onAccent={isActive} />
           </div>
         </div>
       </div>
