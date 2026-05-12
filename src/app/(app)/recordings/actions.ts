@@ -8,10 +8,12 @@ export type Recording = {
   durationSeconds: number;
   trimStartSeconds: number | null;
   trimEndSeconds: number | null;
+  audioTitle: string | null;
   date: string;
   createdAt: string;
   pieceName: string | null;
   pieceComposer: string | null;
+  collectionName: string | null;
   sectionLabel: string | null;
   taskText: string;
 };
@@ -22,7 +24,7 @@ export async function getRecordings(): Promise<Recording[]> {
   const { data, error } = await supabase
     .from("practice_tasks")
     .select(
-      "id, date, text, audio_path, audio_duration_seconds, audio_trim_start_seconds, audio_trim_end_seconds, created_at, pieces(name, composer), piece_sections(label)"
+      "id, date, text, audio_path, audio_duration_seconds, audio_trim_start_seconds, audio_trim_end_seconds, audio_title, created_at, pieces(name, composer, collections(name)), piece_sections(label)"
     )
     .not("audio_path", "is", null)
     .order("created_at", { ascending: false });
@@ -33,6 +35,7 @@ export async function getRecordings(): Promise<Recording[]> {
     const piece = row.pieces as unknown as {
       name: string;
       composer: string | null;
+      collections: { name: string } | null;
     } | null;
     const section = row.piece_sections as unknown as {
       label: string;
@@ -43,10 +46,12 @@ export async function getRecordings(): Promise<Recording[]> {
       durationSeconds: row.audio_duration_seconds ?? 0,
       trimStartSeconds: row.audio_trim_start_seconds,
       trimEndSeconds: row.audio_trim_end_seconds,
+      audioTitle: row.audio_title,
       date: row.date,
       createdAt: row.created_at,
       pieceName: piece?.name ?? null,
       pieceComposer: piece?.composer ?? null,
+      collectionName: piece?.collections?.name ?? null,
       sectionLabel: section?.label ?? null,
       taskText: row.text,
     };

@@ -39,6 +39,7 @@ import {
   createAudioUploadUrl,
   createSignedPlaybackUrl,
   deleteTaskAudio,
+  updateTaskAudioTitle,
   updateTaskAudioTrim,
 } from "@/app/(app)/timer/audio-actions";
 
@@ -81,18 +82,21 @@ type Props = {
   existingDurationSeconds: number | null;
   existingTrimStartSeconds: number | null;
   existingTrimEndSeconds: number | null;
+  existingAudioTitle: string | null;
   pieceName: string | null;
   sectionLabel: string | null;
   onAttached?: (
     path: string,
     durationSeconds: number,
     trimStartSeconds: number | null,
-    trimEndSeconds: number | null
+    trimEndSeconds: number | null,
+    audioTitle: string | null
   ) => void;
   onTrimUpdated?: (
     trimStartSeconds: number | null,
     trimEndSeconds: number | null
   ) => void;
+  onTitleUpdated?: (audioTitle: string | null) => void;
   onDeleted?: () => void;
 };
 
@@ -132,14 +136,16 @@ export function TaskAudioDialog({
   existingDurationSeconds,
   existingTrimStartSeconds,
   existingTrimEndSeconds,
+  existingAudioTitle,
   pieceName,
   sectionLabel,
   onAttached,
   onTrimUpdated,
+  onTitleUpdated,
   onDeleted,
 }: Props) {
-  const titleSuffix = [pieceName, sectionLabel].filter(Boolean).join(" — ");
-  const dialogTitle = titleSuffix ? `Record: ${titleSuffix}` : "Record";
+  const defaultTitle = [pieceName, sectionLabel].filter(Boolean).join(" — ");
+  const recordTitle = defaultTitle ? `Record: ${defaultTitle}` : "Record";
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const wavesurferRef = useRef<WaveSurferType | null>(null);
   const recordPluginRef = useRef<RecordPluginType | null>(null);
@@ -157,6 +163,10 @@ export function TaskAudioDialog({
     end: number | null;
   }>({ start: null, end: null });
   const [savingTrim, setSavingTrim] = useState(false);
+  const [title, setTitle] = useState<string>("");
+  const [titleBaseline, setTitleBaseline] = useState<string>("");
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const titleAutoSelectRef = useRef(false);
   const [availableInputs, setAvailableInputs] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
@@ -309,6 +319,8 @@ export function TaskAudioDialog({
       // length only becomes available after renderRecordedAudio's load.
       const duration = plugin.getDuration() / 1000;
       const blobUrl = URL.createObjectURL(blob);
+      setTitle(defaultTitle || "Recording");
+      titleAutoSelectRef.current = true;
       setState({ kind: "preview", blob, blobUrl, duration, mime: blob.type || mime });
     });
 
@@ -379,6 +391,7 @@ export function TaskAudioDialog({
     effectiveDeviceId,
     refreshAvailableInputs,
     setMonitorStreamTracked,
+    defaultTitle,
   ]);
 
   const loadPlayback = useCallback(async (path: string) => {
@@ -430,6 +443,9 @@ export function TaskAudioDialog({
       setTrimStart(null);
       setTrimEnd(null);
       setTrimBaseline({ start: null, end: null });
+      setTitle("");
+      setTitleBaseline("");
+      titleAutoSelectRef.current = false;
       return;
     }
     if (!container) return;
@@ -441,6 +457,9 @@ export function TaskAudioDialog({
         start: existingTrimStartSeconds,
         end: existingTrimEndSeconds,
       });
+      const seeded = existingAudioTitle ?? defaultTitle;
+      setTitle(seeded);
+      setTitleBaseline(existingAudioTitle ?? "");
       void loadPlayback(existingAudioPath);
     } else if (initialMode === "record") {
       void refreshAvailableInputs();
@@ -513,6 +532,35 @@ export function TaskAudioDialog({
     effectiveDeviceId,
     setMonitorStreamTracked,
   ]);
+
+  // After transitioning into preview from a fresh recording, focus the title
+  // input and select its text so the user can immediately type a new name.
+  useEffect(() => {
+    if (state.kind !== "preview") return;
+    if (!titleAutoSelectRef.current) return;
+    titleAutoSelectRef.current = false;
+    const el = titleInputRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.focus();
+      el.select();
+    });
+  }, [state.kind]);
+
+  const titleDirty = state.kind === "playback" && title.trim() !== titleBaseline;
+
+  const saveTitle = useCallback(async () => {
+    if (state.kind !== "playback") return;
+    const trimmed = title.trim();
+    const next = trimmed ? trimmed : null;
+    try {
+      await updateTaskAudioTitle(taskId, next);
+      setTitleBaseline(trimmed);
+      onTitleUpdated?.(next);
+    } catch {
+      // Leave local state; user can retry by editing again.
+    }
+  }, [onTitleUpdated, state.kind, taskId, title]);
 
   const stopRecording = useCallback(() => {
     const plugin = recordPluginRef.current;
@@ -600,6 +648,8 @@ export function TaskAudioDialog({
     const { blob, duration, mime } = state;
     const trimStartToSave = trimStart;
     const trimEndToSave = trimEnd;
+    const trimmedTitle = title.trim();
+    const titleToSave = trimmedTitle ? trimmedTitle : null;
     setState({ kind: "saving" });
     try {
       const ext: "webm" | "m4a" = mime.startsWith("audio/mp4") ? "m4a" : "webm";
@@ -617,20 +667,22 @@ export function TaskAudioDialog({
         path,
         duration,
         trimStartToSave,
-        trimEndToSave
+        trimEndToSave,
+        titleToSave
       );
       onAttached?.(
         path,
         Math.max(0, Math.round(duration)),
         trimStartToSave,
-        trimEndToSave
+        trimEndToSave,
+        titleToSave
       );
       onOpenChange(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed";
       setState({ ...state, kind: "save-error", message });
     }
-  }, [onAttached, onOpenChange, state, taskId, trimStart, trimEnd]);
+  }, [onAttached, onOpenChange, state, taskId, trimStart, trimEnd, title]);
 
   const reRecordFromPlayback = useCallback(() => {
     teardownWavesurfer();
@@ -716,7 +768,42 @@ export function TaskAudioDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{dialogTitle}</DialogTitle>
+          {state.kind === "preview" ||
+          state.kind === "save-error" ||
+          state.kind === "playback" ? (
+            <>
+              <DialogTitle className="sr-only">
+                {title || defaultTitle || "Recording"}
+              </DialogTitle>
+              <input
+                ref={titleInputRef}
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onBlur={() => {
+                  if (titleDirty) void saveTitle();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (state.kind === "playback") {
+                      setTitle(titleBaseline || defaultTitle);
+                    }
+                    e.currentTarget.blur();
+                  }
+                }}
+                placeholder={defaultTitle || "Recording"}
+                aria-label="Recording title"
+                className="-my-0.5 -ml-1 w-[calc(100%-4rem)] rounded-sm bg-transparent px-1 py-0.5 text-base font-medium leading-none tracking-tight outline-none focus:bg-muted/60"
+              />
+            </>
+          ) : (
+            <DialogTitle>{recordTitle}</DialogTitle>
+          )}
         </DialogHeader>
 
         {state.kind === "playback" && (

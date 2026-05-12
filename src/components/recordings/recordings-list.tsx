@@ -135,11 +135,11 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
                   >
                     <div className="min-w-0">
                       <div className="truncate text-sm font-medium">
-                        {rec.pieceName ?? "General"}
-                        {rec.sectionLabel && (
-                          <span className="text-muted-foreground">
+                        {rec.audioTitle ?? rec.pieceName ?? "General"}
+                        {buildSecondary(rec) && (
+                          <span className="font-normal text-muted-foreground">
                             {" · "}
-                            {rec.sectionLabel}
+                            {buildSecondary(rec)}
                           </span>
                         )}
                       </div>
@@ -174,11 +174,20 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
   );
 }
 
+function buildSecondary(rec: Recording): string {
+  const parts: string[] = [];
+  if (rec.audioTitle && rec.pieceName) parts.push(rec.pieceName);
+  if (!rec.audioTitle && rec.sectionLabel) parts.push(rec.sectionLabel);
+  if (rec.pieceComposer) parts.push(rec.pieceComposer);
+  if (rec.collectionName) parts.push(rec.collectionName);
+  return parts.join(" · ");
+}
+
 function buildDownloadFilename(rec: Recording): string {
-  const parts = [rec.pieceName ?? "General", rec.sectionLabel, rec.date].filter(
-    Boolean
-  ) as string[];
-  const raw = parts.join(" - ");
+  const parts = rec.audioTitle
+    ? [rec.audioTitle, rec.date]
+    : [rec.pieceName ?? "General", rec.sectionLabel, rec.date];
+  const raw = (parts.filter(Boolean) as string[]).join(" - ");
   return raw.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
 }
 
