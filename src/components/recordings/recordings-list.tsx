@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RecordingPlayer } from "@/components/recordings/recording-player";
 import { cn } from "@/lib/utils";
 import type { Recording } from "@/app/(app)/recordings/actions";
+import { updateTaskAudioTitle } from "@/app/(app)/timer/audio-actions";
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
@@ -134,15 +135,18 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
                     )}
                   >
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-medium">
-                        {rec.audioTitle ?? rec.pieceName ?? "General"}
-                        {buildSecondary(rec) && (
-                          <span className="font-normal text-muted-foreground">
-                            {" · "}
-                            {buildSecondary(rec)}
-                          </span>
-                        )}
-                      </div>
+                      <RecordingTitle
+                        rec={rec}
+                        onTitleSaved={(nextTitle) =>
+                          setRecordings((prev) =>
+                            prev.map((r) =>
+                              r.taskId === rec.taskId
+                                ? { ...r, audioTitle: nextTitle }
+                                : r
+                            )
+                          )
+                        }
+                      />
                       {rec.taskText && (
                         <div className="truncate text-xs text-muted-foreground">
                           {rec.taskText}
@@ -169,6 +173,104 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
             </ul>
           </section>
         ))
+      )}
+    </div>
+  );
+}
+
+function recordingDefaultTitle(rec: Recording): string {
+  return [rec.pieceName, rec.sectionLabel].filter(Boolean).join(" — ");
+}
+
+function RecordingTitle({
+  rec,
+  onTitleSaved,
+}: {
+  rec: Recording;
+  onTitleSaved: (nextTitle: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const defaultTitle = recordingDefaultTitle(rec);
+  const displayPrimary = rec.audioTitle ?? rec.pieceName ?? "General";
+  const secondary = buildSecondary(rec);
+
+  const startEditing = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setValue(rec.audioTitle ?? defaultTitle);
+    setEditing(true);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.select();
+    });
+  };
+
+  const commit = async () => {
+    const trimmed = value.trim();
+    const next = trimmed ? trimmed : null;
+    setEditing(false);
+    if (next === (rec.audioTitle ?? null)) return;
+    setSaving(true);
+    try {
+      await updateTaskAudioTitle(rec.taskId, next);
+      onTitleSaved(next);
+    } catch {
+      // Leave local state alone; user can retry by clicking again.
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cancel = () => {
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        onBlur={() => void commit()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            cancel();
+          }
+        }}
+        placeholder={defaultTitle || "Recording"}
+        aria-label="Recording title"
+        className="-mx-1 w-full rounded-sm bg-transparent px-1 text-sm font-medium leading-tight outline-none ring-1 ring-ring/40 focus:ring-ring"
+      />
+    );
+  }
+
+  return (
+    <div className="truncate text-sm font-medium">
+      <button
+        type="button"
+        onClick={startEditing}
+        disabled={saving}
+        title="Rename recording"
+        className="-mx-1 rounded-sm px-1 text-left hover:bg-muted/60 disabled:opacity-60"
+      >
+        {displayPrimary}
+      </button>
+      {secondary && (
+        <span className="font-normal text-muted-foreground">
+          {" · "}
+          {secondary}
+        </span>
       )}
     </div>
   );
