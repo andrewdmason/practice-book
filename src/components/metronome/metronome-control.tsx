@@ -11,7 +11,7 @@ import {
 import { useMetronome } from "@/components/metronome/metronome-context";
 import { cn } from "@/lib/utils";
 
-export function MetronomeControl() {
+export function MetronomeControl({ onAccent = false }: { onAccent?: boolean }) {
   const { bpm, setBpm, isActive, toggle, beatPulse } = useMetronome();
   const pulseRef = useRef<SVGSVGElement>(null);
 
@@ -69,9 +69,13 @@ export function MetronomeControl() {
         onClick={toggle}
         className={cn(
           "flex size-7 items-center justify-center rounded-full transition-colors",
-          isActive
-            ? "text-primary hover:bg-muted"
-            : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          onAccent
+            ? isActive
+              ? "text-white hover:bg-white/15"
+              : "text-white/70 hover:text-white hover:bg-white/15"
+            : isActive
+              ? "text-primary hover:bg-muted"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
         )}
         aria-label={isActive ? "Stop metronome" : "Start metronome"}
       >
@@ -82,8 +86,16 @@ export function MetronomeControl() {
       <Popover>
         <PopoverTrigger
           className={cn(
-            "rounded px-1.5 py-0.5 font-mono text-sm tabular-nums transition-colors hover:bg-muted",
-            isActive ? "text-foreground" : "text-muted-foreground"
+            "rounded px-1.5 py-0.5 font-mono text-sm tabular-nums transition-colors",
+            onAccent
+              ? cn(
+                  "hover:bg-white/15",
+                  isActive ? "text-white" : "text-white/70"
+                )
+              : cn(
+                  "hover:bg-muted",
+                  isActive ? "text-foreground" : "text-muted-foreground"
+                )
           )}
         >
           {bpm}
