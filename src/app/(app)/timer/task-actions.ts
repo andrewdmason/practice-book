@@ -230,13 +230,13 @@ export async function updateTaskField(
 ) {
   const supabase = await createClient();
 
-  // When updating timer_seconds, also reset timer_remaining_seconds to match.
   // Skip revalidation for goal edits — the client holds optimistic state and
-  // no other UI on the feed depends on timer_seconds.
+  // also writes a recomputed timer_remaining_seconds via updateTaskRemaining
+  // so accrued time is preserved.
   if (field === "timer_seconds") {
     await supabase
       .from("practice_tasks")
-      .update({ timer_seconds: value as number, timer_remaining_seconds: value as number })
+      .update({ timer_seconds: value as number })
       .eq("id", taskId);
     return;
   }
