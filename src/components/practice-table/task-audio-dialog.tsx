@@ -85,6 +85,7 @@ type Props = {
   existingAudioTitle: string | null;
   pieceName: string | null;
   sectionLabel: string | null;
+  taskText: string | null;
   onAttached?: (
     path: string,
     durationSeconds: number,
@@ -119,6 +120,14 @@ function pickMimeType(): { mime: string; ext: "webm" | "m4a" } {
   return { mime: "", ext: "webm" };
 }
 
+export function formatNotesDefault(
+  sectionLabel: string | null,
+  taskText: string | null
+): string {
+  const text = taskText?.trim() || "Task Details";
+  return sectionLabel ? `${sectionLabel}: ${text}` : text;
+}
+
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
   const s = Math.floor(seconds);
@@ -139,13 +148,15 @@ export function TaskAudioDialog({
   existingAudioTitle,
   pieceName,
   sectionLabel,
+  taskText,
   onAttached,
   onTrimUpdated,
   onTitleUpdated,
   onDeleted,
 }: Props) {
-  const defaultTitle = [pieceName, sectionLabel].filter(Boolean).join(" — ");
-  const recordTitle = defaultTitle ? `Record: ${defaultTitle}` : "Record";
+  const defaultTitle = formatNotesDefault(sectionLabel, taskText);
+  const recordContext = [pieceName, sectionLabel].filter(Boolean).join(" — ");
+  const recordTitle = recordContext ? `Record: ${recordContext}` : "Record";
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const wavesurferRef = useRef<WaveSurferType | null>(null);
   const recordPluginRef = useRef<RecordPluginType | null>(null);
@@ -319,7 +330,7 @@ export function TaskAudioDialog({
       // length only becomes available after renderRecordedAudio's load.
       const duration = plugin.getDuration() / 1000;
       const blobUrl = URL.createObjectURL(blob);
-      setTitle(defaultTitle || "Recording");
+      setTitle(defaultTitle);
       titleAutoSelectRef.current = true;
       setState({ kind: "preview", blob, blobUrl, duration, mime: blob.type || mime });
     });
@@ -773,7 +784,7 @@ export function TaskAudioDialog({
           state.kind === "playback" ? (
             <>
               <DialogTitle className="sr-only">
-                {title || defaultTitle || "Recording"}
+                {title || defaultTitle}
               </DialogTitle>
               <input
                 ref={titleInputRef}
@@ -796,8 +807,8 @@ export function TaskAudioDialog({
                     e.currentTarget.blur();
                   }
                 }}
-                placeholder={defaultTitle || "Recording"}
-                aria-label="Recording title"
+                placeholder={defaultTitle}
+                aria-label="Notes"
                 className="-my-0.5 -ml-1 w-[calc(100%-4rem)] rounded-sm bg-transparent px-1 py-0.5 text-base font-medium leading-none tracking-tight outline-none focus:bg-muted/60"
               />
             </>

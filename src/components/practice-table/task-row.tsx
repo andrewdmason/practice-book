@@ -871,6 +871,7 @@ export function TaskRow({
         existingAudioTitle={task.audio_title}
         pieceName={task.piece_name}
         sectionLabel={optimisticSection.label}
+        taskText={text}
         onAttached={(path, duration, trimStart, trimEnd, audioTitle) => {
           emitOptimisticTaskUpdate(task.id, {
             audio_path: path,
