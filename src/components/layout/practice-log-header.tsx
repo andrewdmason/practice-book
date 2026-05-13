@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import type { Piece } from "@/lib/types";
+import { groupPiecesForMenu } from "@/lib/piece-menu";
 
 const FOCUS_VIEW = "next-session";
 
@@ -185,49 +185,10 @@ export function PracticeLogHeader() {
     ]
   );
 
-  type MenuEntry =
-    | { kind: "piece"; piece: Piece }
-    | { kind: "collection"; collectionId: string; name: string; pieces: Piece[] };
-
-  const menuEntries = useMemo<MenuEntry[]>(() => {
-    const piecesByCollection = new Map<string, Piece[]>();
-    for (const piece of activePieces) {
-      if (!piece.collection_id) continue;
-      const list = piecesByCollection.get(piece.collection_id) ?? [];
-      list.push(piece);
-      piecesByCollection.set(piece.collection_id, list);
-    }
-
-    const entries: MenuEntry[] = [];
-    const seenCollections = new Set<string>();
-    for (const piece of activePieces) {
-      const collectionId = piece.collection_id;
-      const collectionName = collectionId
-        ? collectionsById[collectionId]
-        : undefined;
-      const collectionPieces = collectionId
-        ? piecesByCollection.get(collectionId)
-        : undefined;
-      if (
-        collectionId &&
-        collectionName &&
-        collectionPieces &&
-        collectionPieces.length > 1
-      ) {
-        if (seenCollections.has(collectionId)) continue;
-        seenCollections.add(collectionId);
-        entries.push({
-          kind: "collection",
-          collectionId,
-          name: collectionName,
-          pieces: collectionPieces,
-        });
-      } else {
-        entries.push({ kind: "piece", piece });
-      }
-    }
-    return entries;
-  }, [activePieces, collectionsById]);
+  const menuEntries = useMemo(
+    () => groupPiecesForMenu(activePieces, collectionsById),
+    [activePieces, collectionsById]
+  );
 
   const title = focusedPiece
     ? `Practice Log: ${focusedPiece.name}`
@@ -272,7 +233,7 @@ export function PracticeLogHeader() {
                   {focusedPiece?.name ?? "Pieces"}
                   <ChevronDownIcon className="size-3" />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="max-h-80">
+                <DropdownMenuContent align="start" className="max-h-80 w-56">
                   {menuEntries.map((entry) =>
                     entry.kind === "piece" ? (
                       <DropdownMenuItem
