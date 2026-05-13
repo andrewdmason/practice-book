@@ -1,46 +1,99 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { RecordingPlayer } from "@/components/recordings/recording-player";
+import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  PlayIcon,
+  PauseIcon,
+  MoreVerticalIcon,
+  Trash2Icon,
+  DownloadIcon,
+  Scissors,
+  ArrowUpIcon,
+  ArrowDownIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Recording } from "@/app/(app)/recordings/actions";
-import { updateTaskAudioTitle } from "@/app/(app)/timer/audio-actions";
+import {
+  createSignedPlaybackUrl,
+  deleteTaskAudio,
+  updateTaskAudioTitle,
+} from "@/app/(app)/timer/audio-actions";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { TaskAudioDialog } from "@/components/practice-table/task-audio-dialog";
+import { RecordingsPlayerBar } from "@/components/recordings/recordings-player-bar";
+
+type SortKey = "piece" | "time" | "composer" | "group" | "notes" | "date";
+type SortDir = "asc" | "desc";
+
+const GENERAL_KEY = "__general__";
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
+  const s = Math.floor(seconds);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${r.toString().padStart(2, "0")}`;
+}
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
-
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().slice(0, 10);
-
   if (dateStr === todayStr) return "Today";
   if (dateStr === yesterdayStr) return "Yesterday";
-
   return date.toLocaleDateString("en-US", {
-    weekday: "short",
     month: "short",
     day: "numeric",
     year: "numeric",
   });
 }
 
-type PieceOption = {
-  key: string;
-  label: string;
-};
+function comparatorFor(key: SortKey): (a: Recording, b: Recording) => number {
+  const str = (v: string | null | undefined) => (v ?? "").toLocaleLowerCase();
+  switch (key) {
+    case "piece":
+      return (a, b) =>
+        str(a.pieceName ?? "General").localeCompare(str(b.pieceName ?? "General"));
+    case "time":
+      return (a, b) => a.durationSeconds - b.durationSeconds;
+    case "composer":
+      return (a, b) => str(a.pieceComposer).localeCompare(str(b.pieceComposer));
+    case "group":
+      return (a, b) =>
+        str(a.collectionName).localeCompare(str(b.collectionName));
+    case "notes":
+      return (a, b) => str(a.audioTitle).localeCompare(str(b.audioTitle));
+    case "date":
+      return (a, b) => a.createdAt.localeCompare(b.createdAt);
+  }
+}
 
-const GENERAL_KEY = "__general__";
+function buildDownloadFilename(rec: Recording): string {
+  const parts = rec.audioTitle
+    ? [rec.audioTitle, rec.date]
+    : [rec.pieceName ?? "General", rec.sectionLabel, rec.date];
+  const raw = (parts.filter(Boolean) as string[]).join(" - ");
+  return raw.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+}
 
 export function RecordingsList({ initial }: { initial: Recording[] }) {
   const [recordings, setRecordings] = useState<Recording[]>(initial);
   const [filterKey, setFilterKey] = useState<string | null>(null);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(
-    initial[0]?.taskId ?? null
-  );
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [trimDialogTaskId, setTrimDialogTaskId] = useState<string | null>(null);
 
-  const pieceOptions = useMemo<PieceOption[]>(() => {
+  const pieceOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const rec of recordings) {
       const key = rec.pieceName ?? GENERAL_KEY;
@@ -50,33 +103,86 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
     return Array.from(seen.entries()).map(([key, label]) => ({ key, label }));
   }, [recordings]);
 
-  const filtered = useMemo(() => {
-    if (!filterKey) return recordings;
-    return recordings.filter(
-      (rec) => (rec.pieceName ?? GENERAL_KEY) === filterKey
-    );
-  }, [recordings, filterKey]);
+  const visible = useMemo(() => {
+    const filtered = filterKey
+      ? recordings.filter(
+          (r) => (r.pieceName ?? GENERAL_KEY) === filterKey
+        )
+      : recordings;
+    const cmp = comparatorFor(sortKey);
+    const sorted = [...filtered].sort(cmp);
+    if (sortDir === "desc") sorted.reverse();
+    return sorted;
+  }, [recordings, filterKey, sortKey, sortDir]);
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, Recording[]>();
-    for (const rec of filtered) {
-      if (!map.has(rec.date)) map.set(rec.date, []);
-      map.get(rec.date)!.push(rec);
-    }
-    return Array.from(map.entries());
-  }, [filtered]);
+  const currentRecording = useMemo(
+    () => recordings.find((r) => r.taskId === currentTaskId) ?? null,
+    [recordings, currentTaskId]
+  );
 
-  // Keep selection inside the currently visible set.
-  useEffect(() => {
-    if (filtered.length === 0) {
-      if (selectedTaskId !== null) setSelectedTaskId(null);
-      return;
-    }
-    if (selectedTaskId && filtered.some((r) => r.taskId === selectedTaskId)) {
-      return;
-    }
-    setSelectedTaskId(filtered[0].taskId);
-  }, [filtered, selectedTaskId]);
+  const trimDialogRec = useMemo(
+    () => recordings.find((r) => r.taskId === trimDialogTaskId) ?? null,
+    [recordings, trimDialogTaskId]
+  );
+
+  const handlePlayRow = useCallback(
+    (rec: Recording) => {
+      if (currentTaskId === rec.taskId) {
+        setIsPlaying((p) => !p);
+        return;
+      }
+      setCurrentTaskId(rec.taskId);
+      setIsPlaying(true);
+    },
+    [currentTaskId]
+  );
+
+  const handleTitleSaved = useCallback(
+    (taskId: string, nextTitle: string | null) => {
+      setRecordings((prev) =>
+        prev.map((r) =>
+          r.taskId === taskId ? { ...r, audioTitle: nextTitle } : r
+        )
+      );
+    },
+    []
+  );
+
+  const handleDeleted = useCallback(
+    (taskId: string) => {
+      setRecordings((prev) => prev.filter((r) => r.taskId !== taskId));
+      if (currentTaskId === taskId) {
+        setCurrentTaskId(null);
+        setIsPlaying(false);
+      }
+    },
+    [currentTaskId]
+  );
+
+  const handleTrimUpdated = useCallback(
+    (taskId: string, start: number | null, end: number | null) => {
+      setRecordings((prev) =>
+        prev.map((r) =>
+          r.taskId === taskId
+            ? { ...r, trimStartSeconds: start, trimEndSeconds: end }
+            : r
+        )
+      );
+    },
+    []
+  );
+
+  const toggleSort = useCallback(
+    (key: SortKey) => {
+      if (sortKey !== key) {
+        setSortKey(key);
+        setSortDir(key === "date" || key === "time" ? "desc" : "asc");
+        return;
+      }
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    },
+    [sortKey]
+  );
 
   if (recordings.length === 0) {
     return (
@@ -87,7 +193,7 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 pb-24">
       {pieceOptions.length > 1 && (
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
           <FilterPill
@@ -110,71 +216,255 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
         </div>
       )}
 
-      {grouped.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
           No recordings for this piece.
         </div>
       ) : (
-        grouped.map(([date, items]) => (
-          <section key={date}>
-            <h3 className="mb-2 text-sm font-medium text-muted-foreground">
-              {formatDate(date)}
-            </h3>
-            <ul className="space-y-3">
-              {items.map((rec) => {
-                const isSelected = rec.taskId === selectedTaskId;
-                return (
-                  <li
-                    key={rec.taskId}
-                    onClick={() => setSelectedTaskId(rec.taskId)}
-                    className={cn(
-                      "cursor-pointer rounded-lg border bg-card p-4 space-y-3 transition-[box-shadow,border-color]",
-                      isSelected
-                        ? "border-primary ring-2 ring-primary/30"
-                        : "hover:border-muted-foreground/40"
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <RecordingTitle
-                        rec={rec}
-                        onTitleSaved={(nextTitle) =>
-                          setRecordings((prev) =>
-                            prev.map((r) =>
-                              r.taskId === rec.taskId
-                                ? { ...r, audioTitle: nextTitle }
-                                : r
-                            )
-                          )
-                        }
-                      />
-                      {rec.taskText && (
-                        <div className="truncate text-xs text-muted-foreground">
-                          {rec.taskText}
-                        </div>
+        <>
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-hidden rounded-lg border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="w-10" />
+                  <SortHeader
+                    label="Piece"
+                    active={sortKey === "piece"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("piece")}
+                  />
+                  <SortHeader
+                    label="Time"
+                    active={sortKey === "time"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("time")}
+                    className="w-20"
+                  />
+                  <SortHeader
+                    label="Composer"
+                    active={sortKey === "composer"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("composer")}
+                  />
+                  <SortHeader
+                    label="Group"
+                    active={sortKey === "group"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("group")}
+                  />
+                  <SortHeader
+                    label="Notes"
+                    active={sortKey === "notes"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("notes")}
+                  />
+                  <SortHeader
+                    label="Date"
+                    active={sortKey === "date"}
+                    dir={sortDir}
+                    onClick={() => toggleSort("date")}
+                    className="w-32"
+                  />
+                  <th className="w-10" />
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((rec) => {
+                  const isCurrent = rec.taskId === currentTaskId;
+                  const showPause = isCurrent && isPlaying;
+                  return (
+                    <tr
+                      key={rec.taskId}
+                      className={cn(
+                        "border-t transition-colors",
+                        isCurrent
+                          ? "bg-primary/5"
+                          : "hover:bg-muted/30"
                       )}
+                    >
+                      <td className="px-2 py-2">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => handlePlayRow(rec)}
+                          aria-label={showPause ? "Pause" : "Play"}
+                          title={showPause ? "Pause" : "Play"}
+                        >
+                          {showPause ? <PauseIcon /> : <PlayIcon />}
+                        </Button>
+                      </td>
+                      <td className="px-3 py-2 truncate max-w-[14rem]">
+                        {rec.pieceName ?? (
+                          <span className="text-muted-foreground">General</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums text-muted-foreground">
+                        {formatDuration(rec.durationSeconds)}
+                      </td>
+                      <td className="px-3 py-2 truncate max-w-[12rem] text-muted-foreground">
+                        {rec.pieceComposer ?? ""}
+                      </td>
+                      <td className="px-3 py-2 truncate max-w-[12rem] text-muted-foreground">
+                        {rec.collectionName ?? ""}
+                      </td>
+                      <td className="px-3 py-2 max-w-[16rem]">
+                        <NotesCell
+                          rec={rec}
+                          onSaved={(t) => handleTitleSaved(rec.taskId, t)}
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                        {formatDate(rec.date)}
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        <RowMenu
+                          rec={rec}
+                          onDeleted={() => handleDeleted(rec.taskId)}
+                          onEditTrim={() => setTrimDialogTaskId(rec.taskId)}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile card list */}
+          <ul className="md:hidden space-y-2">
+            {visible.map((rec) => {
+              const isCurrent = rec.taskId === currentTaskId;
+              const showPause = isCurrent && isPlaying;
+              return (
+                <li
+                  key={rec.taskId}
+                  className={cn(
+                    "rounded-lg border p-3 transition-colors",
+                    isCurrent ? "border-primary/60 bg-primary/5" : "bg-card"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      onClick={() => handlePlayRow(rec)}
+                      aria-label={showPause ? "Pause" : "Play"}
+                      title={showPause ? "Pause" : "Play"}
+                    >
+                      {showPause ? <PauseIcon /> : <PlayIcon />}
+                    </Button>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">
+                        {rec.pieceName ?? "General"}
+                      </div>
+                      <NotesCell
+                        rec={rec}
+                        onSaved={(t) => handleTitleSaved(rec.taskId, t)}
+                      />
                     </div>
-                    <RecordingPlayer
-                      taskId={rec.taskId}
-                      audioPath={rec.audioPath}
-                      initialDuration={rec.durationSeconds}
-                      trimStartSeconds={rec.trimStartSeconds}
-                      trimEndSeconds={rec.trimEndSeconds}
-                      selected={isSelected}
-                      downloadFilename={buildDownloadFilename(rec)}
-                      onDeleted={() =>
-                        setRecordings((prev) =>
-                          prev.filter((r) => r.taskId !== rec.taskId)
-                        )
-                      }
+                    <RowMenu
+                      rec={rec}
+                      onDeleted={() => handleDeleted(rec.taskId)}
+                      onEditTrim={() => setTrimDialogTaskId(rec.taskId)}
                     />
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                    {rec.pieceComposer && (
+                      <span className="truncate">{rec.pieceComposer}</span>
+                    )}
+                    {rec.collectionName && (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span className="truncate">{rec.collectionName}</span>
+                      </>
+                    )}
+                    <span aria-hidden>·</span>
+                    <span className="whitespace-nowrap">
+                      {formatDate(rec.date)}
+                    </span>
+                    <span aria-hidden>·</span>
+                    <span className="tabular-nums whitespace-nowrap">
+                      {formatDuration(rec.durationSeconds)}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+
+      <RecordingsPlayerBar
+        recording={currentRecording}
+        isPlaying={isPlaying}
+        onPlayingChange={setIsPlaying}
+        onClose={() => {
+          setCurrentTaskId(null);
+          setIsPlaying(false);
+        }}
+      />
+
+      {trimDialogRec && (
+        <TaskAudioDialog
+          taskId={trimDialogRec.taskId}
+          open={trimDialogTaskId !== null}
+          onOpenChange={(open) => {
+            if (!open) setTrimDialogTaskId(null);
+          }}
+          initialMode="playback"
+          existingAudioPath={trimDialogRec.audioPath}
+          existingDurationSeconds={trimDialogRec.durationSeconds}
+          existingTrimStartSeconds={trimDialogRec.trimStartSeconds}
+          existingTrimEndSeconds={trimDialogRec.trimEndSeconds}
+          existingAudioTitle={trimDialogRec.audioTitle}
+          pieceName={trimDialogRec.pieceName}
+          sectionLabel={trimDialogRec.sectionLabel}
+          onTrimUpdated={(start, end) =>
+            handleTrimUpdated(trimDialogRec.taskId, start, end)
+          }
+          onTitleUpdated={(title) =>
+            handleTitleSaved(trimDialogRec.taskId, title)
+          }
+          onDeleted={() => handleDeleted(trimDialogRec.taskId)}
+        />
       )}
     </div>
+  );
+}
+
+function SortHeader({
+  label,
+  active,
+  dir,
+  onClick,
+  className,
+}: {
+  label: string;
+  active: boolean;
+  dir: SortDir;
+  onClick: () => void;
+  className?: string;
+}) {
+  return (
+    <th className={cn("px-3 py-2 text-left font-medium", className)}>
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "inline-flex items-center gap-1 text-xs uppercase tracking-wide",
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+        )}
+      >
+        <span>{label}</span>
+        {active &&
+          (dir === "asc" ? (
+            <ArrowUpIcon className="size-3" />
+          ) : (
+            <ArrowDownIcon className="size-3" />
+          ))}
+      </button>
+    </th>
   );
 }
 
@@ -182,24 +472,22 @@ function recordingDefaultTitle(rec: Recording): string {
   return [rec.pieceName, rec.sectionLabel].filter(Boolean).join(" — ");
 }
 
-function RecordingTitle({
+function NotesCell({
   rec,
-  onTitleSaved,
+  onSaved,
 }: {
   rec: Recording;
-  onTitleSaved: (nextTitle: string | null) => void;
+  onSaved: (nextTitle: string | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const defaultTitle = recordingDefaultTitle(rec);
-  const displayPrimary = rec.audioTitle ?? rec.pieceName ?? "General";
-  const secondary = buildSecondary(rec);
 
   const startEditing = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setValue(rec.audioTitle ?? defaultTitle);
+    setValue(rec.audioTitle ?? "");
     setEditing(true);
     requestAnimationFrame(() => {
       const el = inputRef.current;
@@ -217,16 +505,12 @@ function RecordingTitle({
     setSaving(true);
     try {
       await updateTaskAudioTitle(rec.taskId, next);
-      onTitleSaved(next);
+      onSaved(next);
     } catch {
-      // Leave local state alone; user can retry by clicking again.
+      // Leave local state alone; user can retry.
     } finally {
       setSaving(false);
     }
-  };
-
-  const cancel = () => {
-    setEditing(false);
   };
 
   if (editing) {
@@ -245,52 +529,119 @@ function RecordingTitle({
           } else if (e.key === "Escape") {
             e.preventDefault();
             e.stopPropagation();
-            cancel();
+            setEditing(false);
           }
         }}
-        placeholder={defaultTitle || "Recording"}
-        aria-label="Recording title"
-        className="-mx-1 w-full rounded-sm bg-transparent px-1 text-sm font-medium leading-tight outline-none ring-1 ring-ring/40 focus:ring-ring"
+        placeholder={defaultTitle || "Add a note"}
+        aria-label="Recording note"
+        className="-mx-1 w-full rounded-sm bg-transparent px-1 text-sm outline-none ring-1 ring-ring/40 focus:ring-ring"
       />
     );
   }
 
+  const display = rec.audioTitle;
   return (
-    <div className="truncate text-sm font-medium">
-      <button
-        type="button"
-        onClick={startEditing}
-        disabled={saving}
-        title="Rename recording"
-        className="-mx-1 rounded-sm px-1 text-left hover:bg-muted/60 disabled:opacity-60"
-      >
-        {displayPrimary}
-      </button>
-      {secondary && (
-        <span className="font-normal text-muted-foreground">
-          {" · "}
-          {secondary}
-        </span>
+    <button
+      type="button"
+      onClick={startEditing}
+      disabled={saving}
+      title="Edit note"
+      className={cn(
+        "-mx-1 block w-full truncate rounded-sm px-1 text-left hover:bg-muted/60 disabled:opacity-60",
+        display ? "text-foreground" : "text-muted-foreground italic"
       )}
-    </div>
+    >
+      {display || "Add a note"}
+    </button>
   );
 }
 
-function buildSecondary(rec: Recording): string {
-  const parts: string[] = [];
-  if (rec.audioTitle && rec.pieceName) parts.push(rec.pieceName);
-  if (!rec.audioTitle && rec.sectionLabel) parts.push(rec.sectionLabel);
-  if (rec.pieceComposer) parts.push(rec.pieceComposer);
-  if (rec.collectionName) parts.push(rec.collectionName);
-  return parts.join(" · ");
-}
+function RowMenu({
+  rec,
+  onDeleted,
+  onEditTrim,
+}: {
+  rec: Recording;
+  onDeleted: () => void;
+  onEditTrim: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
-function buildDownloadFilename(rec: Recording): string {
-  const parts = rec.audioTitle
-    ? [rec.audioTitle, rec.date]
-    : [rec.pieceName ?? "General", rec.sectionLabel, rec.date];
-  const raw = (parts.filter(Boolean) as string[]).join(" - ");
-  return raw.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim();
+  const onDownload = async () => {
+    setOpen(false);
+    try {
+      const signedUrl = await createSignedPlaybackUrl(rec.audioPath);
+      const res = await fetch(signedUrl);
+      if (!res.ok) throw new Error(`Download failed (${res.status})`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const basename = rec.audioPath.split("/").pop() ?? "recording";
+      const ext = basename.includes(".") ? basename.split(".").pop()! : "webm";
+      const name = buildDownloadFilename(rec)
+        ? `${buildDownloadFilename(rec)}.${ext}`
+        : basename;
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      // Silent — surfacing this in the row UI would be noisy.
+    }
+  };
+
+  const onDelete = async () => {
+    setOpen(false);
+    try {
+      await deleteTaskAudio(rec.taskId);
+      onDeleted();
+    } catch {
+      // No-op; UI stays as-is.
+    }
+  };
+
+  return (
+    <>
+      <Button
+        ref={triggerRef}
+        variant="ghost"
+        size="icon-sm"
+        onClick={() => setOpen((o) => !o)}
+        aria-label="Recording options"
+      >
+        <MoreVerticalIcon />
+      </Button>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenuContent
+          anchor={triggerRef}
+          align="end"
+          side="bottom"
+          className="w-40"
+        >
+          <DropdownMenuItem
+            onClick={() => {
+              setOpen(false);
+              onEditTrim();
+            }}
+          >
+            <Scissors />
+            Edit trim
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onDownload}>
+            <DownloadIcon />
+            Download
+          </DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onClick={onDelete}>
+            <Trash2Icon />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  );
 }
 
 function FilterPill({
