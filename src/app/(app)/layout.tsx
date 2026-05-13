@@ -1,5 +1,4 @@
 import { Header } from "@/components/layout/header";
-import { PracticeBar } from "@/components/layout/practice-bar";
 import { TransportBar } from "@/components/layout/transport-bar";
 import { MetronomeProvider } from "@/components/metronome/metronome-context";
 import { TaskTimerProvider } from "@/components/timer/task-timer-context";
@@ -18,17 +17,22 @@ export default async function AppLayout({
 }) {
   const supabase = await createClient();
 
-  const [{ data: activePieces }, todaySummary] = await Promise.all([
-    supabase
-      .from("pieces")
-      .select(
-        "id, collection_id, name, composer, status, kind, sort_order, notes, target_tempo, created_at, updated_at"
-      )
-      .eq("status", "active")
-      .order("sort_order")
-      .order("name"),
-    getTodaySummary(),
-  ]);
+  const [{ data: activePieces }, { data: collections }, todaySummary] =
+    await Promise.all([
+      supabase
+        .from("pieces")
+        .select(
+          "id, collection_id, name, composer, status, kind, sort_order, notes, target_tempo, created_at, updated_at"
+        )
+        .eq("status", "active")
+        .order("sort_order")
+        .order("name"),
+      supabase.from("collections").select("id, name"),
+      getTodaySummary(),
+    ]);
+
+  const collectionsById: Record<string, string> = {};
+  for (const c of collections ?? []) collectionsById[c.id] = c.name;
 
   const initialDailySeconds = todaySummary.reduce(
     (sum, e) => sum + e.total_seconds,
@@ -44,10 +48,10 @@ export default async function AppLayout({
             <VideoProvider>
               <TaskTimerProvider
                 activePieces={(activePieces as Piece[]) ?? []}
+                collectionsById={collectionsById}
                 initialDailySeconds={initialDailySeconds}
               >
                 <Header />
-                <PracticeBar />
                 <div className="flex flex-1 flex-col">{children}</div>
                 <TransportBar />
               </TaskTimerProvider>

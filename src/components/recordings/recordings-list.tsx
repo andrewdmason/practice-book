@@ -10,6 +10,7 @@ import {
   Scissors,
   ArrowUpIcon,
   ArrowDownIcon,
+  ChevronDownIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Recording } from "@/app/(app)/recordings/actions";
@@ -23,6 +24,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   TaskAudioDialog,
@@ -96,15 +101,54 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [trimDialogTaskId, setTrimDialogTaskId] = useState<string | null>(null);
 
-  const pieceOptions = useMemo(() => {
-    const seen = new Map<string, string>();
+  type PieceOption = { key: string; label: string; collectionName: string | null };
+  type MenuEntry =
+    | { kind: "piece"; option: PieceOption }
+    | { kind: "collection"; name: string; options: PieceOption[] };
+
+  const pieceOptions = useMemo<PieceOption[]>(() => {
+    const seen = new Map<string, PieceOption>();
     for (const rec of recordings) {
       const key = rec.pieceName ?? GENERAL_KEY;
-      const label = rec.pieceName ?? "General";
-      if (!seen.has(key)) seen.set(key, label);
+      if (seen.has(key)) continue;
+      seen.set(key, {
+        key,
+        label: rec.pieceName ?? "General",
+        collectionName: rec.pieceName ? rec.collectionName : null,
+      });
     }
-    return Array.from(seen.entries()).map(([key, label]) => ({ key, label }));
+    return Array.from(seen.values());
   }, [recordings]);
+
+  const menuEntries = useMemo<MenuEntry[]>(() => {
+    const byCollection = new Map<string, PieceOption[]>();
+    for (const opt of pieceOptions) {
+      if (!opt.collectionName) continue;
+      const list = byCollection.get(opt.collectionName) ?? [];
+      list.push(opt);
+      byCollection.set(opt.collectionName, list);
+    }
+    const entries: MenuEntry[] = [];
+    const seenCollections = new Set<string>();
+    for (const opt of pieceOptions) {
+      const collection = opt.collectionName;
+      const collectionOptions = collection
+        ? byCollection.get(collection)
+        : undefined;
+      if (collection && collectionOptions && collectionOptions.length > 1) {
+        if (seenCollections.has(collection)) continue;
+        seenCollections.add(collection);
+        entries.push({
+          kind: "collection",
+          name: collection,
+          options: collectionOptions,
+        });
+      } else {
+        entries.push({ kind: "piece", option: opt });
+      }
+    }
+    return entries;
+  }, [pieceOptions]);
 
   const visible = useMemo(() => {
     const filtered = filterKey
@@ -199,23 +243,63 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
     <div className="space-y-4 pb-24">
       {pieceOptions.length > 1 && (
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-          <FilterPill
-            active={filterKey === null}
-            onClick={() => setFilterKey(null)}
-          >
-            All
-          </FilterPill>
-          {pieceOptions.map((opt) => (
-            <FilterPill
-              key={opt.key}
-              active={filterKey === opt.key}
-              onClick={() =>
-                setFilterKey((prev) => (prev === opt.key ? null : opt.key))
-              }
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
+                filterKey
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+              )}
             >
-              {opt.label}
-            </FilterPill>
-          ))}
+              {pieceOptions.find((opt) => opt.key === filterKey)?.label ??
+                "Pieces"}
+              <ChevronDownIcon className="size-3" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="max-h-80">
+              {menuEntries.map((entry) =>
+                entry.kind === "piece" ? (
+                  <DropdownMenuItem
+                    key={entry.option.key}
+                    onClick={() =>
+                      setFilterKey((prev) =>
+                        prev === entry.option.key ? null : entry.option.key
+                      )
+                    }
+                    className={cn(filterKey === entry.option.key && "bg-accent")}
+                  >
+                    {entry.option.label}
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuSub key={`collection:${entry.name}`}>
+                    <DropdownMenuSubTrigger
+                      className={cn(
+                        entry.options.some((opt) => opt.key === filterKey) &&
+                          "bg-accent"
+                      )}
+                    >
+                      {entry.name}
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      {entry.options.map((opt) => (
+                        <DropdownMenuItem
+                          key={opt.key}
+                          onClick={() =>
+                            setFilterKey((prev) =>
+                              prev === opt.key ? null : opt.key
+                            )
+                          }
+                          className={cn(filterKey === opt.key && "bg-accent")}
+                        >
+                          {opt.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                )
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )}
 
@@ -648,26 +732,3 @@ function RowMenu({
   );
 }
 
-function FilterPill({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
-        active
-          ? "bg-primary text-primary-foreground"
-          : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-      )}
-    >
-      {children}
-    </button>
-  );
-}
