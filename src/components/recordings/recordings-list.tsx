@@ -24,7 +24,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { TaskAudioDialog } from "@/components/practice-table/task-audio-dialog";
+import {
+  TaskAudioDialog,
+  formatNotesDefault,
+} from "@/components/practice-table/task-audio-dialog";
 import { RecordingsPlayerBar } from "@/components/recordings/recordings-player-bar";
 
 type SortKey = "piece" | "time" | "composer" | "group" | "notes" | "date";
@@ -420,6 +423,7 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
           existingAudioTitle={trimDialogRec.audioTitle}
           pieceName={trimDialogRec.pieceName}
           sectionLabel={trimDialogRec.sectionLabel}
+          taskText={trimDialogRec.taskText}
           onTrimUpdated={(start, end) =>
             handleTrimUpdated(trimDialogRec.taskId, start, end)
           }
@@ -469,7 +473,7 @@ function SortHeader({
 }
 
 function recordingDefaultTitle(rec: Recording): string {
-  return [rec.pieceName, rec.sectionLabel].filter(Boolean).join(" — ");
+  return formatNotesDefault(rec.sectionLabel, rec.taskText);
 }
 
 function NotesCell({
