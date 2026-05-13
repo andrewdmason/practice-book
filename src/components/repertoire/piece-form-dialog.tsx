@@ -248,7 +248,12 @@ export function PieceFormDialog({
                 }}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="None (standalone)" />
+                  <SelectValue placeholder="None (standalone)">
+                    {workId
+                      ? works.find((w) => w.id === workId)?.name ??
+                        "None (standalone)"
+                      : undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">None (standalone)</SelectItem>

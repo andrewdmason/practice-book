@@ -123,7 +123,11 @@ export function WorkPicker({
         }}
       >
         <SelectTrigger className="h-7 text-sm">
-          <SelectValue placeholder="None (standalone)" />
+          <SelectValue placeholder="None (standalone)">
+            {work?.id
+              ? works.find((w) => w.id === work.id)?.name ?? "None (standalone)"
+              : undefined}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="">None (standalone)</SelectItem>
