@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArchiveIcon, PencilIcon, RotateCcwIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,15 +8,18 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "./status-badge";
 import { ArchiveDialog } from "./archive-dialog";
+import { WorkPicker } from "./work-picker";
 import { updatePieceDetails, updatePieceStatus } from "@/app/(app)/repertoire/actions";
-import type { Piece, Collection } from "@/lib/types";
+import type { Piece, Work } from "@/lib/types";
 
 export function PieceDetailHeader({
   piece,
-  collection,
+  work,
+  works,
 }: {
   piece: Piece;
-  collection: Collection | null;
+  work: Work | null;
+  works: Work[];
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -133,17 +135,13 @@ export function PieceDetailHeader({
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-muted-foreground">
         {composer && <span>{composer}</span>}
-        {collection && (
-          <>
-            <span>&middot;</span>
-            <Link
-              href={`/repertoire/collections/${collection.id}`}
-              className="hover:text-foreground transition-colors"
-            >
-              {collection.name}
-            </Link>
-          </>
-        )}
+        {composer && <span>&middot;</span>}
+        <WorkPicker
+          piece={piece}
+          work={work}
+          works={works}
+          composer={composer}
+        />
       </div>
       {notes && (
         <p className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap">

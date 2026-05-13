@@ -14,16 +14,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  createCollection,
-  updateCollection,
+  createWork,
+  updateWork,
 } from "@/app/(app)/repertoire/actions";
-import type { Collection } from "@/lib/types";
+import type { Work } from "@/lib/types";
 
-export function CollectionFormDialog({
-  collection,
+export function WorkFormDialog({
+  work,
   trigger,
 }: {
-  collection?: Collection;
+  work?: Work;
   trigger: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -37,9 +37,9 @@ export function CollectionFormDialog({
 
     const formData = new FormData(e.currentTarget);
 
-    const result = collection
-      ? await updateCollection(collection.id, formData)
-      : await createCollection(formData);
+    const result = work
+      ? await updateWork(work.id, formData)
+      : await createWork(formData);
 
     setPending(false);
 
@@ -63,35 +63,35 @@ export function CollectionFormDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {collection ? "Edit Collection" : "Add Collection"}
+            {work ? "Edit Work" : "Add Work"}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="collection-name">Name</Label>
+            <Label htmlFor="work-name">Name</Label>
             <Input
-              id="collection-name"
+              id="work-name"
               name="name"
               required
-              defaultValue={collection?.name ?? ""}
+              defaultValue={work?.name ?? ""}
               placeholder="e.g. Goldberg Variations"
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="collection-composer">Composer</Label>
+            <Label htmlFor="work-composer">Composer</Label>
             <Input
-              id="collection-composer"
+              id="work-composer"
               name="composer"
-              defaultValue={collection?.composer ?? ""}
+              defaultValue={work?.composer ?? ""}
               placeholder="e.g. J.S. Bach"
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="collection-notes">Notes</Label>
+            <Label htmlFor="work-notes">Notes</Label>
             <Textarea
-              id="collection-notes"
+              id="work-notes"
               name="notes"
-              defaultValue={collection?.notes ?? ""}
+              defaultValue={work?.notes ?? ""}
               placeholder="Optional notes..."
               className="min-h-20"
             />
@@ -101,9 +101,9 @@ export function CollectionFormDialog({
             <Button type="submit" disabled={pending}>
               {pending
                 ? "Saving..."
-                : collection
+                : work
                   ? "Save Changes"
-                  : "Add Collection"}
+                  : "Add Work"}
             </Button>
           </DialogFooter>
         </form>

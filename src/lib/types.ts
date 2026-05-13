@@ -8,7 +8,7 @@ export const SIGHT_READING_PIECE_ID = "00000000-0000-0000-0000-000000000002";
 export const SYSTEM_PIECE_IDS = [TECHNIQUE_PIECE_ID, SIGHT_READING_PIECE_ID] as const;
 
 // Database row types
-export type Collection = {
+export type Work = {
   id: string;
   name: string;
   composer: string | null;
@@ -19,12 +19,11 @@ export type Collection = {
 
 export type Piece = {
   id: string;
-  collection_id: string | null;
+  work_id: string | null;
   name: string;
   composer: string | null;
   status: PieceStatus;
   kind: PieceKind;
-  sort_order: number;
   notes: string | null;
   target_tempo: number | null;
   created_at: string;
@@ -47,7 +46,7 @@ export type LessonTimeSummary = {
 };
 
 // Composite types for views
-export type CollectionWithPieces = Collection & {
+export type WorkWithPieces = Work & {
   pieces: Piece[];
 };
 
@@ -193,7 +192,7 @@ export type CompletedAssignmentMarker = {
 // Search types
 export type SearchResultType =
   | "piece"
-  | "collection"
+  | "work"
   | "practice_entry"
   | "lesson";
 
@@ -212,7 +211,7 @@ export type TypeaheadResult = {
   id: string;
   name: string;
   composer: string | null;
-  type: "piece" | "collection";
+  type: "piece" | "work";
   url: string;
 };
 

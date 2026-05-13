@@ -29,7 +29,7 @@ export function PracticeLogHeader() {
 
   const {
     activePieces,
-    collectionsById,
+    worksById,
     focusedPieceId,
     setFocusedPieceId,
     activePieceInstance,
@@ -187,47 +187,47 @@ export function PracticeLogHeader() {
 
   type MenuEntry =
     | { kind: "piece"; piece: Piece }
-    | { kind: "collection"; collectionId: string; name: string; pieces: Piece[] };
+    | { kind: "work"; workId: string; name: string; pieces: Piece[] };
 
   const menuEntries = useMemo<MenuEntry[]>(() => {
-    const piecesByCollection = new Map<string, Piece[]>();
+    const piecesByWork = new Map<string, Piece[]>();
     for (const piece of activePieces) {
-      if (!piece.collection_id) continue;
-      const list = piecesByCollection.get(piece.collection_id) ?? [];
+      if (!piece.work_id) continue;
+      const list = piecesByWork.get(piece.work_id) ?? [];
       list.push(piece);
-      piecesByCollection.set(piece.collection_id, list);
+      piecesByWork.set(piece.work_id, list);
     }
 
     const entries: MenuEntry[] = [];
-    const seenCollections = new Set<string>();
+    const seenWorks = new Set<string>();
     for (const piece of activePieces) {
-      const collectionId = piece.collection_id;
-      const collectionName = collectionId
-        ? collectionsById[collectionId]
+      const workId = piece.work_id;
+      const workName = workId
+        ? worksById[workId]
         : undefined;
-      const collectionPieces = collectionId
-        ? piecesByCollection.get(collectionId)
+      const workPieces = workId
+        ? piecesByWork.get(workId)
         : undefined;
       if (
-        collectionId &&
-        collectionName &&
-        collectionPieces &&
-        collectionPieces.length > 1
+        workId &&
+        workName &&
+        workPieces &&
+        workPieces.length > 1
       ) {
-        if (seenCollections.has(collectionId)) continue;
-        seenCollections.add(collectionId);
+        if (seenWorks.has(workId)) continue;
+        seenWorks.add(workId);
         entries.push({
-          kind: "collection",
-          collectionId,
-          name: collectionName,
-          pieces: collectionPieces,
+          kind: "work",
+          workId,
+          name: workName,
+          pieces: workPieces,
         });
       } else {
         entries.push({ kind: "piece", piece });
       }
     }
     return entries;
-  }, [activePieces, collectionsById]);
+  }, [activePieces, worksById]);
 
   const title = focusedPiece
     ? `Practice Log: ${focusedPiece.name}`
@@ -285,7 +285,7 @@ export function PracticeLogHeader() {
                         {entry.piece.name}
                       </DropdownMenuItem>
                     ) : (
-                      <DropdownMenuSub key={entry.collectionId}>
+                      <DropdownMenuSub key={entry.workId}>
                         <DropdownMenuSubTrigger
                           className={cn(
                             entry.pieces.some((p) => p.id === focusedPieceId) &&

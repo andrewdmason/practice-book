@@ -36,7 +36,7 @@ function recordingSubtitle(rec: Recording): string {
   const parts: string[] = [];
   if (rec.audioTitle && rec.pieceName) parts.push(rec.pieceName);
   if (rec.pieceComposer) parts.push(rec.pieceComposer);
-  if (rec.collectionName) parts.push(rec.collectionName);
+  if (rec.workName) parts.push(rec.workName);
   return parts.join(" · ");
 }
 
