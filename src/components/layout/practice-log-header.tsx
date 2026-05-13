@@ -1,9 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { ChevronDownIcon } from "lucide-react";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import type { Piece } from "@/lib/types";
 
 const FOCUS_VIEW = "next-session";
 
@@ -17,6 +29,7 @@ export function PracticeLogHeader() {
 
   const {
     activePieces,
+    collectionsById,
     focusedPieceId,
     setFocusedPieceId,
     activePieceInstance,
@@ -63,27 +76,10 @@ export function PracticeLogHeader() {
 
   const currentView = isFocusView ? FOCUS_VIEW : null;
 
-  const handleAllClick = () => {
-    setActivePieceInstance(null);
-    setFocusedPieceId(null);
-    setUrlState(null, null);
-  };
-
   const handleFocusClick = useCallback(() => {
     setActivePieceInstance(null);
     setUrlState(focusedPieceId, isFocusView ? null : FOCUS_VIEW);
   }, [focusedPieceId, isFocusView, setActivePieceInstance, setUrlState]);
-
-  const handlePieceClick = (pieceId: string) => {
-    setActivePieceInstance(null);
-    if (focusedPieceId === pieceId) {
-      setFocusedPieceId(null);
-      setUrlState(null, currentView);
-      return;
-    }
-    setFocusedPieceId(pieceId);
-    setUrlState(pieceId, currentView);
-  };
 
   const clearFocus = useCallback(() => {
     setFocusedPieceId(null);
@@ -169,6 +165,70 @@ export function PracticeLogHeader() {
     ? activePieces.find((p) => p.id === focusedPieceId)
     : null;
 
+  const focusPiece = useCallback(
+    (pieceId: string) => {
+      setActivePieceInstance(null);
+      if (focusedPieceId === pieceId) {
+        setFocusedPieceId(null);
+        setUrlState(null, currentView);
+        return;
+      }
+      setFocusedPieceId(pieceId);
+      setUrlState(pieceId, currentView);
+    },
+    [
+      focusedPieceId,
+      setActivePieceInstance,
+      setFocusedPieceId,
+      setUrlState,
+      currentView,
+    ]
+  );
+
+  type MenuEntry =
+    | { kind: "piece"; piece: Piece }
+    | { kind: "collection"; collectionId: string; name: string; pieces: Piece[] };
+
+  const menuEntries = useMemo<MenuEntry[]>(() => {
+    const piecesByCollection = new Map<string, Piece[]>();
+    for (const piece of activePieces) {
+      if (!piece.collection_id) continue;
+      const list = piecesByCollection.get(piece.collection_id) ?? [];
+      list.push(piece);
+      piecesByCollection.set(piece.collection_id, list);
+    }
+
+    const entries: MenuEntry[] = [];
+    const seenCollections = new Set<string>();
+    for (const piece of activePieces) {
+      const collectionId = piece.collection_id;
+      const collectionName = collectionId
+        ? collectionsById[collectionId]
+        : undefined;
+      const collectionPieces = collectionId
+        ? piecesByCollection.get(collectionId)
+        : undefined;
+      if (
+        collectionId &&
+        collectionName &&
+        collectionPieces &&
+        collectionPieces.length > 1
+      ) {
+        if (seenCollections.has(collectionId)) continue;
+        seenCollections.add(collectionId);
+        entries.push({
+          kind: "collection",
+          collectionId,
+          name: collectionName,
+          pieces: collectionPieces,
+        });
+      } else {
+        entries.push({ kind: "piece", piece });
+      }
+    }
+    return entries;
+  }, [activePieces, collectionsById]);
+
   const title = focusedPiece
     ? `Practice Log: ${focusedPiece.name}`
     : "Practice Log";
@@ -188,47 +248,71 @@ export function PracticeLogHeader() {
         )}
       >
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
-          <div className="flex flex-wrap items-center gap-1.5 py-2 pl-8">
-            <button
-              onClick={handleAllClick}
-              className={cn(
-                "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
-                focusedPieceId === null && !isFocusView
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-              )}
-            >
-              All
-            </button>
-            <button
-              onClick={handleFocusClick}
+          <div className="flex flex-wrap items-center gap-3 py-2 pl-8">
+            <label
+              className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground select-none cursor-pointer"
               title="Focus (F)"
-              className={cn(
-                "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
-                isFocusView
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
-              )}
             >
-              Focus
-            </button>
-            {activePieces.map((piece) => {
-              const isActive = focusedPieceId === piece.id;
-              return (
-                <button
-                  key={piece.id}
-                  onClick={() => handlePieceClick(piece.id)}
+              <Switch
+                checked={isFocusView}
+                onCheckedChange={handleFocusClick}
+              />
+              <span className={cn(isFocusView && "text-foreground")}>Focus</span>
+            </label>
+            {activePieces.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
                   className={cn(
-                    "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
-                    isActive
+                    "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
+                    focusedPiece
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
                   )}
                 >
-                  {piece.name}
-                </button>
-              );
-            })}
+                  {focusedPiece?.name ?? "Pieces"}
+                  <ChevronDownIcon className="size-3" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="max-h-80">
+                  {menuEntries.map((entry) =>
+                    entry.kind === "piece" ? (
+                      <DropdownMenuItem
+                        key={entry.piece.id}
+                        onClick={() => focusPiece(entry.piece.id)}
+                        className={cn(
+                          focusedPieceId === entry.piece.id && "bg-accent"
+                        )}
+                      >
+                        {entry.piece.name}
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuSub key={entry.collectionId}>
+                        <DropdownMenuSubTrigger
+                          className={cn(
+                            entry.pieces.some((p) => p.id === focusedPieceId) &&
+                              "bg-accent"
+                          )}
+                        >
+                          {entry.name}
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                          {entry.pieces.map((piece) => (
+                            <DropdownMenuItem
+                              key={piece.id}
+                              onClick={() => focusPiece(piece.id)}
+                              className={cn(
+                                focusedPieceId === piece.id && "bg-accent"
+                              )}
+                            >
+                              {piece.name}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    )
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
       </div>
