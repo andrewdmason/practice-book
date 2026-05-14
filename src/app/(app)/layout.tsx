@@ -17,22 +17,21 @@ export default async function AppLayout({
 }) {
   const supabase = await createClient();
 
-  const [{ data: activePieces }, { data: collections }, todaySummary] =
+  const [{ data: activePieces }, { data: works }, todaySummary] =
     await Promise.all([
       supabase
         .from("pieces")
         .select(
-          "id, collection_id, name, composer, status, kind, sort_order, notes, target_tempo, created_at, updated_at"
+          "id, work_id, name, composer, status, kind, notes, target_tempo, created_at, updated_at"
         )
         .eq("status", "active")
-        .order("sort_order")
         .order("name"),
-      supabase.from("collections").select("id, name"),
+      supabase.from("works").select("id, name"),
       getTodaySummary(),
     ]);
 
-  const collectionsById: Record<string, string> = {};
-  for (const c of collections ?? []) collectionsById[c.id] = c.name;
+  const worksById: Record<string, string> = {};
+  for (const w of works ?? []) worksById[w.id] = w.name;
 
   const initialDailySeconds = todaySummary.reduce(
     (sum, e) => sum + e.total_seconds,
@@ -48,7 +47,7 @@ export default async function AppLayout({
             <VideoProvider>
               <TaskTimerProvider
                 activePieces={(activePieces as Piece[]) ?? []}
-                collectionsById={collectionsById}
+                worksById={worksById}
                 initialDailySeconds={initialDailySeconds}
               >
                 <Header />

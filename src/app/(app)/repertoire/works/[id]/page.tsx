@@ -5,11 +5,11 @@ import { createClient } from "@/lib/supabase/server";
 import { AssignmentList } from "@/components/repertoire/assignment-list";
 import { Separator } from "@/components/ui/separator";
 import {
-  getCollectionFocusData,
+  getWorkFocusData,
 } from "@/app/(app)/repertoire/actions";
-import type { Collection, Piece } from "@/lib/types";
+import type { Work, Piece } from "@/lib/types";
 
-export default async function CollectionDetailPage({
+export default async function WorkDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -17,25 +17,25 @@ export default async function CollectionDetailPage({
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: collection } = await supabase
-    .from("collections")
+  const { data: work } = await supabase
+    .from("works")
     .select("*")
     .eq("id", id)
     .single();
 
-  if (!collection) {
+  if (!work) {
     notFound();
   }
 
-  const typedCollection = collection as Collection;
+  const typedWork = work as Work;
 
   const [{ data: rawPieces }, focusData] = await Promise.all([
     supabase
       .from("pieces")
       .select("*")
-      .eq("collection_id", id)
+      .eq("work_id", id)
       .order("name"),
-    getCollectionFocusData(id),
+    getWorkFocusData(id),
   ]);
 
   const pieces = (rawPieces ?? []) as Piece[];
@@ -52,11 +52,11 @@ export default async function CollectionDetailPage({
 
       <div className="mb-6">
         <h1 className="font-heading text-2xl font-semibold">
-          {typedCollection.name}
+          {typedWork.name}
         </h1>
-        {typedCollection.composer && (
+        {typedWork.composer && (
           <p className="text-muted-foreground mt-1">
-            {typedCollection.composer}
+            {typedWork.composer}
           </p>
         )}
       </div>

@@ -189,7 +189,7 @@ function PieceMenuEntries({
             <PieceMenuItemBody piece={entry.piece} />
           </DropdownMenuItem>
         ) : (
-          <DropdownMenuSub key={entry.collectionId}>
+          <DropdownMenuSub key={entry.workId}>
             <DropdownMenuSubTrigger>{entry.name}</DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               {entry.pieces.map((piece) => (
@@ -531,7 +531,7 @@ function SessionBlock({
   daySessionNumbers,
   focusedPieceId,
   activePieces,
-  collectionsById,
+  worksById,
   onReorder,
   onAddTask,
   onAddPiece,
@@ -546,7 +546,7 @@ function SessionBlock({
   daySessionNumbers: number[];
   focusedPieceId: string | null;
   activePieces: Piece[];
-  collectionsById: Record<string, string>;
+  worksById: Record<string, string>;
   onReorder: (dayDate: string, orderedIds: string[]) => void;
   onAddTask: (
     pieceId: string | null,
@@ -627,7 +627,7 @@ function SessionBlock({
   const addablePieces = activePieces.filter(
     (p) => !existingPieceIds.has(p.id)
   );
-  const addableEntries = groupPiecesForMenu(addablePieces, collectionsById);
+  const addableEntries = groupPiecesForMenu(addablePieces, worksById);
 
   return (
     <div className={cn("mb-5", !isFirst && showHeader && "mt-6")}>
@@ -702,7 +702,7 @@ function DayGroup({
   focusedPieceId,
   focusedPieceName,
   activePieces,
-  collectionsById,
+  worksById,
   hasTomorrow,
   hasUnfinishedBefore,
   isNextSessionView,
@@ -713,7 +713,7 @@ function DayGroup({
   focusedPieceId: string | null;
   focusedPieceName: string | null;
   activePieces: Piece[];
-  collectionsById: Record<string, string>;
+  worksById: Record<string, string>;
   hasTomorrow: boolean;
   hasUnfinishedBefore: boolean;
   isNextSessionView: boolean;
@@ -891,7 +891,7 @@ function DayGroup({
   );
   const dayAddableEntries = groupPiecesForMenu(
     dayAddablePieces,
-    collectionsById
+    worksById
   );
 
   const dayElapsedSeconds = day.tasks.reduce(
@@ -1000,7 +1000,7 @@ function DayGroup({
           daySessionNumbers={sessionsToRender.map((s) => s.sessionNumber)}
           focusedPieceId={focusedPieceId}
           activePieces={activePieces}
-          collectionsById={collectionsById}
+          worksById={worksById}
           onReorder={onReorder}
           onAddTask={handleAddTask}
           onAddPiece={handleAddPiece}
@@ -1052,7 +1052,7 @@ export function PracticeTable({
     activePieceInstance,
     setActivePieceInstance,
     activePieces,
-    collectionsById,
+    worksById,
     startTaskTimer,
   } = useTaskTimer();
   const metronomeCtx = useMetronome();
@@ -1419,7 +1419,7 @@ export function PracticeTable({
           focusedPieceId={focusedPieceId}
           focusedPieceName={focusedPieceName}
           activePieces={activePieces}
-          collectionsById={collectionsById}
+          worksById={worksById}
           hasTomorrow={hasTomorrow && !isNextSessionView}
           hasUnfinishedBefore={hasUnfinishedBefore}
           isNextSessionView={isNextSessionView}

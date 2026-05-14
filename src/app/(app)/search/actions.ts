@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { SearchResult, TypeaheadResult } from "@/lib/types";
 
 /**
- * Fast typeahead search for pieces and collections by name/composer.
+ * Fast typeahead search for pieces and works by name/composer.
  * Called on each keystroke (debounced client-side).
  */
 export async function searchTypeahead(
@@ -15,7 +15,7 @@ export async function searchTypeahead(
   const supabase = await createClient();
   const pattern = `%${query}%`;
 
-  const [{ data: pieces }, { data: collections }] = await Promise.all([
+  const [{ data: pieces }, { data: works }] = await Promise.all([
     supabase
       .from("pieces")
       .select("id, name, composer")
@@ -23,7 +23,7 @@ export async function searchTypeahead(
       .order("name")
       .limit(6),
     supabase
-      .from("collections")
+      .from("works")
       .select("id, name, composer")
       .or(`name.ilike.${pattern},composer.ilike.${pattern}`)
       .order("name")
@@ -44,14 +44,14 @@ export async function searchTypeahead(
     }
   }
 
-  if (collections) {
-    for (const c of collections) {
+  if (works) {
+    for (const w of works) {
       results.push({
-        id: c.id,
-        name: c.name,
-        composer: c.composer,
-        type: "collection",
-        url: `/repertoire/collections/${c.id}`,
+        id: w.id,
+        name: w.name,
+        composer: w.composer,
+        type: "work",
+        url: `/repertoire/works/${w.id}`,
       });
     }
   }

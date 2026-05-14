@@ -24,7 +24,7 @@ import {
 import { getSections, getProgressSnapshots } from "@/app/(app)/repertoire/section-actions";
 import { getVideos, getTimestamps } from "@/app/(app)/repertoire/video-actions";
 import { getPieceCumulativeData, getPieceCompletionByWeek } from "@/app/(app)/reports/actions";
-import type { Piece, Collection } from "@/lib/types";
+import type { Piece, Work } from "@/lib/types";
 
 export default async function PieceDetailPage({
   params,
@@ -46,21 +46,19 @@ export default async function PieceDetailPage({
 
   const typedPiece = piece as Piece;
 
-  const [collection, focusData, cumulativeData, sections, videos, progressSnapshots] = await Promise.all([
-    typedPiece.collection_id
-      ? supabase
-          .from("collections")
-          .select("*")
-          .eq("id", typedPiece.collection_id)
-          .single()
-          .then(({ data }) => data as Collection | null)
-      : Promise.resolve(null),
+  const [{ data: allWorks }, focusData, cumulativeData, sections, videos, progressSnapshots] = await Promise.all([
+    supabase.from("works").select("*").order("name"),
     getAssignmentsForPiece(id),
     getPieceCumulativeData(id),
     getSections(id),
     getVideos(id),
     getProgressSnapshots(id),
   ]);
+
+  const works = (allWorks ?? []) as Work[];
+  const work = typedPiece.work_id
+    ? works.find((w) => w.id === typedPiece.work_id) ?? null
+    : null;
 
   const [videoTimestamps, completionByWeek] = await Promise.all([
     videos[0] ? getTimestamps(videos[0].id) : Promise.resolve([]),
@@ -82,7 +80,7 @@ export default async function PieceDetailPage({
         Back to repertoire
       </Link>
 
-      <PieceDetailHeader piece={typedPiece} collection={collection} />
+      <PieceDetailHeader piece={typedPiece} work={work} works={works} />
 
       <div className="mt-6 space-y-6">
         <SectionEditor

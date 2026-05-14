@@ -3,50 +3,46 @@ import type { Piece } from "@/lib/types";
 export type PieceMenuEntry =
   | { kind: "piece"; piece: Piece }
   | {
-      kind: "collection";
-      collectionId: string;
+      kind: "work";
+      workId: string;
       name: string;
       pieces: Piece[];
     };
 
-/** Group pieces by collection, preserving the input order. A collection only
- * becomes a submenu when more than one of its pieces is in the input list and
- * its name is known. Single-piece collections render flat. */
+/** Group pieces by work, preserving the input order. A work only becomes a
+ * submenu when more than one of its pieces is in the input list and its name
+ * is known. Single-piece works render flat. */
 export function groupPiecesForMenu(
   pieces: Piece[],
-  collectionsById: Record<string, string>
+  worksById: Record<string, string>
 ): PieceMenuEntry[] {
-  const piecesByCollection = new Map<string, Piece[]>();
+  const piecesByWork = new Map<string, Piece[]>();
   for (const piece of pieces) {
-    if (!piece.collection_id) continue;
-    const list = piecesByCollection.get(piece.collection_id) ?? [];
+    if (!piece.work_id) continue;
+    const list = piecesByWork.get(piece.work_id) ?? [];
     list.push(piece);
-    piecesByCollection.set(piece.collection_id, list);
+    piecesByWork.set(piece.work_id, list);
   }
 
   const entries: PieceMenuEntry[] = [];
-  const seenCollections = new Set<string>();
+  const seenWorks = new Set<string>();
   for (const piece of pieces) {
-    const collectionId = piece.collection_id;
-    const collectionName = collectionId
-      ? collectionsById[collectionId]
-      : undefined;
-    const collectionPieces = collectionId
-      ? piecesByCollection.get(collectionId)
-      : undefined;
+    const workId = piece.work_id;
+    const workName = workId ? worksById[workId] : undefined;
+    const workPieces = workId ? piecesByWork.get(workId) : undefined;
     if (
-      collectionId &&
-      collectionName &&
-      collectionPieces &&
-      collectionPieces.length > 1
+      workId &&
+      workName &&
+      workPieces &&
+      workPieces.length > 1
     ) {
-      if (seenCollections.has(collectionId)) continue;
-      seenCollections.add(collectionId);
+      if (seenWorks.has(workId)) continue;
+      seenWorks.add(workId);
       entries.push({
-        kind: "collection",
-        collectionId,
-        name: collectionName,
-        pieces: collectionPieces,
+        kind: "work",
+        workId,
+        name: workName,
+        pieces: workPieces,
       });
     } else {
       entries.push({ kind: "piece", piece });

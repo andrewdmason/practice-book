@@ -1,86 +1,78 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { PlusIcon, LibraryIcon } from "lucide-react";
+import { PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { PieceFormDialog } from "./piece-form-dialog";
-import { CollectionFormDialog } from "./collection-form-dialog";
-import { RepertoireTable, type TabValue } from "./repertoire-table";
+import { RepertoireGroupedList } from "./repertoire-grouped-list";
 import type {
   Piece,
-  Collection,
-  CollectionWithPieces,
+  Work,
+  WorkWithPieces,
   PieceStatus,
 } from "@/lib/types";
 import { PIECE_STATUS_LABELS } from "@/lib/types";
 
+type TabValue = PieceStatus | "all";
 const TABS: TabValue[] = ["active", "upcoming", "archived", "all"];
-
-function getStatusCount(
-  status: PieceStatus,
-  pieces: Piece[],
-  collections: CollectionWithPieces[]
-): number {
-  const standalone = pieces.filter(
-    (p) => p.collection_id === null && p.status === status
-  ).length;
-  const inCollections = collections.reduce(
-    (sum, c) => sum + c.pieces.filter((p) => p.status === status).length,
-    0
-  );
-  return standalone + inCollections;
-}
 
 export function RepertoireList({
   pieces,
-  collections,
+  works,
 }: {
   pieces: Piece[];
-  collections: CollectionWithPieces[];
+  works: WorkWithPieces[];
 }) {
   const [activeTab, setActiveTab] = useState<TabValue>("active");
-  const allCollections: Collection[] = collections;
+  const allWorks: Work[] = works;
 
-  // Flatten all pieces (standalone + from collections) for the current tab
   const allPieces = useMemo(() => {
-    const standalone = pieces.filter((p) => p.collection_id === null);
-    const fromCollections = collections.flatMap((c) => c.pieces);
-    return [...standalone, ...fromCollections];
-  }, [pieces, collections]);
+    const standalone = pieces.filter((p) => p.work_id === null);
+    const fromWorks = works.flatMap((w) => w.pieces);
+    return [...standalone, ...fromWorks];
+  }, [pieces, works]);
 
   const tabPieces = useMemo(() => {
-    if (activeTab === "all") {
-      return allPieces.sort((a, b) => a.name.localeCompare(b.name));
-    }
-    const filtered = allPieces.filter((p) => p.status === activeTab);
-    if (activeTab === "active") {
-      return filtered.sort(
-        (a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)
-      );
-    }
-    return filtered.sort((a, b) => a.name.localeCompare(b.name));
+    if (activeTab === "all") return allPieces;
+    return allPieces.filter((p) => p.status === activeTab);
   }, [allPieces, activeTab]);
 
+  const counts = useMemo(() => {
+    const out: Record<TabValue, number> = {
+      active: 0,
+      upcoming: 0,
+      archived: 0,
+      all: allPieces.length,
+    };
+    for (const p of allPieces) out[p.status] += 1;
+    return out;
+  }, [allPieces]);
+
+  const composers = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of allPieces) {
+      const c = p.composer?.trim();
+      if (c) set.add(c);
+    }
+    for (const w of works) {
+      const c = w.composer?.trim();
+      if (c) set.add(c);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [allPieces, works]);
+
   const hasAnyPieces = allPieces.length > 0;
-  const isActiveTab = activeTab === "active";
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold tracking-tight">Repertoire</h2>
-        <div className="flex gap-2">
-          <CollectionFormDialog
-            trigger={
-              <Button variant="outline" size="sm">
-                <LibraryIcon data-icon="inline-start" />
-                Collection
-              </Button>
-            }
-          />
+    <>
+      <div className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6">
+        <div className="flex items-center justify-between pl-8">
+          <h1 className="text-2xl font-semibold tracking-tight">Repertoire</h1>
           <PieceFormDialog
-            collections={allCollections}
+            works={allWorks}
+            composers={composers}
             trigger={
               <Button size="sm">
                 <PlusIcon data-icon="inline-start" />
@@ -91,59 +83,62 @@ export function RepertoireList({
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 border-b">
-        {TABS.map((tab) => {
-          const count =
-            tab === "all"
-              ? allPieces.length
-              : getStatusCount(tab, pieces, collections);
-          const label =
-            tab === "all" ? "All" : PIECE_STATUS_LABELS[tab];
-          const isActive = activeTab === tab;
-          return (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
-                isActive
-                  ? "border-foreground text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-              }`}
-            >
-              {label}
-              {count > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="text-[10px] px-1.5 py-0 min-w-5 h-5 justify-center"
+      <div className="sticky top-14 z-40 mt-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
+          <div className="flex flex-wrap items-center gap-1 py-2 pl-8">
+            {TABS.map((tab) => {
+              const label = tab === "all" ? "All" : PIECE_STATUS_LABELS[tab];
+              const isActive = activeTab === tab;
+              const count = counts[tab];
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors",
+                    isActive
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                  )}
                 >
-                  {count}
-                </Badge>
-              )}
-            </button>
-          );
-        })}
+                  {label}
+                  {count > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "text-[10px] px-1.5 py-0 min-w-5 h-5 justify-center",
+                        isActive && "bg-primary-foreground/20 text-primary-foreground"
+                      )}
+                    >
+                      {count}
+                    </Badge>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
-      {!hasAnyPieces && (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            <p>No pieces yet. Add your first piece to get started.</p>
-          </CardContent>
-        </Card>
-      )}
+      <div className="mx-auto w-full max-w-7xl px-4 pt-6 pb-12 sm:px-6">
+        <div className="pl-8">
+          {!hasAnyPieces && (
+            <p className="py-12 text-center text-muted-foreground">
+              No pieces yet. Add your first piece to get started.
+            </p>
+          )}
 
-      <Card className="overflow-visible">
-        <CardContent className="p-0">
-          <RepertoireTable
-            pieces={tabPieces}
-            allPieces={allPieces}
-            collections={allCollections}
-            isActiveTab={isActiveTab}
-            activeTab={activeTab}
-          />
-        </CardContent>
-      </Card>
-    </div>
+          {hasAnyPieces && tabPieces.length === 0 && (
+            <p className="py-12 text-center text-muted-foreground">
+              No {activeTab === "all" ? "" : activeTab + " "}pieces.
+            </p>
+          )}
+
+          {tabPieces.length > 0 && (
+            <RepertoireGroupedList pieces={tabPieces} works={allWorks} />
+          )}
+        </div>
+      </div>
+    </>
   );
 }

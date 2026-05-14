@@ -76,7 +76,7 @@ function comparatorFor(key: SortKey): (a: Recording, b: Recording) => number {
       return (a, b) => str(a.pieceComposer).localeCompare(str(b.pieceComposer));
     case "group":
       return (a, b) =>
-        str(a.collectionName).localeCompare(str(b.collectionName));
+        str(a.workName).localeCompare(str(b.workName));
     case "notes":
       return (a, b) => str(a.audioTitle).localeCompare(str(b.audioTitle));
     case "date":
@@ -101,10 +101,10 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [trimDialogTaskId, setTrimDialogTaskId] = useState<string | null>(null);
 
-  type PieceOption = { key: string; label: string; collectionName: string | null };
+  type PieceOption = { key: string; label: string; workName: string | null };
   type MenuEntry =
     | { kind: "piece"; option: PieceOption }
-    | { kind: "collection"; name: string; options: PieceOption[] };
+    | { kind: "work"; name: string; options: PieceOption[] };
 
   const pieceOptions = useMemo<PieceOption[]>(() => {
     const seen = new Map<string, PieceOption>();
@@ -114,34 +114,34 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
       seen.set(key, {
         key,
         label: rec.pieceName ?? "General",
-        collectionName: rec.pieceName ? rec.collectionName : null,
+        workName: rec.pieceName ? rec.workName : null,
       });
     }
     return Array.from(seen.values());
   }, [recordings]);
 
   const menuEntries = useMemo<MenuEntry[]>(() => {
-    const byCollection = new Map<string, PieceOption[]>();
+    const byWork = new Map<string, PieceOption[]>();
     for (const opt of pieceOptions) {
-      if (!opt.collectionName) continue;
-      const list = byCollection.get(opt.collectionName) ?? [];
+      if (!opt.workName) continue;
+      const list = byWork.get(opt.workName) ?? [];
       list.push(opt);
-      byCollection.set(opt.collectionName, list);
+      byWork.set(opt.workName, list);
     }
     const entries: MenuEntry[] = [];
-    const seenCollections = new Set<string>();
+    const seenWorks = new Set<string>();
     for (const opt of pieceOptions) {
-      const collection = opt.collectionName;
-      const collectionOptions = collection
-        ? byCollection.get(collection)
+      const work = opt.workName;
+      const workOptions = work
+        ? byWork.get(work)
         : undefined;
-      if (collection && collectionOptions && collectionOptions.length > 1) {
-        if (seenCollections.has(collection)) continue;
-        seenCollections.add(collection);
+      if (work && workOptions && workOptions.length > 1) {
+        if (seenWorks.has(work)) continue;
+        seenWorks.add(work);
         entries.push({
-          kind: "collection",
-          name: collection,
-          options: collectionOptions,
+          kind: "work",
+          name: work,
+          options: workOptions,
         });
       } else {
         entries.push({ kind: "piece", option: opt });
@@ -271,7 +271,7 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
                     {entry.option.label}
                   </DropdownMenuItem>
                 ) : (
-                  <DropdownMenuSub key={`collection:${entry.name}`}>
+                  <DropdownMenuSub key={`work:${entry.name}`}>
                     <DropdownMenuSubTrigger
                       className={cn(
                         entry.options.some((opt) => opt.key === filterKey) &&
@@ -393,7 +393,7 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
                         {rec.pieceComposer ?? ""}
                       </td>
                       <td className="px-3 py-2 truncate max-w-[12rem] text-muted-foreground">
-                        {rec.collectionName ?? ""}
+                        {rec.workName ?? ""}
                       </td>
                       <td className="px-3 py-2 max-w-[16rem]">
                         <NotesCell
@@ -460,10 +460,10 @@ export function RecordingsList({ initial }: { initial: Recording[] }) {
                     {rec.pieceComposer && (
                       <span className="truncate">{rec.pieceComposer}</span>
                     )}
-                    {rec.collectionName && (
+                    {rec.workName && (
                       <>
                         <span aria-hidden>·</span>
-                        <span className="truncate">{rec.collectionName}</span>
+                        <span className="truncate">{rec.workName}</span>
                       </>
                     )}
                     <span aria-hidden>·</span>

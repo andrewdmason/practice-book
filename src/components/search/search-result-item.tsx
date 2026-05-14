@@ -10,11 +10,11 @@ import { cn } from "@/lib/utils";
 import type { SearchResult, TypeaheadResult, SearchResultType } from "@/lib/types";
 
 const typeConfig: Record<
-  SearchResultType | "collection",
+  SearchResultType | "work",
   { icon: typeof Music; label: string }
 > = {
   piece: { icon: Music, label: "Piece" },
-  collection: { icon: FolderOpen, label: "Collection" },
+  work: { icon: FolderOpen, label: "Work" },
   practice_entry: { icon: PenLine, label: "Practice" },
   lesson: { icon: BookOpen, label: "Lesson" },
 };

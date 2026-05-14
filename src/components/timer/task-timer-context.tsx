@@ -55,8 +55,8 @@ type TaskTimerContextValue = {
   /** Total elapsed seconds for tasks today (from server data + active timer) */
   dailyElapsedSeconds: number;
   activePieces: Piece[];
-  /** Map of collection_id → collection name, for grouping pieces in UI. */
-  collectionsById: Record<string, string>;
+  /** Map of work_id → work name, for grouping pieces in UI. */
+  worksById: Record<string, string>;
   /** Filter piece ID — drives filter-bar pill, filtered-view, and URL. */
   focusedPieceId: string | null;
   setFocusedPieceId: (id: string | null) => void;
@@ -92,12 +92,12 @@ export function useTaskTimer() {
 
 export function TaskTimerProvider({
   activePieces,
-  collectionsById,
+  worksById,
   initialDailySeconds = 0,
   children,
 }: {
   activePieces: Piece[];
-  collectionsById: Record<string, string>;
+  worksById: Record<string, string>;
   initialDailySeconds?: number;
   children: ReactNode;
 }) {
@@ -489,7 +489,7 @@ export function TaskTimerProvider({
         isExpired,
         dailyElapsedSeconds,
         activePieces,
-        collectionsById,
+        worksById,
         focusedPieceId,
         setFocusedPieceId,
         activePieceInstance,

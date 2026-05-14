@@ -29,7 +29,7 @@ export function PracticeLogHeader() {
 
   const {
     activePieces,
-    collectionsById,
+    worksById,
     focusedPieceId,
     setFocusedPieceId,
     activePieceInstance,
@@ -186,8 +186,8 @@ export function PracticeLogHeader() {
   );
 
   const menuEntries = useMemo(
-    () => groupPiecesForMenu(activePieces, collectionsById),
-    [activePieces, collectionsById]
+    () => groupPiecesForMenu(activePieces, worksById),
+    [activePieces, worksById]
   );
 
   const title = focusedPiece
@@ -246,7 +246,7 @@ export function PracticeLogHeader() {
                         {entry.piece.name}
                       </DropdownMenuItem>
                     ) : (
-                      <DropdownMenuSub key={entry.collectionId}>
+                      <DropdownMenuSub key={entry.workId}>
                         <DropdownMenuSubTrigger
                           className={cn(
                             entry.pieces.some((p) => p.id === focusedPieceId) &&

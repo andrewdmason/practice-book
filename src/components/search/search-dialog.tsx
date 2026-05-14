@@ -11,14 +11,14 @@ import type { SearchResult, TypeaheadResult, SearchResultType } from "@/lib/type
 
 const RESULT_TYPE_ORDER: SearchResultType[] = [
   "piece",
-  "collection",
+  "work",
   "lesson",
   "practice_entry",
 ];
 
 const RESULT_TYPE_LABELS: Record<SearchResultType, string> = {
   piece: "Pieces",
-  collection: "Collections",
+  work: "Works",
   practice_entry: "Practice Notes",
   lesson: "Lessons",
 };
