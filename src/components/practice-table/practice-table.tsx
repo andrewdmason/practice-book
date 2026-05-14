@@ -56,8 +56,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { groupPiecesForMenu, type PieceMenuEntry } from "@/lib/piece-menu";
 import type { FeedDay, TaskWithDetails, PieceKind, Piece } from "@/lib/types";
 
 type PieceGroup = {
@@ -154,6 +158,54 @@ function AggregateTimerPill({
   }
 
   return <div className={baseClass}>{content}</div>;
+}
+
+function PieceMenuItemBody({ piece }: { piece: Piece }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-sm">{piece.name}</span>
+      {piece.composer && (
+        <span className="text-xs text-muted-foreground">{piece.composer}</span>
+      )}
+    </div>
+  );
+}
+
+function PieceMenuEntries({
+  entries,
+  onSelect,
+}: {
+  entries: PieceMenuEntry[];
+  onSelect: (piece: Piece) => void;
+}) {
+  return (
+    <>
+      {entries.map((entry) =>
+        entry.kind === "piece" ? (
+          <DropdownMenuItem
+            key={entry.piece.id}
+            onClick={() => onSelect(entry.piece)}
+          >
+            <PieceMenuItemBody piece={entry.piece} />
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuSub key={entry.workId}>
+            <DropdownMenuSubTrigger>{entry.name}</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {entry.pieces.map((piece) => (
+                <DropdownMenuItem
+                  key={piece.id}
+                  onClick={() => onSelect(piece)}
+                >
+                  <PieceMenuItemBody piece={piece} />
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )
+      )}
+    </>
+  );
 }
 
 function groupTasksByPiece(tasks: TaskWithDetails[]): PieceGroup[] {
@@ -479,6 +531,7 @@ function SessionBlock({
   daySessionNumbers,
   focusedPieceId,
   activePieces,
+  worksById,
   onReorder,
   onAddTask,
   onAddPiece,
@@ -493,6 +546,7 @@ function SessionBlock({
   daySessionNumbers: number[];
   focusedPieceId: string | null;
   activePieces: Piece[];
+  worksById: Record<string, string>;
   onReorder: (dayDate: string, orderedIds: string[]) => void;
   onAddTask: (
     pieceId: string | null,
@@ -573,6 +627,7 @@ function SessionBlock({
   const addablePieces = activePieces.filter(
     (p) => !existingPieceIds.has(p.id)
   );
+  const addableEntries = groupPiecesForMenu(addablePieces, worksById);
 
   return (
     <div className={cn("mb-5", !isFirst && showHeader && "mt-6")}>
@@ -603,22 +658,11 @@ function SessionBlock({
                 >
                   <span className="text-sm">General note</span>
                 </DropdownMenuItem>
-                {addablePieces.length > 0 && <DropdownMenuSeparator />}
-                {addablePieces.map((piece) => (
-                  <DropdownMenuItem
-                    key={piece.id}
-                    onClick={() => onAddPiece(piece, sessionNumber)}
-                  >
-                    <div className="flex flex-col">
-                      <span className="text-sm">{piece.name}</span>
-                      {piece.composer && (
-                        <span className="text-xs text-muted-foreground">
-                          {piece.composer}
-                        </span>
-                      )}
-                    </div>
-                  </DropdownMenuItem>
-                ))}
+                {addableEntries.length > 0 && <DropdownMenuSeparator />}
+                <PieceMenuEntries
+                  entries={addableEntries}
+                  onSelect={(piece) => onAddPiece(piece, sessionNumber)}
+                />
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -658,6 +702,7 @@ function DayGroup({
   focusedPieceId,
   focusedPieceName,
   activePieces,
+  worksById,
   hasTomorrow,
   hasUnfinishedBefore,
   isNextSessionView,
@@ -668,6 +713,7 @@ function DayGroup({
   focusedPieceId: string | null;
   focusedPieceName: string | null;
   activePieces: Piece[];
+  worksById: Record<string, string>;
   hasTomorrow: boolean;
   hasUnfinishedBefore: boolean;
   isNextSessionView: boolean;
@@ -843,6 +889,10 @@ function DayGroup({
   const dayAddablePieces = activePieces.filter(
     (p) => !dayExistingPieceIds.has(p.id)
   );
+  const dayAddableEntries = groupPiecesForMenu(
+    dayAddablePieces,
+    worksById
+  );
 
   const dayElapsedSeconds = day.tasks.reduce(
     (sum, t) => sum + Math.max(0, t.timer_seconds - t.timer_remaining_seconds),
@@ -903,22 +953,11 @@ function DayGroup({
               >
                 <span className="text-sm">General note</span>
               </DropdownMenuItem>
-              {dayAddablePieces.length > 0 && <DropdownMenuSeparator />}
-              {dayAddablePieces.map((piece) => (
-                <DropdownMenuItem
-                  key={piece.id}
-                  onClick={() => handleAddPiece(piece, defaultAddSession)}
-                >
-                  <div className="flex flex-col">
-                    <span className="text-sm">{piece.name}</span>
-                    {piece.composer && (
-                      <span className="text-xs text-muted-foreground">
-                        {piece.composer}
-                      </span>
-                    )}
-                  </div>
-                </DropdownMenuItem>
-              ))}
+              {dayAddableEntries.length > 0 && <DropdownMenuSeparator />}
+              <PieceMenuEntries
+                entries={dayAddableEntries}
+                onSelect={(piece) => handleAddPiece(piece, defaultAddSession)}
+              />
               {filteredTasks.length > 0 &&
                 pendingEmptySession === null &&
                 !isNextSessionView && (
@@ -961,6 +1000,7 @@ function DayGroup({
           daySessionNumbers={sessionsToRender.map((s) => s.sessionNumber)}
           focusedPieceId={focusedPieceId}
           activePieces={activePieces}
+          worksById={worksById}
           onReorder={onReorder}
           onAddTask={handleAddTask}
           onAddPiece={handleAddPiece}
@@ -1012,6 +1052,7 @@ export function PracticeTable({
     activePieceInstance,
     setActivePieceInstance,
     activePieces,
+    worksById,
     startTaskTimer,
   } = useTaskTimer();
   const metronomeCtx = useMetronome();
@@ -1378,6 +1419,7 @@ export function PracticeTable({
           focusedPieceId={focusedPieceId}
           focusedPieceName={focusedPieceName}
           activePieces={activePieces}
+          worksById={worksById}
           hasTomorrow={hasTomorrow && !isNextSessionView}
           hasUnfinishedBefore={hasUnfinishedBefore}
           isNextSessionView={isNextSessionView}

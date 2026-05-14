@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import type { Piece } from "@/lib/types";
+import { groupPiecesForMenu } from "@/lib/piece-menu";
 
 const FOCUS_VIEW = "next-session";
 
@@ -185,49 +185,10 @@ export function PracticeLogHeader() {
     ]
   );
 
-  type MenuEntry =
-    | { kind: "piece"; piece: Piece }
-    | { kind: "work"; workId: string; name: string; pieces: Piece[] };
-
-  const menuEntries = useMemo<MenuEntry[]>(() => {
-    const piecesByWork = new Map<string, Piece[]>();
-    for (const piece of activePieces) {
-      if (!piece.work_id) continue;
-      const list = piecesByWork.get(piece.work_id) ?? [];
-      list.push(piece);
-      piecesByWork.set(piece.work_id, list);
-    }
-
-    const entries: MenuEntry[] = [];
-    const seenWorks = new Set<string>();
-    for (const piece of activePieces) {
-      const workId = piece.work_id;
-      const workName = workId
-        ? worksById[workId]
-        : undefined;
-      const workPieces = workId
-        ? piecesByWork.get(workId)
-        : undefined;
-      if (
-        workId &&
-        workName &&
-        workPieces &&
-        workPieces.length > 1
-      ) {
-        if (seenWorks.has(workId)) continue;
-        seenWorks.add(workId);
-        entries.push({
-          kind: "work",
-          workId,
-          name: workName,
-          pieces: workPieces,
-        });
-      } else {
-        entries.push({ kind: "piece", piece });
-      }
-    }
-    return entries;
-  }, [activePieces, worksById]);
+  const menuEntries = useMemo(
+    () => groupPiecesForMenu(activePieces, worksById),
+    [activePieces, worksById]
+  );
 
   const title = focusedPiece
     ? `Practice Log: ${focusedPiece.name}`
@@ -272,7 +233,7 @@ export function PracticeLogHeader() {
                   {focusedPiece?.name ?? "Pieces"}
                   <ChevronDownIcon className="size-3" />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="max-h-80">
+                <DropdownMenuContent align="start" className="max-h-80 w-56">
                   {menuEntries.map((entry) =>
                     entry.kind === "piece" ? (
                       <DropdownMenuItem
