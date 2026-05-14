@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeftIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { AssignmentList } from "@/components/repertoire/assignment-list";
+import { WorkDetailHeader } from "@/components/repertoire/work-detail-header";
 import { Separator } from "@/components/ui/separator";
 import {
   getWorkFocusData,
@@ -50,16 +51,7 @@ export default async function WorkDetailPage({
         Back to repertoire
       </Link>
 
-      <div className="mb-6">
-        <h1 className="font-heading text-2xl font-semibold">
-          {typedWork.name}
-        </h1>
-        {typedWork.composer && (
-          <p className="text-muted-foreground mt-1">
-            {typedWork.composer}
-          </p>
-        )}
-      </div>
+      <WorkDetailHeader work={typedWork} />
 
       <div className="space-y-6">
         {/* Child pieces */}

@@ -67,6 +67,7 @@ import type { FeedDay, TaskWithDetails, PieceKind, Piece } from "@/lib/types";
 type PieceGroup = {
   pieceId: string | null;
   pieceName: string;
+  pieceWorkName: string | null;
   pieceKind: PieceKind | null;
   tasks: TaskWithDetails[];
   // Full task set used for aggregate timers. Differs from `tasks` only in
@@ -162,12 +163,7 @@ function AggregateTimerPill({
 
 function PieceMenuItemBody({ piece }: { piece: Piece }) {
   return (
-    <div className="flex flex-col">
-      <span className="text-sm">{piece.name}</span>
-      {piece.composer && (
-        <span className="text-xs text-muted-foreground">{piece.composer}</span>
-      )}
-    </div>
+    <span className="min-w-0 flex-1 truncate text-sm">{piece.name}</span>
   );
 }
 
@@ -190,8 +186,10 @@ function PieceMenuEntries({
           </DropdownMenuItem>
         ) : (
           <DropdownMenuSub key={entry.workId}>
-            <DropdownMenuSubTrigger>{entry.name}</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
+            <DropdownMenuSubTrigger>
+              <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-64">
               {entry.pieces.map((piece) => (
                 <DropdownMenuItem
                   key={piece.id}
@@ -208,7 +206,10 @@ function PieceMenuEntries({
   );
 }
 
-function groupTasksByPiece(tasks: TaskWithDetails[]): PieceGroup[] {
+function groupTasksByPiece(
+  tasks: TaskWithDetails[],
+  pieceWorkNameById: Record<string, string>
+): PieceGroup[] {
   const groups = new Map<string, PieceGroup>();
 
   for (const task of tasks) {
@@ -217,6 +218,9 @@ function groupTasksByPiece(tasks: TaskWithDetails[]): PieceGroup[] {
       groups.set(key, {
         pieceId: task.piece_id,
         pieceName: task.piece_name ?? "General",
+        pieceWorkName: task.piece_id
+          ? pieceWorkNameById[task.piece_id] ?? null
+          : null,
         pieceKind: task.piece_kind,
         tasks: [],
       });
@@ -227,7 +231,10 @@ function groupTasksByPiece(tasks: TaskWithDetails[]): PieceGroup[] {
   return Array.from(groups.values());
 }
 
-function groupTasksBySession(tasks: TaskWithDetails[]): SessionGroup[] {
+function groupTasksBySession(
+  tasks: TaskWithDetails[],
+  pieceWorkNameById: Record<string, string>
+): SessionGroup[] {
   const bySession = new Map<number, TaskWithDetails[]>();
   for (const task of tasks) {
     const sess = task.session_number ?? 1;
@@ -238,7 +245,7 @@ function groupTasksBySession(tasks: TaskWithDetails[]): SessionGroup[] {
     .sort((a, b) => a[0] - b[0])
     .map(([sessionNumber, sessionTasks]) => ({
       sessionNumber,
-      pieces: groupTasksByPiece(sessionTasks),
+      pieces: groupTasksByPiece(sessionTasks, pieceWorkNameById),
     }));
 }
 
@@ -473,6 +480,12 @@ function SortablePieceGroup({
         <div className="flex items-center gap-1.5 px-1">
           <h3 className="text-sm font-medium text-foreground">
             {group.pieceName}
+            {group.pieceWorkName && (
+              <span className="text-muted-foreground/70">
+                {" "}
+                · {group.pieceWorkName}
+              </span>
+            )}
           </h3>
           {showPieceTimer && (
             <AggregateTimerPill
@@ -652,7 +665,7 @@ function SessionBlock({
               >
                 <PlusIcon className="size-3.5" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
+              <DropdownMenuContent align="start" className="w-64">
                 <DropdownMenuItem
                   onClick={() => onAddTask(null, sessionNumber)}
                 >
@@ -724,7 +737,21 @@ function DayGroup({
     ? day.tasks.filter((t) => t.piece_id === focusedPieceId)
     : day.tasks;
 
-  const allSessionGroups = groupTasksBySession(filteredTasks);
+  const pieceWorkNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of activePieces) {
+      if (p.work_id) {
+        const workName = worksById[p.work_id];
+        if (workName) map[p.id] = workName;
+      }
+    }
+    return map;
+  }, [activePieces, worksById]);
+
+  const allSessionGroups = groupTasksBySession(
+    filteredTasks,
+    pieceWorkNameById
+  );
 
   // Keep the currently-shown session visible while a follow-up dialog is open
   // for this day. Without this, completing the last task in the session would
@@ -947,7 +974,7 @@ function DayGroup({
             >
               <PlusIcon className="size-4" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
+            <DropdownMenuContent align="start" className="w-64">
               <DropdownMenuItem
                 onClick={() => handleAddTask(null, defaultAddSession)}
               >
