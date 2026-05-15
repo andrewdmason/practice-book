@@ -337,20 +337,14 @@ export function ChatSurface({
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6 pb-24 pt-12">
-      {isHistoryClosed && summary && (
-        <p className="mb-10 font-serif text-base italic text-muted-foreground">
-          {summary}
-        </p>
-      )}
-
       <div className="flex-1 space-y-6 font-serif text-lg leading-relaxed">
         {messages.map((m, i) => (
           <div
             key={i}
             className={
               m.role === "assistant"
-                ? "text-foreground"
-                : "text-foreground/80 pl-6 border-l-2 border-muted"
+                ? "italic text-muted-foreground pl-6 border-l-2 border-muted"
+                : "text-foreground"
             }
           >
             <p className="whitespace-pre-wrap">{m.content || (thinking && i === messages.length - 1 ? "" : "")}</p>
