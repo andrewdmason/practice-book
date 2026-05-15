@@ -310,9 +310,3 @@
   animation: assignment-highlight 1.5s ease-out;
   border-radius: 0.25rem;
 }
-
-/* Journal zen timer: slow breathing once the 5-minute minimum is reached */
-@keyframes zen-timer-breath {
-  0%, 100% { opacity: 0.5; transform: scale(0.9); }
-  50% { opacity: 1; transform: scale(1); }
-}
