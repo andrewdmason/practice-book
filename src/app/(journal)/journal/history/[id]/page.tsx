@@ -51,9 +51,10 @@ export default async function EntryPage({
         <p className="mt-6 font-serif text-sm text-muted-foreground tabular-nums">
           {formatDate(entry.entry_date)}
         </p>
-        {entry.title && (
-          <EntryTitle entryId={entry.id} title={entry.title} />
-        )}
+        <EntryTitle
+          entryId={entry.id}
+          title={entry.title?.trim() || "Untitled"}
+        />
       </div>
       <ChatSurface
         entryId={entry.id}
