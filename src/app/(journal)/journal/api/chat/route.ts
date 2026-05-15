@@ -7,7 +7,8 @@ import {
   loadHistory,
   messagesAsAnthropicTurns,
 } from "@/lib/journal/context";
-import { todayLocal } from "@/lib/journal/today";
+import { loadCalendarBlock } from "@/lib/journal/calendar";
+import { getUserTimezone, localDate } from "@/lib/date-utils";
 import type { JournalMessage } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -66,12 +67,14 @@ export async function POST(req: NextRequest) {
   }
 
   // Assemble system prompt
-  const today = await todayLocal();
-  const [files, history] = await Promise.all([
+  const tz = await getUserTimezone();
+  const today = localDate(new Date(), tz);
+  const [files, history, calendarBlock] = await Promise.all([
     loadAgentFiles(),
     loadHistory(today, entryId),
+    loadCalendarBlock(today, tz),
   ]);
-  const system = buildSystemPrompt(files, history, today);
+  const system = buildSystemPrompt(files, history, today, calendarBlock);
 
   // Build the message turns. If there are no real messages yet, inject the primer.
   const isOpening = thread.length === 0;

@@ -87,7 +87,8 @@ export async function loadHistory(
 export function buildSystemPrompt(
   files: AgentFiles,
   history: { recent: RecentEntry[]; older: JournalEntry[] },
-  today: string
+  today: string,
+  calendarBlock?: string | null
 ): string {
   const sections: string[] = [];
 
@@ -110,6 +111,11 @@ export function buildSystemPrompt(
   sections.push("=== MEMORY.md ===");
   sections.push(files.MEMORY || "(empty — no memory has been recorded yet)");
   sections.push("");
+
+  if (calendarBlock && calendarBlock.trim().length > 0) {
+    sections.push(calendarBlock);
+    sections.push("");
+  }
 
   if (history.recent.length > 0) {
     sections.push("=== Recent journal entries (full transcripts, most recent first) ===");

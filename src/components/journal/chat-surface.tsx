@@ -40,7 +40,6 @@ export function ChatSurface({
   viewMode?: "today" | "history";
 }) {
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
-  const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -57,15 +56,6 @@ export function ChatSurface({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const initialLoadRef = useRef(false);
 
-  // Auto-grow textarea
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }, [draft]);
-
   // Scroll to bottom on new content
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -81,14 +71,6 @@ export function ChatSurface({
       setTimerRunning(true);
     }
   }, [timerRunning, viewMode, status, streaming, thinking, messages]);
-
-  // Keep the reply box focused: on mount, after streaming ends, and when
-  // status flips back to open (e.g. after reopening a closed entry).
-  useEffect(() => {
-    if (status !== "open") return;
-    if (streaming || closing) return;
-    textareaRef.current?.focus();
-  }, [status, streaming, closing]);
 
   // On mount: if entry is open and has no messages, request the opening question
   useEffect(() => {
@@ -210,19 +192,10 @@ export function ChatSurface({
     }
   }
 
-  async function handleSubmit() {
-    const text = draft.trim();
+  function handleSubmit(text: string) {
     if (!text || streaming || closing) return;
-    setDraft("");
     setMessages((m) => [...m, { role: "user", content: text }]);
-    await streamReply(text);
-  }
-
-  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      void handleSubmit();
-    }
+    void streamReply(text);
   }
 
   async function handleClose() {
@@ -355,20 +328,14 @@ export function ChatSurface({
           <ZenTimer running={timerRunning} />
         </div>
       )}
-      {isHistoryClosed && summary && (
-        <p className="mb-10 font-serif text-base italic text-muted-foreground">
-          {summary}
-        </p>
-      )}
-
       <div className="flex-1 space-y-6 font-serif text-lg leading-relaxed">
         {messages.map((m, i) => (
           <div
             key={i}
             className={
               m.role === "assistant"
-                ? "text-foreground"
-                : "text-foreground/80 pl-6 border-l-2 border-muted"
+                ? "italic text-muted-foreground pl-6 border-l-2 border-muted"
+                : "text-foreground"
             }
           >
             <p className="whitespace-pre-wrap">{m.content || (thinking && i === messages.length - 1 ? "" : "")}</p>
@@ -412,30 +379,94 @@ export function ChatSurface({
           </button>
         </div>
       ) : (
-        <div className="mt-12 flex flex-col gap-3">
-          <textarea
-            ref={textareaRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={onKeyDown}
-            disabled={streaming || closing}
-            rows={1}
-            placeholder={messages.length === 0 ? "" : "type a reply…"}
-            className="w-full resize-none overflow-hidden border-0 bg-transparent font-serif text-lg leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none"
-          />
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{streaming ? "" : draft.trim() ? "enter to send · shift+enter for newline" : ""}</span>
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={closing || streaming || messages.length === 0}
-              className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-40 disabled:hover:no-underline"
-            >
-              {closing ? "wrapping…" : "done for today"}
-            </button>
-          </div>
-        </div>
+        <ReplyBox
+          active={status === "open" && !streaming && !closing}
+          disabled={streaming || closing}
+          streaming={streaming}
+          showPlaceholder={messages.length > 0}
+          onSubmit={handleSubmit}
+        >
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={closing || streaming || messages.length === 0}
+            className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-40 disabled:hover:no-underline"
+          >
+            {closing ? "wrapping…" : "done for today"}
+          </button>
+        </ReplyBox>
       )}
+    </div>
+  );
+}
+
+/**
+ * Isolated reply input. Keeps `draft` state local so keystrokes only
+ * re-render this small subtree, not the message transcript above it —
+ * which otherwise blocks the main thread and tanks INP.
+ */
+function ReplyBox({
+  active,
+  disabled,
+  streaming,
+  showPlaceholder,
+  onSubmit,
+  children,
+}: {
+  active: boolean;
+  disabled: boolean;
+  streaming: boolean;
+  showPlaceholder: boolean;
+  onSubmit: (text: string) => void;
+  children: React.ReactNode;
+}) {
+  const [draft, setDraft] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Auto-grow textarea
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [draft]);
+
+  // Keep the reply box focused on mount, after streaming ends, and when
+  // status flips back to open (e.g. after reopening a closed entry).
+  useEffect(() => {
+    if (active) textareaRef.current?.focus();
+  }, [active]);
+
+  function submit() {
+    const text = draft.trim();
+    if (!text || disabled) return;
+    setDraft("");
+    onSubmit(text);
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    }
+  }
+
+  return (
+    <div className="mt-12 flex flex-col gap-3">
+      <textarea
+        ref={textareaRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={onKeyDown}
+        disabled={disabled}
+        rows={1}
+        placeholder={showPlaceholder ? "type a reply…" : ""}
+        className="w-full resize-none overflow-hidden border-0 bg-transparent font-serif text-lg leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none"
+      />
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{streaming ? "" : draft.trim() ? "enter to send · shift+enter for newline" : ""}</span>
+        {children}
+      </div>
     </div>
   );
 }

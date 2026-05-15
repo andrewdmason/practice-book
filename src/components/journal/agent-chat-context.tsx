@@ -65,6 +65,18 @@ export function AgentChatProvider({
     else open();
   }, [isOpen, open, close]);
 
+  // Cmd/Ctrl+K toggles the agent sidebar from anywhere in the journal.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        toggle();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [toggle]);
+
   const bumpLatest = useCallback(
     (iso?: string) => {
       const t = iso ?? new Date().toISOString();
