@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/journal/today";
 import type { JournalAgentChatMessage, JournalAgentFileName } from "@/lib/types";
@@ -114,6 +115,17 @@ export async function reopenEntry(entryId: string) {
     .eq("id", entryId);
   if (error) throw new Error(error.message);
   revalidatePath("/journal", "layout");
+}
+
+export async function deleteEntry(entryId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("journal_entries")
+    .delete()
+    .eq("id", entryId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/journal/history");
+  redirect("/journal/history");
 }
 
 export async function saveAgentFile(

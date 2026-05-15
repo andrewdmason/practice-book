@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChatSurface } from "@/components/journal/chat-surface";
+import { EntryTitle } from "@/components/journal/entry-title";
 import { JournalEntryScope } from "@/components/journal/journal-entry-scope";
 import { createClient } from "@/lib/supabase/server";
 import type { JournalEntry, JournalMessage } from "@/lib/types";
@@ -51,9 +52,7 @@ export default async function EntryPage({
           {formatDate(entry.entry_date)}
         </p>
         {entry.title && (
-          <h1 className="mt-2 font-serif text-3xl leading-tight text-foreground">
-            {entry.title}
-          </h1>
+          <EntryTitle entryId={entry.id} title={entry.title} />
         )}
       </div>
       <ChatSurface
