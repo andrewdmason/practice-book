@@ -351,6 +351,72 @@ export type PieceSectionWithChildren = PieceSection & {
   children: PieceSection[];
 };
 
+// ============================================================
+// Journal app
+// ============================================================
+
+export type JournalAgentFileName = "SOUL" | "USER" | "MEMORY";
+
+export type JournalAgentFile = {
+  id: string;
+  name: JournalAgentFileName;
+  content: string;
+  agent_writable: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type JournalEntryStatus = "open" | "closed";
+
+export type JournalEntry = {
+  id: string;
+  entry_date: string; // YYYY-MM-DD
+  status: JournalEntryStatus;
+  opening_question: string | null;
+  summary: string | null;
+  title: string | null;
+  pull_quote: string | null;
+  summary_stale: boolean;
+  closed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type JournalMessageRole = "user" | "assistant";
+
+export type JournalMessage = {
+  id: string;
+  entry_id: string;
+  role: JournalMessageRole;
+  content: string;
+  created_at: string;
+};
+
+export type JournalMemoryProposal = {
+  id: string;
+  entry_id: string;
+  proposed_addition: string;
+  applied: boolean;
+  created_at: string;
+};
+
+export type JournalEntrySummary = {
+  id: string;
+  entry_date: string;
+  opening_question: string | null;
+  summary: string | null;
+};
+
+export type JournalAgentChatRole = "user" | "assistant" | "system";
+
+export type JournalAgentChatMessage = {
+  id: string;
+  role: JournalAgentChatRole;
+  content: string;
+  source_entry_id: string | null;
+  created_at: string;
+};
+
 export type PieceVideo = {
   id: string;
   piece_id: string;
