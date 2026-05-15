@@ -7,7 +7,8 @@ import {
   loadHistory,
   messagesAsAnthropicTurns,
 } from "@/lib/journal/context";
-import { todayLocal } from "@/lib/journal/today";
+import { loadCalendarBlock } from "@/lib/journal/calendar";
+import { getUserTimezone, localDate } from "@/lib/date-utils";
 import type { JournalMessage } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -84,12 +85,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const today = await todayLocal();
-  const [files, history] = await Promise.all([
+  const tz = await getUserTimezone();
+  const today = localDate(new Date(), tz);
+  const [files, history, calendarBlock] = await Promise.all([
     loadAgentFiles(),
     loadHistory(today, entryId),
+    loadCalendarBlock(today, tz),
   ]);
-  const baseSystem = buildSystemPrompt(files, history, today);
+  const baseSystem = buildSystemPrompt(files, history, today, calendarBlock);
   const system =
     baseSystem +
     `\n\n=== Wrap pass ===
