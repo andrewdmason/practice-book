@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { TypingIndicator } from "@/components/journal/typing-indicator";
+import { ZenTimer } from "@/components/journal/zen-timer";
 import { reopenEntry, startNewThread } from "@/app/(journal)/journal/actions";
 import { useAgentChat } from "@/components/journal/agent-chat-context";
 import type { JournalMessageRole } from "@/lib/types";
@@ -46,6 +47,7 @@ export function ChatSurface({
   const [summary, setSummary] = useState<string | null>(initialSummary);
   const [error, setError] = useState<string | null>(null);
   const [rejectedQuestions, setRejectedQuestions] = useState<string[]>([]);
+  const [timerRunning, setTimerRunning] = useState(false);
 
   const REROLL_LIMIT = 3;
   const router = useRouter();
@@ -58,6 +60,17 @@ export function ChatSurface({
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streaming]);
+
+  // Start the zen timer once the opening question has finished generating.
+  useEffect(() => {
+    if (timerRunning) return;
+    if (viewMode !== "today" || status !== "open") return;
+    if (streaming || thinking) return;
+    const first = messages[0];
+    if (first?.role === "assistant" && first.content.trim().length > 0) {
+      setTimerRunning(true);
+    }
+  }, [timerRunning, viewMode, status, streaming, thinking, messages]);
 
   // On mount: if entry is open and has no messages, request the opening question
   useEffect(() => {
@@ -310,6 +323,11 @@ export function ChatSurface({
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6 pb-24 pt-12">
+      {!isHistoryClosed && timerRunning && (
+        <div className="mb-8">
+          <ZenTimer running={timerRunning} />
+        </div>
+      )}
       <div className="flex-1 space-y-6 font-serif text-lg leading-relaxed">
         {messages.map((m, i) => (
           <div
