@@ -4,7 +4,8 @@ import {
   loadAgentFiles,
   loadHistory,
 } from "@/lib/journal/context";
-import { todayLocal } from "@/lib/journal/today";
+import { loadCalendarBlock } from "@/lib/journal/calendar";
+import { getUserTimezone, localDate } from "@/lib/date-utils";
 
 export const OPENING_CANDIDATES_TOOL = {
   name: "propose_questions",
@@ -72,13 +73,15 @@ export async function generateCandidates(
   entryId: string,
   rejected: string[]
 ): Promise<string[]> {
-  const today = await todayLocal();
-  const [files, history] = await Promise.all([
+  const tz = await getUserTimezone();
+  const today = localDate(new Date(), tz);
+  const [files, history, calendarBlock] = await Promise.all([
     loadAgentFiles(),
     loadHistory(today, entryId),
+    loadCalendarBlock(today, tz),
   ]);
   const system =
-    buildSystemPrompt(files, history, today) +
+    buildSystemPrompt(files, history, today, calendarBlock) +
     "\n" +
     buildCandidatesInstruction(rejected);
 
