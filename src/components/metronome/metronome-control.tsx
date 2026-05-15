@@ -133,17 +133,26 @@ export function MetronomeControl({ onAccent = false }: { onAccent?: boolean }) {
             >
               <PlusIcon className="size-3" />
             </Button>
-            <Button
-              variant="outline"
-              className="h-7 px-2 text-xs"
-              onClick={handleTap}
-              aria-label="Tap tempo"
-            >
-              Tap
-            </Button>
           </div>
         </PopoverContent>
       </Popover>
+
+      {/* Tap tempo */}
+      <button
+        onClick={handleTap}
+        className={cn(
+          "rounded px-1.5 py-0.5 text-xs font-medium transition-colors",
+          onAccent
+            ? cn("hover:bg-white/15", isActive ? "text-white" : "text-white/70")
+            : cn(
+                "hover:bg-muted",
+                isActive ? "text-foreground" : "text-muted-foreground"
+              )
+        )}
+        aria-label="Tap tempo"
+      >
+        Tap
+      </button>
     </div>
   );
 }
