@@ -66,16 +66,20 @@ export function AgentChatProvider({
   }, [isOpen, open, close]);
 
   // Cmd/Ctrl+K toggles the agent sidebar from anywhere in the journal.
+  // Esc dismisses it when open.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         toggle();
+      } else if (e.key === "Escape" && isOpen) {
+        e.preventDefault();
+        close();
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggle]);
+  }, [toggle, isOpen, close]);
 
   const bumpLatest = useCallback(
     (iso?: string) => {
