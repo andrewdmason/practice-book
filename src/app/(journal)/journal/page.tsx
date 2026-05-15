@@ -17,10 +17,15 @@ export default async function TodayPage() {
     .eq("entry_id", entry.id)
     .order("created_at", { ascending: true });
 
-  const messages = ((msgs ?? []) as JournalMessage[]).map((m) => ({
+  const messageRows = (msgs ?? []) as JournalMessage[];
+  const messages = messageRows.map((m) => ({
     role: m.role,
     content: m.content,
   }));
+
+  // The zen timer is anchored to the opening question's timestamp so its
+  // completion persists across refreshes and reopens.
+  const timerStartedAt = messageRows[0]?.created_at ?? null;
 
   // Fetch summary if entry is closed
   let summary: string | null = null;
@@ -52,6 +57,7 @@ export default async function TodayPage() {
           initialStatus={entry.status}
           initialMessages={messages}
           initialSummary={summary}
+          timerStartedAt={timerStartedAt}
         />
       )}
     </>

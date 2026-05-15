@@ -3,9 +3,16 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { TypingIndicator } from "@/components/journal/typing-indicator";
-import { ZenTimer } from "@/components/journal/zen-timer";
-import { reopenEntry, startNewThread } from "@/app/(journal)/journal/actions";
+import {
+  appendUserMessage,
+  reopenEntry,
+  startNewThread,
+} from "@/app/(journal)/journal/actions";
 import { useAgentChat } from "@/components/journal/agent-chat-context";
+import {
+  TIMER_DONE_COLOR,
+  useJournalTimer,
+} from "@/components/journal/timer-context";
 import type { JournalMessageRole } from "@/lib/types";
 
 type Msg = { role: JournalMessageRole; content: string };
@@ -27,6 +34,7 @@ export function ChatSurface({
   initialMessages,
   initialSummary,
   viewMode = "today",
+  timerStartedAt = null,
 }: {
   entryId: string;
   initialStatus: "open" | "closed";
@@ -38,6 +46,12 @@ export function ChatSurface({
    * surfaced above and a reopen link. Open state behaves the same in both.
    */
   viewMode?: "today" | "history";
+  /**
+   * ISO timestamp the zen timer is anchored to (the opening question's
+   * created_at). Wall-clock based, so the timer's progress and completion
+   * survive refreshes and reopens.
+   */
+  timerStartedAt?: string | null;
 }) {
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
   const [streaming, setStreaming] = useState(false);
@@ -46,10 +60,10 @@ export function ChatSurface({
   const [status, setStatus] = useState<"open" | "closed">(initialStatus);
   const [summary, setSummary] = useState<string | null>(initialSummary);
   const [error, setError] = useState<string | null>(null);
-  const [timerRunning, setTimerRunning] = useState(false);
 
   const router = useRouter();
   const { bumpLatest } = useAgentChat();
+  const { begin: beginTimer, stop: stopTimer, done: timerDone } = useJournalTimer();
   const [, startTransition] = useTransition();
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -58,16 +72,45 @@ export function ChatSurface({
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streaming]);
 
-  // Start the zen timer once the opening question has finished generating.
+  // Anchor the zen timer to the opening question's timestamp. beginTimer is
+  // idempotent for the same anchor, so it's safe to call on every render.
   useEffect(() => {
-    if (timerRunning) return;
     if (viewMode !== "today" || status !== "open") return;
-    if (streaming || thinking) return;
-    const first = messages[0];
-    if (first?.role === "assistant" && first.content.trim().length > 0) {
-      setTimerRunning(true);
+    if (!timerStartedAt) return;
+    beginTimer(Date.parse(timerStartedAt));
+  }, [viewMode, status, timerStartedAt, beginTimer]);
+
+  // The timer belongs to an in-progress today entry only. Clear it when the
+  // entry closes or this surface unmounts (e.g. navigating to history).
+  useEffect(() => {
+    if (status === "closed") stopTimer();
+    return () => stopTimer();
+  }, [status, stopTimer]);
+
+  // Read a streamed text response, appending each chunk to the trailing
+  // (empty) assistant slot reserved by the caller.
+  async function pumpStream(res: Response) {
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let firstChunk = true;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      if (firstChunk) {
+        setThinking(false);
+        firstChunk = false;
+      }
+      setMessages((m) => {
+        const next = [...m];
+        const last = next[next.length - 1];
+        if (last && last.role === "assistant") {
+          next[next.length - 1] = { role: "assistant", content: last.content + chunk };
+        }
+        return next;
+      });
     }
-  }, [timerRunning, viewMode, status, streaming, thinking, messages]);
+  }
 
   async function streamReply(userMessage: string) {
     setError(null);
@@ -84,8 +127,6 @@ export function ChatSurface({
       if (!res.ok || !res.body) {
         const txt = await res.text().catch(() => "request failed");
         setError(txt);
-        setStreaming(false);
-        setThinking(false);
         // Remove the empty assistant slot we reserved
         setMessages((m) => {
           const next = [...m];
@@ -96,26 +137,7 @@ export function ChatSurface({
         });
         return;
       }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let firstChunk = true;
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        if (firstChunk) {
-          setThinking(false);
-          firstChunk = false;
-        }
-        setMessages((m) => {
-          const next = [...m];
-          const last = next[next.length - 1];
-          if (last && last.role === "assistant") {
-            next[next.length - 1] = { role: "assistant", content: last.content + chunk };
-          }
-          return next;
-        });
-      }
+      await pumpStream(res);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -124,10 +146,73 @@ export function ChatSurface({
     }
   }
 
+  // Swap the latest question for a fresh one. Clears the question text in
+  // place, streams a replacement, and restores the original if it fails.
+  async function handleRegenerate() {
+    if (streaming || thinking || closing) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+    const rejected = last.content;
+
+    setError(null);
+    setThinking(true);
+    setStreaming(true);
+    setMessages((m) => {
+      const next = [...m];
+      next[next.length - 1] = { role: "assistant", content: "" };
+      return next;
+    });
+    try {
+      const res = await fetch("/journal/api/regenerate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entryId }),
+      });
+      if (!res.ok || !res.body) {
+        const txt = await res.text().catch(() => "request failed");
+        setError(txt);
+        setMessages((m) => {
+          const next = [...m];
+          next[next.length - 1] = { role: "assistant", content: rejected };
+          return next;
+        });
+        return;
+      }
+      await pumpStream(res);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setMessages((m) => {
+        const next = [...m];
+        const lastM = next[next.length - 1];
+        if (lastM && lastM.role === "assistant" && lastM.content === "") {
+          next[next.length - 1] = { role: "assistant", content: rejected };
+        }
+        return next;
+      });
+    } finally {
+      setStreaming(false);
+      setThinking(false);
+    }
+  }
+
+  // Once the timer is done the conversation is over: the user's words are
+  // still saved, but the interviewer is no longer asked to respond.
+  async function appendReply(text: string) {
+    try {
+      await appendUserMessage(entryId, text);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   function handleSubmit(text: string) {
     if (!text || streaming || closing) return;
     setMessages((m) => [...m, { role: "user", content: text }]);
-    void streamReply(text);
+    if (timerDone) {
+      void appendReply(text);
+    } else {
+      void streamReply(text);
+    }
   }
 
   async function handleClose() {
@@ -255,26 +340,57 @@ export function ChatSurface({
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6 pb-24 pt-12">
-      {!isHistoryClosed && timerRunning && (
-        <div className="mb-8">
-          <ZenTimer running={timerRunning} />
-        </div>
-      )}
       <div className="flex-1 space-y-6 font-serif text-lg leading-relaxed">
-        {messages.map((m, i) => (
-          <div
-            key={i}
-            className={
-              m.role === "assistant"
-                ? "italic text-muted-foreground pl-6 border-l-2 border-muted"
-                : "text-foreground"
-            }
-          >
-            <p className="whitespace-pre-wrap">{m.content || (thinking && i === messages.length - 1 ? "" : "")}</p>
-          </div>
-        ))}
+        {messages.map((m, i) => {
+          const isLast = i === messages.length - 1;
+          // The regenerate icon swaps the current question for a different
+          // one. It's offered only on a live follow-up question — the last
+          // assistant turn, before it's answered. The opening question (i=0)
+          // is excluded since it was already chosen from the picker, and it's
+          // hidden once the timer elapses and the agent stops asking.
+          const canRegenerate =
+            isLast &&
+            i > 0 &&
+            m.role === "assistant" &&
+            status === "open" &&
+            !streaming &&
+            !thinking &&
+            !closing &&
+            !timerDone &&
+            m.content.trim().length > 0;
+          return (
+            <div
+              key={i}
+              className={
+                m.role === "assistant"
+                  ? "italic text-muted-foreground pl-6 border-l-2 border-muted"
+                  : "text-foreground"
+              }
+            >
+              <p className="whitespace-pre-wrap">
+                {m.content}
+                {canRegenerate && (
+                  <button
+                    type="button"
+                    onClick={handleRegenerate}
+                    aria-label="Ask a different question"
+                    title="Ask a different question"
+                    className="ml-1.5 inline-flex translate-y-[0.15em] text-muted-foreground/40 transition-colors hover:text-foreground"
+                  >
+                    <RegenerateIcon />
+                  </button>
+                )}
+              </p>
+            </div>
+          );
+        })}
         {thinking && messages.length > 0 && messages[messages.length - 1].content === "" && (
           <TypingIndicator />
+        )}
+        {timerDone && !isHistoryClosed && (
+          <div className="flex justify-center pt-2">
+            <ConversationEndGlyph />
+          </div>
         )}
         <div ref={scrollRef} />
       </div>
@@ -300,7 +416,13 @@ export function ChatSurface({
           active={status === "open" && !streaming && !closing}
           disabled={streaming || closing}
           streaming={streaming}
-          showPlaceholder={messages.length > 0}
+          placeholder={
+            messages.length === 0
+              ? ""
+              : timerDone
+                ? "keep writing if you like…"
+                : "type a reply…"
+          }
           onSubmit={handleSubmit}
         >
           <button
@@ -326,14 +448,14 @@ function ReplyBox({
   active,
   disabled,
   streaming,
-  showPlaceholder,
+  placeholder,
   onSubmit,
   children,
 }: {
   active: boolean;
   disabled: boolean;
   streaming: boolean;
-  showPlaceholder: boolean;
+  placeholder: string;
   onSubmit: (text: string) => void;
   children: React.ReactNode;
 }) {
@@ -377,7 +499,7 @@ function ReplyBox({
         onKeyDown={onKeyDown}
         disabled={disabled}
         rows={1}
-        placeholder={showPlaceholder ? "type a reply…" : ""}
+        placeholder={placeholder}
         className="w-full resize-none overflow-hidden border-0 bg-transparent font-serif text-lg leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none"
       />
       <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -385,5 +507,40 @@ function ReplyBox({
         {children}
       </div>
     </div>
+  );
+}
+
+// A small filled mark that echoes the completed zen timer — it stands at the
+// end of the transcript once the five minutes are up to show the
+// conversation is over and the interviewer has signed off.
+function ConversationEndGlyph() {
+  return (
+    <div
+      aria-hidden
+      title="Five minutes done — the conversation is complete."
+      className="h-[10px] w-[10px] rounded-full"
+      style={{ background: TIMER_DONE_COLOR }}
+    />
+  );
+}
+
+function RegenerateIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+      <path d="M3 21v-5h5" />
+    </svg>
   );
 }

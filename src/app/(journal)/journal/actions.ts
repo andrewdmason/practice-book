@@ -96,6 +96,31 @@ export async function pickOpeningQuestion(entryId: string, question: string) {
   revalidatePath("/journal");
 }
 
+/**
+ * Append a user message to an entry without generating an interviewer reply.
+ * Used once the five-minute timer is done: the user can keep writing, but the
+ * conversation is over — the agent is no longer asked to respond.
+ */
+export async function appendUserMessage(entryId: string, content: string) {
+  const trimmed = content.trim();
+  if (!trimmed) return;
+
+  const supabase = await createClient();
+
+  const { data: entry, error: entryErr } = await supabase
+    .from("journal_entries")
+    .select("id, status")
+    .eq("id", entryId)
+    .single();
+  if (entryErr || !entry) throw new Error("entry not found");
+  if (entry.status !== "open") throw new Error("entry is closed");
+
+  const { error } = await supabase
+    .from("journal_messages")
+    .insert({ entry_id: entryId, role: "user", content: trimmed });
+  if (error) throw new Error(error.message);
+}
+
 export async function startNewThread(): Promise<void> {
   const supabase = await createClient();
   const date = await todayLocal();
