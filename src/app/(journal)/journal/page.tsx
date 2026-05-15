@@ -1,4 +1,5 @@
 import { ChatSurface } from "@/components/journal/chat-surface";
+import { OpeningPicker } from "@/components/journal/opening-picker";
 import { JournalEntryScope } from "@/components/journal/journal-entry-scope";
 import { createClient } from "@/lib/supabase/server";
 import { getOrCreateTodayEntry } from "@/app/(journal)/journal/actions";
@@ -32,15 +33,27 @@ export default async function TodayPage() {
     summary = full?.summary ?? null;
   }
 
+  // A fresh open entry with no messages starts in the three-question picker;
+  // picking one inserts the opening message and hands off to the chat.
+  const showPicker = entry.status === "open" && messages.length === 0;
+
   return (
     <>
       <JournalEntryScope id={entry.id} />
-      <ChatSurface
-        entryId={entry.id}
-        initialStatus={entry.status}
-        initialMessages={messages}
-        initialSummary={summary}
-      />
+      {showPicker ? (
+        <OpeningPicker
+          entryId={entry.id}
+          initialCandidates={entry.opening_candidates}
+          initialRerollCount={entry.candidates_reroll_count}
+        />
+      ) : (
+        <ChatSurface
+          entryId={entry.id}
+          initialStatus={entry.status}
+          initialMessages={messages}
+          initialSummary={summary}
+        />
+      )}
     </>
   );
 }

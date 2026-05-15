@@ -46,15 +46,12 @@ export function ChatSurface({
   const [status, setStatus] = useState<"open" | "closed">(initialStatus);
   const [summary, setSummary] = useState<string | null>(initialSummary);
   const [error, setError] = useState<string | null>(null);
-  const [rejectedQuestions, setRejectedQuestions] = useState<string[]>([]);
   const [timerRunning, setTimerRunning] = useState(false);
 
-  const REROLL_LIMIT = 3;
   const router = useRouter();
   const { bumpLatest } = useAgentChat();
   const [, startTransition] = useTransition();
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const initialLoadRef = useRef(false);
 
   // Scroll to bottom on new content
   useEffect(() => {
@@ -72,17 +69,7 @@ export function ChatSurface({
     }
   }, [timerRunning, viewMode, status, streaming, thinking, messages]);
 
-  // On mount: if entry is open and has no messages, request the opening question
-  useEffect(() => {
-    if (initialLoadRef.current) return;
-    initialLoadRef.current = true;
-    if (status === "open" && messages.length === 0) {
-      void streamReply(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function streamReply(userMessage: string | null) {
+  async function streamReply(userMessage: string) {
     setError(null);
     setThinking(true);
     setStreaming(true);
@@ -107,61 +94,6 @@ export function ChatSurface({
           }
           return next;
         });
-        return;
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let firstChunk = true;
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        if (firstChunk) {
-          setThinking(false);
-          firstChunk = false;
-        }
-        setMessages((m) => {
-          const next = [...m];
-          const last = next[next.length - 1];
-          if (last && last.role === "assistant") {
-            next[next.length - 1] = { role: "assistant", content: last.content + chunk };
-          }
-          return next;
-        });
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setStreaming(false);
-      setThinking(false);
-    }
-  }
-
-  async function handleReroll() {
-    if (streaming || closing) return;
-    if (rejectedQuestions.length >= REROLL_LIMIT) return;
-    // Capture current opening question text
-    const current = messages[0];
-    if (!current || current.role !== "assistant" || !current.content.trim()) return;
-    const nextRejected = [...rejectedQuestions, current.content.trim()];
-    setRejectedQuestions(nextRejected);
-    setError(null);
-    setThinking(true);
-    setStreaming(true);
-    // Reset to single empty assistant slot we'll fill as the new stream arrives
-    setMessages([{ role: "assistant", content: "" }]);
-    try {
-      const res = await fetch("/journal/api/regenerate-opening", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entryId, rejected: nextRejected }),
-      });
-      if (!res.ok || !res.body) {
-        const txt = await res.text().catch(() => "request failed");
-        setError(txt);
-        setStreaming(false);
-        setThinking(false);
-        setMessages([]);
         return;
       }
       const reader = res.body.getReader();
@@ -344,21 +276,6 @@ export function ChatSurface({
         {thinking && messages.length > 0 && messages[messages.length - 1].content === "" && (
           <TypingIndicator />
         )}
-        {!streaming &&
-          !thinking &&
-          status === "open" &&
-          messages.length === 1 &&
-          messages[0].role === "assistant" &&
-          messages[0].content.trim().length > 0 &&
-          rejectedQuestions.length < REROLL_LIMIT && (
-            <button
-              type="button"
-              onClick={handleReroll}
-              className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            >
-              ask something else
-            </button>
-          )}
         <div ref={scrollRef} />
       </div>
 

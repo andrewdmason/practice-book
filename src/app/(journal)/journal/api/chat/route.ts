@@ -13,16 +13,14 @@ import type { JournalMessage } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-// Synthetic primer used only when the entry has no messages yet — it's not
-// saved, just nudges the model to produce the opening question rather than
-// waiting for a user turn.
-const OPENING_PRIMER = "It's morning. Ask me today's question.";
-
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as { entryId: string; userMessage?: string };
   const { entryId, userMessage } = body;
   if (!entryId) {
     return new Response("entryId required", { status: 400 });
+  }
+  if (!userMessage || userMessage.trim().length === 0) {
+    return new Response("userMessage required", { status: 400 });
   }
 
   const supabase = await createClient();
@@ -51,8 +49,8 @@ export async function POST(req: NextRequest) {
   }
   const thread = (existingMsgs ?? []) as JournalMessage[];
 
-  // If userMessage provided, persist it before generating the reply
-  if (userMessage && userMessage.trim().length > 0) {
+  // Persist the user's reply before generating the follow-up.
+  {
     const { data: inserted, error: insertErr } = await supabase
       .from("journal_messages")
       .insert({ entry_id: entryId, role: "user", content: userMessage.trim() })
@@ -76,11 +74,7 @@ export async function POST(req: NextRequest) {
   ]);
   const system = buildSystemPrompt(files, history, today, calendarBlock);
 
-  // Build the message turns. If there are no real messages yet, inject the primer.
-  const isOpening = thread.length === 0;
-  const turns = isOpening
-    ? [{ role: "user" as const, content: OPENING_PRIMER }]
-    : messagesAsAnthropicTurns(thread);
+  const turns = messagesAsAnthropicTurns(thread);
 
   const client = anthropic();
 
@@ -113,13 +107,6 @@ export async function POST(req: NextRequest) {
           await supabase
             .from("journal_messages")
             .insert({ entry_id: entryId, role: "assistant", content: trimmed });
-
-          if (isOpening) {
-            await supabase
-              .from("journal_entries")
-              .update({ opening_question: trimmed })
-              .eq("id", entryId);
-          }
         }
 
         controller.close();
