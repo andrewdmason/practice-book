@@ -373,6 +373,8 @@ export type JournalEntry = {
   entry_date: string; // YYYY-MM-DD
   status: JournalEntryStatus;
   opening_question: string | null;
+  opening_candidates: string[] | null;
+  candidates_reroll_count: number;
   summary: string | null;
   title: string | null;
   pull_quote: string | null;

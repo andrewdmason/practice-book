@@ -39,7 +39,7 @@ export async function loadHistory(
   let query = supabase
     .from("journal_entries")
     .select(
-      "id, entry_date, status, opening_question, summary, title, pull_quote, summary_stale, closed_at, created_at, updated_at"
+      "id, entry_date, status, opening_question, opening_candidates, candidates_reroll_count, summary, title, pull_quote, summary_stale, closed_at, created_at, updated_at"
     )
     .order("entry_date", { ascending: false })
     .order("created_at", { ascending: false })

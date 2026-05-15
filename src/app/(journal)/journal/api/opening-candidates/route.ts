@@ -4,10 +4,6 @@ import { generateCandidates } from "@/lib/journal/opening-candidates";
 
 export const runtime = "nodejs";
 
-const REROLL_LIMIT = 3;
-
-// Reroll the three-question picker: regenerate a fresh set, avoiding the
-// questions the user just rejected. Capped server-side at REROLL_LIMIT.
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as { entryId?: string };
   const entryId = body.entryId;
@@ -29,7 +25,17 @@ export async function POST(req: NextRequest) {
     return new Response("entry is closed", { status: 409 });
   }
 
-  // Can't reroll once the conversation has started.
+  // Idempotent: if candidates already exist, return them (handles reload and
+  // React StrictMode double-mount).
+  const existing = entry.opening_candidates as string[] | null;
+  if (Array.isArray(existing) && existing.length === 3) {
+    return Response.json({
+      candidates: existing,
+      rerollCount: entry.candidates_reroll_count,
+    });
+  }
+
+  // The picker only runs before the conversation has started.
   const { count, error: countErr } = await supabase
     .from("journal_messages")
     .select("id", { count: "exact", head: true })
@@ -41,31 +47,24 @@ export async function POST(req: NextRequest) {
     return new Response("entry already started", { status: 409 });
   }
 
-  if (entry.candidates_reroll_count >= REROLL_LIMIT) {
-    return new Response("reroll limit reached", { status: 409 });
-  }
-
-  const rejected = (entry.opening_candidates as string[] | null) ?? [];
-
   let candidates: string[];
   try {
-    candidates = await generateCandidates(entryId, rejected);
+    candidates = await generateCandidates(entryId, []);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return new Response(msg, { status: 500 });
   }
 
-  const rerollCount = entry.candidates_reroll_count + 1;
   const { error: writeErr } = await supabase
     .from("journal_entries")
-    .update({
-      opening_candidates: candidates,
-      candidates_reroll_count: rerollCount,
-    })
+    .update({ opening_candidates: candidates })
     .eq("id", entryId);
   if (writeErr) {
     return new Response(writeErr.message, { status: 500 });
   }
 
-  return Response.json({ candidates, rerollCount });
+  return Response.json({
+    candidates,
+    rerollCount: entry.candidates_reroll_count,
+  });
 }

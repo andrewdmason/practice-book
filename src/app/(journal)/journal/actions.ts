@@ -9,15 +9,19 @@ export async function getOrCreateTodayEntry(): Promise<{
   id: string;
   status: "open" | "closed";
   opening_question: string | null;
+  opening_candidates: string[] | null;
+  candidates_reroll_count: number;
 }> {
   const supabase = await createClient();
   const date = await todayLocal();
+  const columns =
+    "id, status, opening_question, opening_candidates, candidates_reroll_count";
 
   // Most recent entry for today, regardless of status. Could be open (in
   // progress) or closed (finished — the page will show the "done" view).
   const { data: existing } = await supabase
     .from("journal_entries")
-    .select("id, status, opening_question")
+    .select(columns)
     .eq("entry_date", date)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -28,13 +32,15 @@ export async function getOrCreateTodayEntry(): Promise<{
       id: existing.id,
       status: existing.status as "open" | "closed",
       opening_question: existing.opening_question,
+      opening_candidates: existing.opening_candidates as string[] | null,
+      candidates_reroll_count: existing.candidates_reroll_count,
     };
   }
 
   const { data: created, error } = await supabase
     .from("journal_entries")
     .insert({ entry_date: date, status: "open" })
-    .select("id, status, opening_question")
+    .select(columns)
     .single();
   if (error || !created) {
     throw new Error(error?.message ?? "failed to create entry");
@@ -43,7 +49,50 @@ export async function getOrCreateTodayEntry(): Promise<{
     id: created.id,
     status: created.status as "open" | "closed",
     opening_question: created.opening_question,
+    opening_candidates: created.opening_candidates as string[] | null,
+    candidates_reroll_count: created.candidates_reroll_count,
   };
+}
+
+/**
+ * Pick one of the three opening-question candidates. Inserts it as the opening
+ * assistant message so the entry transitions from the picker to the chat.
+ */
+export async function pickOpeningQuestion(entryId: string, question: string) {
+  const supabase = await createClient();
+
+  const { data: entry, error: entryErr } = await supabase
+    .from("journal_entries")
+    .select("id, status, opening_candidates")
+    .eq("id", entryId)
+    .single();
+  if (entryErr || !entry) throw new Error("entry not found");
+  if (entry.status !== "open") throw new Error("entry is closed");
+
+  const candidates = (entry.opening_candidates as string[] | null) ?? [];
+  if (!candidates.includes(question)) {
+    throw new Error("question is not one of the offered candidates");
+  }
+
+  const { count, error: countErr } = await supabase
+    .from("journal_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("entry_id", entryId);
+  if (countErr) throw new Error(countErr.message);
+  if ((count ?? 0) > 0) throw new Error("entry already started");
+
+  const { error: msgErr } = await supabase
+    .from("journal_messages")
+    .insert({ entry_id: entryId, role: "assistant", content: question });
+  if (msgErr) throw new Error(msgErr.message);
+
+  const { error: updateErr } = await supabase
+    .from("journal_entries")
+    .update({ opening_question: question, opening_candidates: null })
+    .eq("id", entryId);
+  if (updateErr) throw new Error(updateErr.message);
+
+  revalidatePath("/journal");
 }
 
 export async function startNewThread(): Promise<void> {
