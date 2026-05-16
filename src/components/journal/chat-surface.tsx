@@ -456,7 +456,7 @@ export function ChatSurface({
           streaming={streaming}
           placeholder={
             messages.length === 0
-              ? ""
+              ? "start writing…"
               : timerDone
                 ? "keep writing if you like…"
                 : "type a reply…"
