@@ -384,6 +384,15 @@ export type JournalEntry = {
   updated_at: string;
 };
 
+export type JournalEntryPhoto = {
+  id: string;
+  entry_id: string;
+  original_path: string;
+  display_path: string;
+  caption: string | null;
+  created_at: string;
+};
+
 export type JournalMessageRole = "user" | "assistant";
 
 export type JournalMessage = {

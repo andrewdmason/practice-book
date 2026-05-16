@@ -1,7 +1,11 @@
 import Link from "next/link";
 import type { JournalEntry } from "@/lib/types";
 
-export function HistoryList({ entries }: { entries: JournalEntry[] }) {
+type HistoryEntry = JournalEntry & {
+  photos: { id: string; displayUrl: string }[];
+};
+
+export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
   if (entries.length === 0) {
     return (
       <p className="font-serif text-muted-foreground italic">
@@ -34,6 +38,23 @@ export function HistoryList({ entries }: { entries: JournalEntry[] }) {
                 {e.pull_quote}
                 <span className="ml-0.5 text-muted-foreground/60">”</span>
               </p>
+            )}
+            {e.photos.length > 0 && (
+              <div className="mt-4 flex gap-2">
+                {e.photos.slice(0, 3).map((photo) => (
+                  <div
+                    key={photo.id}
+                    className="h-52 min-w-0 flex-1 overflow-hidden rounded-lg bg-muted"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.displayUrl}
+                      alt=""
+                      className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                    />
+                  </div>
+                ))}
+              </div>
             )}
           </Link>
         </li>

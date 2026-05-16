@@ -3,7 +3,9 @@ import Link from "next/link";
 import { ChatSurface } from "@/components/journal/chat-surface";
 import { EntryTitle } from "@/components/journal/entry-title";
 import { JournalEntryScope } from "@/components/journal/journal-entry-scope";
+import { JournalPhotoGallery } from "@/components/journal/journal-photo-gallery";
 import { createClient } from "@/lib/supabase/server";
+import { getEntryPhotos } from "@/app/(journal)/journal/actions";
 import type { JournalEntry, JournalMessage } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +40,8 @@ export default async function EntryPage({
     content: m.content,
   }));
 
+  const photos = await getEntryPhotos(entry.id);
+
   return (
     <div className="flex flex-1 flex-col">
       <JournalEntryScope id={entry.id} />
@@ -56,6 +60,11 @@ export default async function EntryPage({
           title={entry.title?.trim() || "Untitled"}
         />
       </div>
+      <JournalPhotoGallery
+        entryId={entry.id}
+        initialPhotos={photos}
+        editable={false}
+      />
       <ChatSurface
         entryId={entry.id}
         initialStatus={entry.status}
