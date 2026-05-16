@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
-import { Loader2, X } from "lucide-react";
+import { Loader2, Play, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import type { JournalMediaType } from "@/lib/types";
 import {
   attachEntryPhoto,
   createPhotoUploadUrls,
@@ -13,15 +14,28 @@ import {
 
 const PHOTOS_BUCKET = "journal-photos";
 const MAX_DISPLAY_EDGE = 2000;
+// Mirrors the storage bucket's file_size_limit (see migration 00044).
+const MAX_UPLOAD_BYTES = 200 * 1024 * 1024;
 
-type Photo = { id: string; displayUrl: string; caption: string | null };
-type Pending = { tempId: string; previewUrl: string };
+type Media = {
+  id: string;
+  mediaType: JournalMediaType;
+  displayUrl: string;
+  videoUrl: string | null;
+  caption: string | null;
+};
+type Pending = { tempId: string; previewUrl: string; mediaType: JournalMediaType };
+
+function formatBytes(bytes: number): string {
+  return `${Math.round(bytes / (1024 * 1024))}MB`;
+}
 
 /**
- * Build a downscaled JPEG copy for display. Falls back to the original bytes
- * when the browser can't decode the format to a canvas (e.g. HEIC).
+ * Build a downscaled JPEG copy of an image for display. Falls back to the
+ * original bytes when the browser can't decode the format to a canvas (e.g.
+ * HEIC).
  */
-async function makeDisplayBlob(file: File): Promise<Blob> {
+async function makeImageDisplayBlob(file: File): Promise<Blob> {
   try {
     const bitmap = await createImageBitmap(file);
     const scale = Math.min(
@@ -47,32 +61,89 @@ async function makeDisplayBlob(file: File): Promise<Blob> {
   }
 }
 
+/**
+ * Extract a poster frame from a video as a downscaled JPEG. Used as the
+ * display copy so galleries and history covers can render a thumbnail.
+ */
+async function makeVideoPosterBlob(file: File): Promise<Blob> {
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  try {
+    video.src = url;
+    video.muted = true;
+    video.preload = "auto";
+    await new Promise<void>((resolve, reject) => {
+      video.onloadeddata = () => resolve();
+      video.onerror = () => reject(new Error("Couldn't read that video file."));
+    });
+    await new Promise<void>((resolve, reject) => {
+      video.onseeked = () => resolve();
+      video.onerror = () => reject(new Error("Couldn't read that video file."));
+      // Seek slightly in to avoid a black opening frame.
+      video.currentTime = Math.min(0.1, (video.duration || 1) / 2);
+    });
+    const scale = Math.min(
+      1,
+      MAX_DISPLAY_EDGE / Math.max(video.videoWidth, video.videoHeight)
+    );
+    const w = Math.round(video.videoWidth * scale);
+    const h = Math.round(video.videoHeight * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Couldn't read that video file.");
+    ctx.drawImage(video, 0, 0, w, h);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.85)
+    );
+    if (!blob) throw new Error("Couldn't read that video file.");
+    return blob;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export function JournalPhotoGallery({
   entryId,
   initialPhotos,
   editable,
 }: {
   entryId: string;
-  initialPhotos: Photo[];
+  initialPhotos: Media[];
   editable: boolean;
 }) {
-  const [photos, setPhotos] = useState<Photo[]>(initialPhotos);
+  const [media, setMedia] = useState<Media[]>(initialPhotos);
   const [pending, setPending] = useState<Pending[]>([]);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lightbox, setLightbox] = useState<Photo | null>(null);
+  const [lightbox, setLightbox] = useState<Media | null>(null);
 
-  const uploadPhoto = useCallback(
+  const uploadMedia = useCallback(
     async (file: File) => {
+      const isVideo = file.type.startsWith("video/");
+      const mediaType: JournalMediaType = isVideo ? "video" : "photo";
+
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setError(
+          `“${file.name}” is ${formatBytes(file.size)} — files must be under ${formatBytes(
+            MAX_UPLOAD_BYTES
+          )}.`
+        );
+        return;
+      }
+
       const tempId = crypto.randomUUID();
       const previewUrl = URL.createObjectURL(file);
-      setPending((p) => [...p, { tempId, previewUrl }]);
+      setPending((p) => [...p, { tempId, previewUrl, mediaType }]);
       setError(null);
       try {
-        const ext = file.name.split(".").pop() ?? "jpg";
+        const ext = file.name.split(".").pop() ?? (isVideo ? "mp4" : "jpg");
         const photoId = crypto.randomUUID();
         const urls = await createPhotoUploadUrls(entryId, photoId, ext);
-        const displayBlob = await makeDisplayBlob(file);
+        const displayBlob = isVideo
+          ? await makeVideoPosterBlob(file)
+          : await makeImageDisplayBlob(file);
         const supabase = createClient();
 
         const original = await supabase.storage
@@ -92,12 +163,23 @@ export function JournalPhotoGallery({
         const id = await attachEntryPhoto(
           entryId,
           urls.originalPath,
-          urls.displayPath
+          urls.displayPath,
+          mediaType
         );
         const displayUrl = await createSignedPhotoUrl(urls.displayPath);
-        setPhotos((ps) => [...ps, { id, displayUrl, caption: null }]);
+        const videoUrl = isVideo
+          ? await createSignedPhotoUrl(urls.originalPath)
+          : null;
+        setMedia((ms) => [
+          ...ms,
+          { id, mediaType, displayUrl, videoUrl, caption: null },
+        ]);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to upload photo");
+        setError(
+          e instanceof Error
+            ? e.message
+            : `Failed to upload ${isVideo ? "video" : "photo"}`
+        );
       } finally {
         URL.revokeObjectURL(previewUrl);
         setPending((p) => p.filter((x) => x.tempId !== tempId));
@@ -133,10 +215,10 @@ export function JournalPhotoGallery({
       e.preventDefault();
       depth = 0;
       setDragging(false);
-      const files = Array.from(e.dataTransfer.files).filter((f) =>
-        f.type.startsWith("image/")
+      const files = Array.from(e.dataTransfer.files).filter(
+        (f) => f.type.startsWith("image/") || f.type.startsWith("video/")
       );
-      files.forEach((f) => void uploadPhoto(f));
+      files.forEach((f) => void uploadMedia(f));
     };
 
     window.addEventListener("dragenter", onEnter);
@@ -149,7 +231,7 @@ export function JournalPhotoGallery({
       window.removeEventListener("dragover", onOver);
       window.removeEventListener("drop", onDrop);
     };
-  }, [editable, uploadPhoto]);
+  }, [editable, uploadMedia]);
 
   useEffect(() => {
     if (!lightbox) return;
@@ -164,20 +246,20 @@ export function JournalPhotoGallery({
   }, [lightbox]);
 
   const handleDelete = (id: string) => {
-    setPhotos((ps) => ps.filter((p) => p.id !== id));
+    setMedia((ms) => ms.filter((m) => m.id !== id));
     void deleteEntryPhoto(id).catch((e) => {
-      setError(e instanceof Error ? e.message : "Failed to delete photo");
+      setError(e instanceof Error ? e.message : "Failed to delete item");
     });
   };
 
-  const hasContent = photos.length > 0 || pending.length > 0;
+  const hasContent = media.length > 0 || pending.length > 0;
 
   return (
     <>
       {editable && dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="rounded-xl border-2 border-dashed border-foreground/40 px-10 py-8 font-serif text-sm text-muted-foreground">
-            Drop photo to attach
+            Drop photo or video to attach
           </div>
         </div>
       )}
@@ -189,26 +271,34 @@ export function JournalPhotoGallery({
           )}
           {hasContent && (
             <div className="flex flex-wrap gap-4">
-              {photos.map((photo) => (
-                <PhotoCard
-                  key={photo.id}
-                  photo={photo}
+              {media.map((item) => (
+                <MediaCard
+                  key={item.id}
+                  media={item}
                   editable={editable}
-                  onDelete={() => handleDelete(photo.id)}
-                  onOpen={() => setLightbox(photo)}
+                  onDelete={() => handleDelete(item.id)}
+                  onOpen={() => setLightbox(item)}
                 />
               ))}
               {pending.map((p) => (
                 <div
                   key={p.tempId}
-                  className="relative h-28 w-28 overflow-hidden rounded-md border border-border"
+                  className="relative h-28 w-28 overflow-hidden rounded-md border border-border bg-muted"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={p.previewUrl}
-                    alt=""
-                    className="h-full w-full object-cover opacity-50"
-                  />
+                  {p.mediaType === "video" ? (
+                    <video
+                      src={p.previewUrl}
+                      muted
+                      className="h-full w-full object-cover opacity-50"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.previewUrl}
+                      alt=""
+                      className="h-full w-full object-cover opacity-50"
+                    />
+                  )}
                   <div className="absolute inset-0 flex items-center justify-center">
                     <Loader2 className="size-5 animate-spin text-foreground" />
                   </div>
@@ -236,12 +326,22 @@ export function JournalPhotoGallery({
             className="flex max-h-full max-w-full flex-col items-center gap-3"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={lightbox.displayUrl}
-              alt={lightbox.caption ?? ""}
-              className="max-h-[85vh] max-w-full rounded-lg object-contain"
-            />
+            {lightbox.mediaType === "video" && lightbox.videoUrl ? (
+              <video
+                src={lightbox.videoUrl}
+                poster={lightbox.displayUrl}
+                controls
+                autoPlay
+                className="max-h-[85vh] max-w-full rounded-lg"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={lightbox.displayUrl}
+                alt={lightbox.caption ?? ""}
+                className="max-h-[85vh] max-w-full rounded-lg object-contain"
+              />
+            )}
             {lightbox.caption && (
               <figcaption className="font-serif text-sm text-white/70">
                 {lightbox.caption}
@@ -254,26 +354,26 @@ export function JournalPhotoGallery({
   );
 }
 
-function PhotoCard({
-  photo,
+function MediaCard({
+  media,
   editable,
   onDelete,
   onOpen,
 }: {
-  photo: Photo;
+  media: Media;
   editable: boolean;
   onDelete: () => void;
   onOpen: () => void;
 }) {
-  const [caption, setCaption] = useState(photo.caption ?? "");
-  const [savedCaption, setSavedCaption] = useState(photo.caption ?? "");
+  const [caption, setCaption] = useState(media.caption ?? "");
+  const [savedCaption, setSavedCaption] = useState(media.caption ?? "");
   const [, startTransition] = useTransition();
 
   const saveCaption = () => {
     if (caption === savedCaption) return;
     setSavedCaption(caption);
     startTransition(async () => {
-      await updatePhotoCaption(photo.id, caption);
+      await updatePhotoCaption(media.id, caption);
     });
   };
 
@@ -283,20 +383,29 @@ function PhotoCard({
         <button
           type="button"
           onClick={onOpen}
-          aria-label="View photo"
+          aria-label={media.mediaType === "video" ? "Play video" : "View photo"}
           className="block h-full w-full"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={photo.displayUrl}
-            alt={photo.caption ?? ""}
+            src={media.displayUrl}
+            alt={media.caption ?? ""}
             className="h-full w-full object-cover"
           />
+          {media.mediaType === "video" && (
+            <span className="absolute inset-0 flex items-center justify-center">
+              <span className="rounded-full bg-black/55 p-2">
+                <Play className="size-4 fill-white text-white" />
+              </span>
+            </span>
+          )}
         </button>
         {editable && (
           <button
             type="button"
-            aria-label="Delete photo"
+            aria-label={
+              media.mediaType === "video" ? "Delete video" : "Delete photo"
+            }
             onClick={onDelete}
             className="absolute right-1 top-1 rounded-full bg-background/80 p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover/photo:opacity-100"
           >
@@ -313,9 +422,9 @@ function PhotoCard({
           className="w-full bg-transparent font-serif text-xs text-muted-foreground placeholder:text-muted-foreground/50 focus:text-foreground focus:outline-none"
         />
       ) : (
-        photo.caption && (
+        media.caption && (
           <figcaption className="font-serif text-xs text-muted-foreground">
-            {photo.caption}
+            {media.caption}
           </figcaption>
         )
       )}

@@ -4,7 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/journal/today";
-import type { JournalAgentChatMessage, JournalAgentFileName } from "@/lib/types";
+import type {
+  JournalAgentChatMessage,
+  JournalAgentFileName,
+  JournalMediaType,
+} from "@/lib/types";
 
 export async function getOrCreateTodayEntry(): Promise<{
   id: string;
@@ -320,7 +324,8 @@ export async function createPhotoUploadUrls(
 export async function attachEntryPhoto(
   entryId: string,
   originalPath: string,
-  displayPath: string
+  displayPath: string,
+  mediaType: "photo" | "video" = "photo"
 ): Promise<string> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -329,6 +334,7 @@ export async function attachEntryPhoto(
       entry_id: entryId,
       original_path: originalPath,
       display_path: displayPath,
+      media_type: mediaType,
     })
     .select("id")
     .single();
@@ -395,12 +401,14 @@ export async function createSignedPhotoUrl(
 
 export async function getEntriesPhotos(
   entryIds: string[]
-): Promise<Record<string, { id: string; displayUrl: string }[]>> {
+): Promise<
+  Record<string, { id: string; displayUrl: string; mediaType: JournalMediaType }[]>
+> {
   if (entryIds.length === 0) return {};
   const supabase = await createClient();
   const { data: rows } = await supabase
     .from("journal_entry_photos")
-    .select("id, entry_id, display_path")
+    .select("id, entry_id, display_path, media_type")
     .in("entry_id", entryIds)
     .order("created_at", { ascending: true });
 
@@ -413,39 +421,71 @@ export async function getEntriesPhotos(
       60 * 60
     );
 
-  const result: Record<string, { id: string; displayUrl: string }[]> = {};
+  const result: Record<
+    string,
+    { id: string; displayUrl: string; mediaType: JournalMediaType }[]
+  > = {};
   rows.forEach((row, i) => {
     const entryId = row.entry_id as string;
     (result[entryId] ??= []).push({
       id: row.id as string,
       displayUrl: signed?.[i]?.signedUrl ?? "",
+      mediaType: (row.media_type as JournalMediaType) ?? "photo",
     });
   });
   return result;
 }
 
-export async function getEntryPhotos(
-  entryId: string
-): Promise<{ id: string; displayUrl: string; caption: string | null }[]> {
+export async function getEntryPhotos(entryId: string): Promise<
+  {
+    id: string;
+    mediaType: JournalMediaType;
+    displayUrl: string;
+    videoUrl: string | null;
+    caption: string | null;
+  }[]
+> {
   const supabase = await createClient();
   const { data: rows } = await supabase
     .from("journal_entry_photos")
-    .select("id, display_path, caption")
+    .select("id, media_type, original_path, display_path, caption")
     .eq("entry_id", entryId)
     .order("created_at", { ascending: true });
 
   if (!rows || rows.length === 0) return [];
 
-  const { data: signed } = await supabase.storage
+  const { data: signedDisplay } = await supabase.storage
     .from(PHOTOS_BUCKET)
     .createSignedUrls(
       rows.map((r) => r.display_path as string),
       60 * 60
     );
 
+  // Videos also need a signed URL for the original file so the lightbox can
+  // play it; photos never use the original at display time.
+  const videoRows = rows.filter((r) => r.media_type === "video");
+  const { data: signedVideo } = videoRows.length
+    ? await supabase.storage
+        .from(PHOTOS_BUCKET)
+        .createSignedUrls(
+          videoRows.map((r) => r.original_path as string),
+          60 * 60
+        )
+    : { data: null };
+  const videoUrlByPath = new Map<string, string>();
+  videoRows.forEach((row, i) => {
+    const url = signedVideo?.[i]?.signedUrl;
+    if (url) videoUrlByPath.set(row.original_path as string, url);
+  });
+
   return rows.map((row, i) => ({
     id: row.id as string,
-    displayUrl: signed?.[i]?.signedUrl ?? "",
+    mediaType: (row.media_type as JournalMediaType) ?? "photo",
+    displayUrl: signedDisplay?.[i]?.signedUrl ?? "",
+    videoUrl:
+      row.media_type === "video"
+        ? videoUrlByPath.get(row.original_path as string) ?? null
+        : null,
     caption: (row.caption as string | null) ?? null,
   }));
 }
