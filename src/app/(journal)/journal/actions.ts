@@ -12,11 +12,12 @@ export async function getOrCreateTodayEntry(): Promise<{
   opening_question: string | null;
   opening_candidates: string[] | null;
   candidates_reroll_count: number;
+  freeform_started_at: string | null;
 }> {
   const supabase = await createClient();
   const date = await todayLocal();
   const columns =
-    "id, status, opening_question, opening_candidates, candidates_reroll_count";
+    "id, status, opening_question, opening_candidates, candidates_reroll_count, freeform_started_at";
 
   // Most recent entry for today, regardless of status. Could be open (in
   // progress) or closed (finished — the page will show the "done" view).
@@ -35,6 +36,7 @@ export async function getOrCreateTodayEntry(): Promise<{
       opening_question: existing.opening_question,
       opening_candidates: existing.opening_candidates as string[] | null,
       candidates_reroll_count: existing.candidates_reroll_count,
+      freeform_started_at: existing.freeform_started_at,
     };
   }
 
@@ -52,7 +54,43 @@ export async function getOrCreateTodayEntry(): Promise<{
     opening_question: created.opening_question,
     opening_candidates: created.opening_candidates as string[] | null,
     candidates_reroll_count: created.candidates_reroll_count,
+    freeform_started_at: created.freeform_started_at,
   };
+}
+
+/**
+ * Skip the opening-question picker and start a freeform entry. Records the
+ * moment "write freely" was clicked: this both flags the entry as freeform
+ * (bypassing the picker) and anchors the five-minute timer.
+ */
+export async function startFreeformEntry(entryId: string) {
+  const supabase = await createClient();
+
+  const { data: entry, error: entryErr } = await supabase
+    .from("journal_entries")
+    .select("id, status")
+    .eq("id", entryId)
+    .single();
+  if (entryErr || !entry) throw new Error("entry not found");
+  if (entry.status !== "open") throw new Error("entry is closed");
+
+  const { count, error: countErr } = await supabase
+    .from("journal_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("entry_id", entryId);
+  if (countErr) throw new Error(countErr.message);
+  if ((count ?? 0) > 0) throw new Error("entry already started");
+
+  const { error: updateErr } = await supabase
+    .from("journal_entries")
+    .update({
+      freeform_started_at: new Date().toISOString(),
+      opening_candidates: null,
+    })
+    .eq("id", entryId);
+  if (updateErr) throw new Error(updateErr.message);
+
+  revalidatePath("/journal");
 }
 
 /**
@@ -119,6 +157,43 @@ export async function appendUserMessage(entryId: string, content: string) {
     .from("journal_messages")
     .insert({ entry_id: entryId, role: "user", content: trimmed });
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Delete the most recent message of an open entry when it's an unanswered
+ * interviewer question. Covers the case where a question was asked but the
+ * timer ran out (or the user simply doesn't want it) before replying.
+ */
+export async function deleteLatestQuestion(entryId: string) {
+  const supabase = await createClient();
+
+  const { data: entry, error: entryErr } = await supabase
+    .from("journal_entries")
+    .select("id, status")
+    .eq("id", entryId)
+    .single();
+  if (entryErr || !entry) throw new Error("entry not found");
+  if (entry.status !== "open") throw new Error("entry is closed");
+
+  const { data: last, error: lastErr } = await supabase
+    .from("journal_messages")
+    .select("id, role")
+    .eq("entry_id", entryId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (lastErr) throw new Error(lastErr.message);
+  if (!last || last.role !== "assistant") {
+    throw new Error("no question to delete");
+  }
+
+  const { error } = await supabase
+    .from("journal_messages")
+    .delete()
+    .eq("id", last.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/journal");
 }
 
 export async function startNewThread(): Promise<void> {
