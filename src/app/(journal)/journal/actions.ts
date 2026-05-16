@@ -123,6 +123,43 @@ export async function appendUserMessage(entryId: string, content: string) {
 }
 
 /**
+ * Delete the most recent message of an open entry when it's an unanswered
+ * interviewer question. Covers the case where a question was asked but the
+ * timer ran out (or the user simply doesn't want it) before replying.
+ */
+export async function deleteLatestQuestion(entryId: string) {
+  const supabase = await createClient();
+
+  const { data: entry, error: entryErr } = await supabase
+    .from("journal_entries")
+    .select("id, status")
+    .eq("id", entryId)
+    .single();
+  if (entryErr || !entry) throw new Error("entry not found");
+  if (entry.status !== "open") throw new Error("entry is closed");
+
+  const { data: last, error: lastErr } = await supabase
+    .from("journal_messages")
+    .select("id, role")
+    .eq("entry_id", entryId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (lastErr) throw new Error(lastErr.message);
+  if (!last || last.role !== "assistant") {
+    throw new Error("no question to delete");
+  }
+
+  const { error } = await supabase
+    .from("journal_messages")
+    .delete()
+    .eq("id", last.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/journal");
+}
+
+/**
  * Mark an entry closed. The wrap pass (summary/title/pull_quote) is generated
  * separately via /journal/api/close — flipping status here first means the
  * journal list can immediately show the entry in its "generating" state.

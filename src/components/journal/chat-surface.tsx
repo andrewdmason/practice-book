@@ -6,6 +6,7 @@ import { TypingIndicator } from "@/components/journal/typing-indicator";
 import {
   appendUserMessage,
   closeEntry,
+  deleteLatestQuestion,
   reopenEntry,
 } from "@/app/(journal)/journal/actions";
 import {
@@ -179,6 +180,24 @@ export function ChatSurface({
     }
   }
 
+  // Remove the trailing question entirely — for questions left unanswered
+  // (e.g. the timer ran out before the user replied).
+  async function handleDeleteQuestion() {
+    if (streaming || thinking || closing) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+    const previous = messages;
+
+    setError(null);
+    setMessages((m) => m.slice(0, -1));
+    try {
+      await deleteLatestQuestion(entryId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setMessages(previous);
+    }
+  }
+
   // Once the timer is done the conversation is over: the user's words are
   // still saved, but the interviewer is no longer asked to respond.
   async function appendReply(text: string) {
@@ -248,7 +267,10 @@ export function ChatSurface({
           // assistant turn, before it's answered. The opening question (i=0)
           // is excluded since it was already chosen from the picker, and it's
           // hidden once the timer elapses and the agent stops asking.
-          const canRegenerate =
+          // Delete removes the trailing question — useful when the timer ran
+          // out before the user answered. Available whenever regenerate is,
+          // plus after the timer (when the agent has stopped asking).
+          const isLiveQuestion =
             isLast &&
             i > 0 &&
             m.role === "assistant" &&
@@ -256,29 +278,45 @@ export function ChatSurface({
             !streaming &&
             !thinking &&
             !closing &&
-            !timerDone &&
             m.content.trim().length > 0;
+          const canRegenerate = isLiveQuestion && !timerDone;
+          const canDelete = isLiveQuestion;
           return (
             <div
               key={i}
               className={
                 m.role === "assistant"
-                  ? "italic text-muted-foreground pl-6 border-l-2 border-muted"
+                  ? "group italic text-muted-foreground pl-6 border-l-2 border-muted"
                   : "text-foreground"
               }
             >
               <p className="whitespace-pre-wrap">
                 {m.content}
-                {canRegenerate && (
-                  <button
-                    type="button"
-                    onClick={handleRegenerate}
-                    aria-label="Ask a different question"
-                    title="Ask a different question"
-                    className="ml-1.5 inline-flex translate-y-[0.15em] text-muted-foreground/40 transition-colors hover:text-foreground"
-                  >
-                    <RegenerateIcon />
-                  </button>
+                {(canRegenerate || canDelete) && (
+                  <span className="ml-1.5 inline-flex translate-y-[0.15em] gap-1.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                    {canRegenerate && (
+                      <button
+                        type="button"
+                        onClick={handleRegenerate}
+                        aria-label="Ask a different question"
+                        title="Ask a different question"
+                        className="inline-flex text-muted-foreground/40 transition-colors hover:text-foreground"
+                      >
+                        <RegenerateIcon />
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        type="button"
+                        onClick={handleDeleteQuestion}
+                        aria-label="Delete this question"
+                        title="Delete this question"
+                        className="inline-flex text-muted-foreground/40 transition-colors hover:text-destructive"
+                      >
+                        <TrashIcon />
+                      </button>
+                    )}
+                  </span>
                 )}
               </p>
             </div>
@@ -384,7 +422,7 @@ function ReplyBox({
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       submit();
     }
@@ -403,7 +441,7 @@ function ReplyBox({
         className="w-full resize-none overflow-hidden border-0 bg-transparent font-serif text-lg leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none"
       />
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{streaming ? "" : draft.trim() ? "enter to send · shift+enter for newline" : ""}</span>
+        <span>{streaming ? "" : draft.trim() ? "⌘+enter to send · enter for newline" : ""}</span>
         {children}
       </div>
     </div>
@@ -441,6 +479,28 @@ function RegenerateIcon() {
       <path d="M21 3v5h-5" />
       <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
       <path d="M3 21v-5h5" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+      <path d="M19 6v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
     </svg>
   );
 }
