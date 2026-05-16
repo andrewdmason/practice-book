@@ -4,6 +4,7 @@ import { JournalEntryScope } from "@/components/journal/journal-entry-scope";
 import { JournalPhotoGallery } from "@/components/journal/journal-photo-gallery";
 import { createClient } from "@/lib/supabase/server";
 import {
+  getEntryById,
   getEntryPhotos,
   getOrCreateTodayEntry,
 } from "@/app/(journal)/journal/actions";
@@ -11,8 +12,15 @@ import type { JournalMessage } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewEntryPage() {
-  const entry = await getOrCreateTodayEntry();
+export default async function NewEntryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ entry?: string }>;
+}) {
+  const { entry: entryParam } = await searchParams;
+  const entry = entryParam
+    ? await getEntryById(entryParam)
+    : await getOrCreateTodayEntry();
 
   const supabase = await createClient();
   const { data: msgs } = await supabase
