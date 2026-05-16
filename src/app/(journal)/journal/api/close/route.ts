@@ -65,8 +65,10 @@ export async function POST(req: NextRequest) {
   if (entryErr || !entry) {
     return NextResponse.json({ error: "entry not found" }, { status: 404 });
   }
-  if (entry.status !== "open") {
-    return NextResponse.json({ error: "entry already closed" }, { status: 409 });
+  // The entry is flipped to "closed" by the closeEntry action before this
+  // wrap pass runs, so the journal list can show its "generating" state.
+  if (entry.status !== "closed") {
+    return NextResponse.json({ error: "entry is not closed" }, { status: 409 });
   }
 
   const { data: msgs, error: msgsErr } = await supabase
@@ -199,14 +201,6 @@ After your tool calls, you may stop. The user does not see the wrap output.`;
       surfacedCount = fresh.length;
     }
   }
-
-  await supabase
-    .from("journal_entries")
-    .update({
-      status: "closed",
-      closed_at: new Date().toISOString(),
-    })
-    .eq("id", entryId);
 
   return NextResponse.json({
     summary,

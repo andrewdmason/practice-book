@@ -1,7 +1,30 @@
+"use client";
+
+import { useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { JournalEntry } from "@/lib/types";
 
+// A just-closed entry whose wrap pass (title/summary/pull_quote) hasn't landed
+// yet. Bounded to 60s after closing so a failed or abandoned wrap stops
+// showing the generating state instead of spinning forever.
+function isGenerating(e: JournalEntry): boolean {
+  if (e.status !== "closed") return false;
+  if (e.title && e.title.trim().length > 0) return false;
+  if (!e.closed_at) return false;
+  return Date.now() - Date.parse(e.closed_at) < 60_000;
+}
+
 export function HistoryList({ entries }: { entries: JournalEntry[] }) {
+  const router = useRouter();
+
+  // While any entry is mid-wrap, poll the server until its AI fields land.
+  useEffect(() => {
+    if (!entries.some(isGenerating)) return;
+    const id = setInterval(() => router.refresh(), 1500);
+    return () => clearInterval(id);
+  }, [entries, router]);
+
   if (entries.length === 0) {
     return (
       <p className="font-serif text-muted-foreground italic">
@@ -12,32 +35,43 @@ export function HistoryList({ entries }: { entries: JournalEntry[] }) {
 
   return (
     <ul className="space-y-10">
-      {entries.map((e) => (
-        <li key={e.id}>
-          <Link href={`/journal/history/${e.id}`} className="block group">
-            <div className="flex items-baseline gap-3">
-              <span className="font-serif text-xs text-muted-foreground tabular-nums">
-                {formatDate(e.entry_date)}
-              </span>
-              {e.status === "open" && (
-                <span className="font-serif text-[10px] uppercase tracking-wider text-muted-foreground">
-                  open
+      {entries.map((e) => {
+        const generating = isGenerating(e);
+        return (
+          <li key={e.id}>
+            <Link href={`/journal/${e.id}`} className="block group">
+              <div className="flex items-baseline gap-3">
+                <span className="font-serif text-xs text-muted-foreground tabular-nums">
+                  {formatDate(e.entry_date)}
                 </span>
+                {e.status === "open" && (
+                  <span className="font-serif text-[10px] uppercase tracking-wider text-muted-foreground">
+                    open
+                  </span>
+                )}
+              </div>
+              {generating ? (
+                <p className="mt-2 font-serif text-2xl italic leading-tight text-muted-foreground/50 animate-pulse">
+                  summing up…
+                </p>
+              ) : (
+                <>
+                  <p className="mt-2 font-serif text-2xl leading-tight text-foreground group-hover:underline group-hover:underline-offset-4 group-hover:decoration-foreground/30">
+                    {displayTitle(e)}
+                  </p>
+                  {e.pull_quote && (
+                    <p className="mt-3 font-serif text-base italic leading-relaxed text-muted-foreground">
+                      <span className="mr-1 text-muted-foreground/60">“</span>
+                      {e.pull_quote}
+                      <span className="ml-0.5 text-muted-foreground/60">”</span>
+                    </p>
+                  )}
+                </>
               )}
-            </div>
-            <p className="mt-2 font-serif text-2xl leading-tight text-foreground group-hover:underline group-hover:underline-offset-4 group-hover:decoration-foreground/30">
-              {displayTitle(e)}
-            </p>
-            {e.pull_quote && (
-              <p className="mt-3 font-serif text-base italic leading-relaxed text-muted-foreground">
-                <span className="mr-1 text-muted-foreground/60">“</span>
-                {e.pull_quote}
-                <span className="ml-0.5 text-muted-foreground/60">”</span>
-              </p>
-            )}
-          </Link>
-        </li>
-      ))}
+            </Link>
+          </li>
+        );
+      })}
     </ul>
   );
 }

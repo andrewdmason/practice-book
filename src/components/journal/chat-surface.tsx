@@ -5,10 +5,9 @@ import { useRouter } from "next/navigation";
 import { TypingIndicator } from "@/components/journal/typing-indicator";
 import {
   appendUserMessage,
+  closeEntry,
   reopenEntry,
-  startNewThread,
 } from "@/app/(journal)/journal/actions";
-import { useAgentChat } from "@/components/journal/agent-chat-context";
 import {
   TIMER_DONE_COLOR,
   useJournalTimer,
@@ -17,33 +16,20 @@ import type { JournalMessageRole } from "@/lib/types";
 
 type Msg = { role: JournalMessageRole; content: string };
 
-async function typeOut(
-  text: string,
-  msPerChar: number,
-  set: (s: string) => void
-) {
-  for (let i = 1; i <= text.length; i++) {
-    set(text.slice(0, i));
-    await new Promise((r) => setTimeout(r, msPerChar));
-  }
-}
-
 export function ChatSurface({
   entryId,
   initialStatus,
   initialMessages,
-  initialSummary,
   viewMode = "today",
   timerStartedAt = null,
 }: {
   entryId: string;
   initialStatus: "open" | "closed";
   initialMessages: Msg[];
-  initialSummary: string | null;
   /**
-   * "today" — closed state shows the inbox-zero "done for today" view.
-   * "history" — closed state shows the full transcript with the summary
-   * surfaced above and a reopen link. Open state behaves the same in both.
+   * "today" — the in-progress entry flow at /journal/new.
+   * "history" — a past entry; closed state shows the full transcript with a
+   * reopen link. Open state behaves the same in both.
    */
   viewMode?: "today" | "history";
   /**
@@ -58,11 +44,9 @@ export function ChatSurface({
   const [thinking, setThinking] = useState(false);
   const [closing, setClosing] = useState(false);
   const [status, setStatus] = useState<"open" | "closed">(initialStatus);
-  const [summary, setSummary] = useState<string | null>(initialSummary);
   const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
-  const { bumpLatest } = useAgentChat();
   const { begin: beginTimer, stop: stopTimer, done: timerDone } = useJournalTimer();
   const [, startTransition] = useTransition();
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -215,57 +199,29 @@ export function ChatSurface({
     }
   }
 
+  // Closing flips the entry to "closed" right away, then kicks off the wrap
+  // pass (summary/title/pull_quote) in the background and hands off to the
+  // journal list, where the entry appears with its AI fields generating.
   async function handleClose() {
     if (closing || streaming || messages.length === 0) return;
-    // Flip to the "done" view immediately for an inbox-zero feel; the
-    // conversation disappears and a thinking indicator stands in for the
-    // summary while we wait for the wrap pass.
     setClosing(true);
-    setStatus("closed");
-    setSummary(null);
     setError(null);
     try {
-      const res = await fetch("/journal/api/close", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entryId }),
-      });
-      if (!res.ok) {
-        const ct = res.headers.get("content-type") ?? "";
-        let msg = `close failed (${res.status})`;
-        if (ct.includes("application/json")) {
-          const body = (await res.json().catch(() => null)) as { error?: string } | null;
-          if (body?.error) msg = body.error;
-        } else {
-          const txt = await res.text().catch(() => "");
-          if (txt) msg = txt;
-        }
-        console.error("[journal] close failed:", msg);
-        setError(msg);
-        // Roll back so the user can retry.
-        setStatus("open");
-        setClosing(false);
-        return;
-      }
-      const data = (await res.json()) as {
-        summary: string | null;
-        surfacedCount?: number;
-      };
-      if ((data.surfacedCount ?? 0) > 0) bumpLatest();
-      // Type the summary in for warmth.
-      if (data.summary) {
-        await typeOut(data.summary, 18, setSummary);
-      } else {
-        setSummary(null);
-      }
+      await closeEntry(entryId);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[journal] close threw:", err);
-      setError(msg);
-      setStatus("open");
-    } finally {
+      setError(err instanceof Error ? err.message : String(err));
       setClosing(false);
+      return;
     }
+    // Fire-and-forget: the wrap writes summary/title to the DB on its own. We
+    // navigate away without waiting; the list polls until the fields land.
+    void fetch("/journal/api/close", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entryId }),
+    }).catch((err) => console.error("[journal] wrap request failed:", err));
+    router.push("/journal");
+    router.refresh();
   }
 
   function handleReopen() {
@@ -278,62 +234,6 @@ export function ChatSurface({
         setError(err instanceof Error ? err.message : String(err));
       }
     });
-  }
-
-  function handleNewThread() {
-    startTransition(async () => {
-      try {
-        await startNewThread();
-        // /journal will pick up the new (latest) entry on refresh.
-        router.push("/journal");
-        router.refresh();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    });
-  }
-
-  if (status === "closed" && viewMode === "today") {
-    return (
-      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col items-center justify-center px-6 pb-24 pt-12 text-center">
-        <p className="font-serif text-sm uppercase tracking-[0.2em] text-muted-foreground">
-          done for today
-        </p>
-        <div className="mt-6 min-h-[3.5rem] flex items-center justify-center">
-          {summary ? (
-            <p className="font-serif text-xl italic leading-relaxed text-foreground">
-              {summary}
-              {closing && <span className="ml-0.5 inline-block w-[2px] h-[1.1em] align-[-0.2em] bg-foreground/60 animate-pulse" />}
-            </p>
-          ) : (
-            <TypingIndicator />
-          )}
-        </div>
-        {!closing && (
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-            <button
-              type="button"
-              onClick={handleNewThread}
-              className="font-serif text-sm text-foreground underline-offset-4 hover:underline"
-            >
-              ask me something else
-            </button>
-            <button
-              type="button"
-              onClick={handleReopen}
-              className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            >
-              reopen this thread
-            </button>
-          </div>
-        )}
-        {error && (
-          <div className="mt-6 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive">
-            {error}
-          </div>
-        )}
-      </div>
-    );
   }
 
   const isHistoryClosed = status === "closed" && viewMode === "history";
