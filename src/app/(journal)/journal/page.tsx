@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { HistoryList } from "@/components/journal/history-list";
 import { createClient } from "@/lib/supabase/server";
+import { getEntriesPhotos } from "@/app/(journal)/journal/actions";
 import type { JournalEntry } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,12 @@ export default async function JournalPage() {
     a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0
   );
 
+  const photosByEntry = await getEntriesPhotos(entries.map((e) => e.id));
+  const entriesWithPhotos = entries.map((e) => ({
+    ...e,
+    photos: photosByEntry[e.id] ?? [],
+  }));
+
   return (
     <div className="mx-auto w-full max-w-2xl px-6 pb-24 pt-12">
       <div className="mb-10 flex justify-end">
@@ -30,7 +37,7 @@ export default async function JournalPage() {
           + new entry
         </Link>
       </div>
-      <HistoryList entries={entries} />
+      <HistoryList entries={entriesWithPhotos} />
     </div>
   );
 }

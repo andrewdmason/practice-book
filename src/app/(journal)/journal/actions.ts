@@ -267,3 +267,185 @@ export async function latestAgentChatAt(): Promise<string | null> {
     .maybeSingle();
   return data?.created_at ?? null;
 }
+
+// ============================================================
+// Entry photos
+// ============================================================
+
+const PHOTOS_BUCKET = "journal-photos";
+
+export async function createPhotoUploadUrls(
+  entryId: string,
+  photoId: string,
+  ext: string
+): Promise<{
+  originalPath: string;
+  originalToken: string;
+  displayPath: string;
+  displayToken: string;
+}> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const safeExt = ext.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+  const originalPath = `${user.id}/${entryId}/${photoId}-original.${safeExt}`;
+  const displayPath = `${user.id}/${entryId}/${photoId}-display.jpg`;
+
+  const original = await supabase.storage
+    .from(PHOTOS_BUCKET)
+    .createSignedUploadUrl(originalPath);
+  if (original.error || !original.data) {
+    throw new Error(
+      original.error?.message ?? "Failed to create upload URL"
+    );
+  }
+  const display = await supabase.storage
+    .from(PHOTOS_BUCKET)
+    .createSignedUploadUrl(displayPath);
+  if (display.error || !display.data) {
+    throw new Error(display.error?.message ?? "Failed to create upload URL");
+  }
+
+  return {
+    originalPath: original.data.path,
+    originalToken: original.data.token,
+    displayPath: display.data.path,
+    displayToken: display.data.token,
+  };
+}
+
+export async function attachEntryPhoto(
+  entryId: string,
+  originalPath: string,
+  displayPath: string
+): Promise<string> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("journal_entry_photos")
+    .insert({
+      entry_id: entryId,
+      original_path: originalPath,
+      display_path: displayPath,
+    })
+    .select("id")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "Failed to attach photo");
+  revalidatePath("/journal");
+  revalidatePath(`/journal/${entryId}`);
+  return data.id as string;
+}
+
+export async function deleteEntryPhoto(photoId: string): Promise<void> {
+  const supabase = await createClient();
+  const { data: photo } = await supabase
+    .from("journal_entry_photos")
+    .select("entry_id, original_path, display_path")
+    .eq("id", photoId)
+    .single();
+
+  if (photo) {
+    const paths = [photo.original_path, photo.display_path].filter(
+      (p): p is string => Boolean(p)
+    );
+    if (paths.length > 0) {
+      await supabase.storage.from(PHOTOS_BUCKET).remove(paths);
+    }
+  }
+
+  const { error } = await supabase
+    .from("journal_entry_photos")
+    .delete()
+    .eq("id", photoId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/journal");
+  if (photo?.entry_id) revalidatePath(`/journal/${photo.entry_id}`);
+}
+
+export async function updatePhotoCaption(
+  photoId: string,
+  caption: string
+): Promise<void> {
+  const trimmed = caption.trim();
+  const supabase = await createClient();
+  const { data: photo } = await supabase
+    .from("journal_entry_photos")
+    .update({ caption: trimmed || null })
+    .eq("id", photoId)
+    .select("entry_id")
+    .single();
+  revalidatePath("/journal");
+  if (photo?.entry_id) revalidatePath(`/journal/${photo.entry_id}`);
+}
+
+export async function createSignedPhotoUrl(
+  displayPath: string
+): Promise<string> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage
+    .from(PHOTOS_BUCKET)
+    .createSignedUrl(displayPath, 60 * 60);
+  if (error || !data) {
+    throw new Error(error?.message ?? "Failed to create signed photo URL");
+  }
+  return data.signedUrl;
+}
+
+export async function getEntriesPhotos(
+  entryIds: string[]
+): Promise<Record<string, { id: string; displayUrl: string }[]>> {
+  if (entryIds.length === 0) return {};
+  const supabase = await createClient();
+  const { data: rows } = await supabase
+    .from("journal_entry_photos")
+    .select("id, entry_id, display_path")
+    .in("entry_id", entryIds)
+    .order("created_at", { ascending: true });
+
+  if (!rows || rows.length === 0) return {};
+
+  const { data: signed } = await supabase.storage
+    .from(PHOTOS_BUCKET)
+    .createSignedUrls(
+      rows.map((r) => r.display_path as string),
+      60 * 60
+    );
+
+  const result: Record<string, { id: string; displayUrl: string }[]> = {};
+  rows.forEach((row, i) => {
+    const entryId = row.entry_id as string;
+    (result[entryId] ??= []).push({
+      id: row.id as string,
+      displayUrl: signed?.[i]?.signedUrl ?? "",
+    });
+  });
+  return result;
+}
+
+export async function getEntryPhotos(
+  entryId: string
+): Promise<{ id: string; displayUrl: string; caption: string | null }[]> {
+  const supabase = await createClient();
+  const { data: rows } = await supabase
+    .from("journal_entry_photos")
+    .select("id, display_path, caption")
+    .eq("entry_id", entryId)
+    .order("created_at", { ascending: true });
+
+  if (!rows || rows.length === 0) return [];
+
+  const { data: signed } = await supabase.storage
+    .from(PHOTOS_BUCKET)
+    .createSignedUrls(
+      rows.map((r) => r.display_path as string),
+      60 * 60
+    );
+
+  return rows.map((row, i) => ({
+    id: row.id as string,
+    displayUrl: signed?.[i]?.signedUrl ?? "",
+    caption: (row.caption as string | null) ?? null,
+  }));
+}

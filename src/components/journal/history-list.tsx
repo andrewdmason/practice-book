@@ -5,6 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { JournalEntry } from "@/lib/types";
 
+type HistoryEntry = JournalEntry & {
+  photos: { id: string; displayUrl: string }[];
+};
+
 // A just-closed entry whose wrap pass (title/summary/pull_quote) hasn't landed
 // yet. Bounded to 60s after closing so a failed or abandoned wrap stops
 // showing the generating state instead of spinning forever.
@@ -15,7 +19,7 @@ function isGenerating(e: JournalEntry): boolean {
   return Date.now() - Date.parse(e.closed_at) < 60_000;
 }
 
-export function HistoryList({ entries }: { entries: JournalEntry[] }) {
+export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
   const router = useRouter();
 
   // While any entry is mid-wrap, poll the server until its AI fields land.
@@ -67,6 +71,23 @@ export function HistoryList({ entries }: { entries: JournalEntry[] }) {
                     </p>
                   )}
                 </>
+              )}
+              {e.photos.length > 0 && (
+                <div className="mt-4 flex gap-2">
+                  {e.photos.slice(0, 3).map((photo) => (
+                    <div
+                      key={photo.id}
+                      className="h-52 min-w-0 flex-1 overflow-hidden rounded-lg bg-muted"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={photo.displayUrl}
+                        alt=""
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                      />
+                    </div>
+                  ))}
+                </div>
               )}
             </Link>
           </li>

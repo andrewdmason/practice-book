@@ -1,8 +1,12 @@
 import { ChatSurface } from "@/components/journal/chat-surface";
 import { OpeningPicker } from "@/components/journal/opening-picker";
 import { JournalEntryScope } from "@/components/journal/journal-entry-scope";
+import { JournalPhotoGallery } from "@/components/journal/journal-photo-gallery";
 import { createClient } from "@/lib/supabase/server";
-import { getOrCreateTodayEntry } from "@/app/(journal)/journal/actions";
+import {
+  getEntryPhotos,
+  getOrCreateTodayEntry,
+} from "@/app/(journal)/journal/actions";
 import type { JournalMessage } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +34,8 @@ export default async function NewEntryPage() {
   const timerStartedAt =
     entry.freeform_started_at ?? messageRows[0]?.created_at ?? null;
 
+  const photos = await getEntryPhotos(entry.id);
+
   // A fresh open entry with no messages starts in the three-question picker;
   // picking one inserts the opening message and hands off to the chat. Once
   // "write freely" is clicked the picker is bypassed straight to the chat.
@@ -38,6 +44,7 @@ export default async function NewEntryPage() {
   return (
     <>
       <JournalEntryScope id={entry.id} />
+      <JournalPhotoGallery entryId={entry.id} initialPhotos={photos} editable />
       {showPicker ? (
         <OpeningPicker
           entryId={entry.id}
