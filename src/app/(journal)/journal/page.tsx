@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { HistoryList } from "@/components/journal/history-list";
+import { JournalListDropZone } from "@/components/journal/journal-list-drop-zone";
 import { createClient } from "@/lib/supabase/server";
 import { getEntriesPhotos } from "@/app/(journal)/journal/actions";
 import type { JournalEntry } from "@/lib/types";
@@ -29,6 +30,7 @@ export default async function JournalPage() {
 
   return (
     <div className="mx-auto w-full max-w-2xl px-6 pb-24 pt-12">
+      <JournalListDropZone />
       <div className="mb-10 flex justify-end">
         <Link
           href="/journal/new"
