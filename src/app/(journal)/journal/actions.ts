@@ -90,6 +90,76 @@ export async function getOrCreateTodayEntry(): Promise<{
 }
 
 /**
+ * Load a single entry for the /journal/new editor. Used when the editor is
+ * opened for a specific entry (e.g. one started from a dropped photo whose
+ * date was moved into the past, so it no longer matches "today's entry").
+ */
+export async function getEntryById(entryId: string): Promise<{
+  id: string;
+  status: "open" | "closed";
+  opening_question: string | null;
+  opening_candidates: string[] | null;
+  candidates_reroll_count: number;
+  freeform_started_at: string | null;
+}> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("journal_entries")
+    .select(
+      "id, status, opening_question, opening_candidates, candidates_reroll_count, freeform_started_at"
+    )
+    .eq("id", entryId)
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "entry not found");
+  return {
+    id: data.id,
+    status: data.status as "open" | "closed",
+    opening_question: data.opening_question,
+    opening_candidates: data.opening_candidates as string[] | null,
+    candidates_reroll_count: data.candidates_reroll_count,
+    freeform_started_at: data.freeform_started_at,
+  };
+}
+
+/**
+ * Create a fresh entry that starts straight in freeform mode, skipping the
+ * opening-question picker. Used when a new entry is initiated by dropping
+ * photos onto the journal list. Returns the new entry id.
+ */
+export async function createFreeformEntry(): Promise<string> {
+  const supabase = await createClient();
+  const date = await todayLocal();
+  const { data, error } = await supabase
+    .from("journal_entries")
+    .insert({
+      entry_date: date,
+      status: "open",
+      freeform_started_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    throw new Error(error?.message ?? "failed to create entry");
+  }
+  return data.id as string;
+}
+
+/**
+ * Set an entry's date. Used when a new entry is started from a dropped photo
+ * and the user opts to date the entry to when the photo was taken.
+ */
+export async function setEntryDate(entryId: string, date: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("invalid date");
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("journal_entries")
+    .update({ entry_date: date })
+    .eq("id", entryId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/journal");
+}
+
+/**
  * Skip the opening-question picker and start a freeform entry. Records the
  * moment "write freely" was clicked: this both flags the entry as freeform
  * (bypassing the picker) and anchors the five-minute timer.
