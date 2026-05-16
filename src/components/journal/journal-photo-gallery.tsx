@@ -60,6 +60,7 @@ export function JournalPhotoGallery({
   const [pending, setPending] = useState<Pending[]>([]);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<Photo | null>(null);
 
   const uploadPhoto = useCallback(
     async (file: File) => {
@@ -150,6 +151,18 @@ export function JournalPhotoGallery({
     };
   }, [editable, uploadPhoto]);
 
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setLightbox(null);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [lightbox]);
+
   const handleDelete = (id: string) => {
     setPhotos((ps) => ps.filter((p) => p.id !== id));
     void deleteEntryPhoto(id).catch((e) => {
@@ -182,6 +195,7 @@ export function JournalPhotoGallery({
                   photo={photo}
                   editable={editable}
                   onDelete={() => handleDelete(photo.id)}
+                  onOpen={() => setLightbox(photo)}
                 />
               ))}
               {pending.map((p) => (
@@ -204,6 +218,38 @@ export function JournalPhotoGallery({
           )}
         </div>
       )}
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 p-6"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={() => setLightbox(null)}
+            className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white/80 transition-colors hover:bg-white/20 hover:text-white"
+          >
+            <X className="size-5" />
+          </button>
+          <figure
+            className="flex max-h-full max-w-full flex-col items-center gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={lightbox.displayUrl}
+              alt={lightbox.caption ?? ""}
+              className="max-h-[85vh] max-w-full rounded-lg object-contain"
+            />
+            {lightbox.caption && (
+              <figcaption className="font-serif text-sm text-white/70">
+                {lightbox.caption}
+              </figcaption>
+            )}
+          </figure>
+        </div>
+      )}
     </>
   );
 }
@@ -212,10 +258,12 @@ function PhotoCard({
   photo,
   editable,
   onDelete,
+  onOpen,
 }: {
   photo: Photo;
   editable: boolean;
   onDelete: () => void;
+  onOpen: () => void;
 }) {
   const [caption, setCaption] = useState(photo.caption ?? "");
   const [savedCaption, setSavedCaption] = useState(photo.caption ?? "");
@@ -232,14 +280,19 @@ function PhotoCard({
   return (
     <figure className="group/photo flex w-28 flex-col gap-1">
       <div className="relative h-28 w-28 overflow-hidden rounded-md border border-border">
-        <a href={photo.displayUrl} target="_blank" rel="noreferrer">
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label="View photo"
+          className="block h-full w-full"
+        >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={photo.displayUrl}
             alt={photo.caption ?? ""}
             className="h-full w-full object-cover"
           />
-        </a>
+        </button>
         {editable && (
           <button
             type="button"
