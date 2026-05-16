@@ -43,10 +43,10 @@ export default async function EntryPage({
       <JournalEntryScope id={entry.id} />
       <div className="mx-auto w-full max-w-2xl px-6 pt-8">
         <Link
-          href="/journal/history"
+          href="/journal"
           className="font-serif text-xs text-muted-foreground hover:text-foreground"
         >
-          ← history
+          ← journal
         </Link>
         <p className="mt-6 font-serif text-sm text-muted-foreground tabular-nums">
           {formatDate(entry.entry_date)}
@@ -60,7 +60,6 @@ export default async function EntryPage({
         entryId={entry.id}
         initialStatus={entry.status}
         initialMessages={messages}
-        initialSummary={entry.summary}
         viewMode="history"
       />
     </div>

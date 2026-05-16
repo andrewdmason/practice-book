@@ -19,12 +19,13 @@ export async function getOrCreateTodayEntry(): Promise<{
   const columns =
     "id, status, opening_question, opening_candidates, candidates_reroll_count, freeform_started_at";
 
-  // Most recent entry for today, regardless of status. Could be open (in
-  // progress) or closed (finished — the page will show the "done" view).
+  // Most recent *open* entry for today. /journal/new resumes an in-progress
+  // thread; if today's threads are all closed, we create a fresh one.
   const { data: existing } = await supabase
     .from("journal_entries")
     .select(columns)
     .eq("entry_date", date)
+    .eq("status", "open")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -90,7 +91,7 @@ export async function startFreeformEntry(entryId: string) {
     .eq("id", entryId);
   if (updateErr) throw new Error(updateErr.message);
 
-  revalidatePath("/journal");
+  revalidatePath("/journal/new");
 }
 
 /**
@@ -131,7 +132,7 @@ export async function pickOpeningQuestion(entryId: string, question: string) {
     .eq("id", entryId);
   if (updateErr) throw new Error(updateErr.message);
 
-  revalidatePath("/journal");
+  revalidatePath("/journal/new");
 }
 
 /**
@@ -196,15 +197,20 @@ export async function deleteLatestQuestion(entryId: string) {
   revalidatePath("/journal");
 }
 
-export async function startNewThread(): Promise<void> {
+/**
+ * Mark an entry closed. The wrap pass (summary/title/pull_quote) is generated
+ * separately via /journal/api/close — flipping status here first means the
+ * journal list can immediately show the entry in its "generating" state.
+ */
+export async function closeEntry(entryId: string): Promise<void> {
   const supabase = await createClient();
-  const date = await todayLocal();
   const { error } = await supabase
     .from("journal_entries")
-    .insert({ entry_date: date, status: "open" });
+    .update({ status: "closed", closed_at: new Date().toISOString() })
+    .eq("id", entryId)
+    .eq("status", "open");
   if (error) throw new Error(error.message);
   revalidatePath("/journal");
-  revalidatePath("/journal/history");
 }
 
 export async function reopenEntry(entryId: string) {
@@ -224,8 +230,8 @@ export async function deleteEntry(entryId: string) {
     .delete()
     .eq("id", entryId);
   if (error) throw new Error(error.message);
-  revalidatePath("/journal/history");
-  redirect("/journal/history");
+  revalidatePath("/journal");
+  redirect("/journal");
 }
 
 export async function saveAgentFile(
@@ -260,15 +266,4 @@ export async function latestAgentChatAt(): Promise<string | null> {
     .limit(1)
     .maybeSingle();
   return data?.created_at ?? null;
-}
-
-export async function updateSummary(entryId: string, summary: string) {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("journal_entries")
-    .update({ summary: summary.trim() })
-    .eq("id", entryId);
-  if (error) throw new Error(error.message);
-  revalidatePath("/journal/history");
-  revalidatePath(`/journal/history/${entryId}`);
 }

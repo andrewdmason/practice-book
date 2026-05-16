@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import Link from "next/link";
+import { Settings, X } from "lucide-react";
 import { useAgentChat } from "@/components/journal/agent-chat-context";
 import { loadAgentChatMessages } from "@/app/(journal)/journal/actions";
 import { cn } from "@/lib/utils";
@@ -168,20 +169,31 @@ export function AgentChatSidebar() {
     <aside
       aria-hidden={!isOpen}
       className={cn(
-        "fixed inset-y-0 right-0 z-40 flex w-full max-w-[420px] flex-col border-l border-border bg-background shadow-lg transition-transform duration-200",
+        "fixed inset-y-0 right-0 z-[60] flex w-full max-w-[420px] flex-col border-l border-border bg-background shadow-lg transition-transform duration-200",
         isOpen ? "translate-x-0" : "translate-x-full"
       )}
     >
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
         <span className="font-serif text-base text-foreground">agent</span>
-        <button
-          type="button"
-          onClick={close}
-          aria-label="Close agent chat"
-          className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <Link
+            href="/journal/agent"
+            onClick={close}
+            aria-label="Agent settings"
+            title="Agent settings"
+            className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+          >
+            <Settings className="h-4 w-4" />
+          </Link>
+          <button
+            type="button"
+            onClick={close}
+            aria-label="Close agent chat"
+            className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
