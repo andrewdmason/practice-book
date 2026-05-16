@@ -23,9 +23,12 @@ export default async function TodayPage() {
     content: m.content,
   }));
 
-  // The zen timer is anchored to the opening question's timestamp so its
-  // completion persists across refreshes and reopens.
-  const timerStartedAt = messageRows[0]?.created_at ?? null;
+  // The zen timer is anchored to a wall-clock timestamp so its completion
+  // persists across refreshes and reopens. A freeform entry has no opening
+  // message, so it anchors to when "write freely" was clicked; a picked
+  // question anchors to the opening question's timestamp.
+  const timerStartedAt =
+    entry.freeform_started_at ?? messageRows[0]?.created_at ?? null;
 
   // Fetch summary if entry is closed
   let summary: string | null = null;
@@ -39,8 +42,12 @@ export default async function TodayPage() {
   }
 
   // A fresh open entry with no messages starts in the three-question picker;
-  // picking one inserts the opening message and hands off to the chat.
-  const showPicker = entry.status === "open" && messages.length === 0;
+  // picking one inserts the opening message and hands off to the chat. Once
+  // "write freely" is clicked the picker is bypassed straight to the chat.
+  const showPicker =
+    entry.status === "open" &&
+    messages.length === 0 &&
+    !entry.freeform_started_at;
 
   return (
     <>

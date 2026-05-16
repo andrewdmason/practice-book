@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { TypingIndicator } from "@/components/journal/typing-indicator";
-import { pickOpeningQuestion } from "@/app/(journal)/journal/actions";
+import {
+  pickOpeningQuestion,
+  startFreeformEntry,
+} from "@/app/(journal)/journal/actions";
 
 const REROLL_LIMIT = 3;
 
@@ -93,6 +96,19 @@ export function OpeningPicker({
     });
   }
 
+  function handleWriteFreely() {
+    if (picked) return;
+    setError(null);
+    startTransition(async () => {
+      try {
+        await startFreeformEntry(entryId);
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    });
+  }
+
   if (picked) {
     return (
       <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6 pb-24 pt-12">
@@ -134,6 +150,14 @@ export function OpeningPicker({
             ))}
           </ul>
         )}
+        <button
+          type="button"
+          onClick={handleWriteFreely}
+          disabled={!!picked}
+          className="mt-4 w-full rounded-lg border border-dashed border-muted px-5 py-4 text-left font-serif text-lg leading-relaxed text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
+        >
+          I already know what I want to write
+        </button>
       </div>
 
       {error && (
