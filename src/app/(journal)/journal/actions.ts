@@ -6,6 +6,34 @@ import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/journal/today";
 import type { JournalAgentChatMessage, JournalAgentFileName } from "@/lib/types";
 
+/** The zen timer's five-minute minimum — kept in sync with timer-context.tsx. */
+const TIMER_DURATION_MS = 5 * 60 * 1000;
+
+/**
+ * Whether an open entry's writing session is effectively over: its five-minute
+ * timer has elapsed. The timer anchors to when "write freely" was clicked
+ * (`freeform_started_at`) or, for a picked question, to the opening message's
+ * timestamp. An entry that was never started has no anchor and is not done.
+ */
+async function entrySessionDone(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  entry: { id: string; freeform_started_at: string | null }
+): Promise<boolean> {
+  let anchor = entry.freeform_started_at;
+  if (!anchor) {
+    const { data: firstMsg } = await supabase
+      .from("journal_messages")
+      .select("created_at")
+      .eq("entry_id", entry.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    anchor = firstMsg?.created_at ?? null;
+  }
+  if (!anchor) return false;
+  return Date.now() - new Date(anchor).getTime() >= TIMER_DURATION_MS;
+}
+
 export async function getOrCreateTodayEntry(): Promise<{
   id: string;
   status: "open" | "closed";
@@ -20,7 +48,9 @@ export async function getOrCreateTodayEntry(): Promise<{
     "id, status, opening_question, opening_candidates, candidates_reroll_count, freeform_started_at";
 
   // Most recent *open* entry for today. /journal/new resumes an in-progress
-  // thread; if today's threads are all closed, we create a fresh one.
+  // thread, but only while its writing session is still live: a finished
+  // entry whose timer has elapsed (but which was never formally closed)
+  // should not be resumed — "+ new entry" creates a fresh one instead.
   const { data: existing } = await supabase
     .from("journal_entries")
     .select(columns)
@@ -30,7 +60,7 @@ export async function getOrCreateTodayEntry(): Promise<{
     .limit(1)
     .maybeSingle();
 
-  if (existing) {
+  if (existing && !(await entrySessionDone(supabase, existing))) {
     return {
       id: existing.id,
       status: existing.status as "open" | "closed",
