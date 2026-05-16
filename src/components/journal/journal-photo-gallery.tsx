@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
-import { Loader2, Play, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { Loader2, Play, Plus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { JournalMediaType } from "@/lib/types";
 import {
@@ -28,6 +28,25 @@ type Pending = { tempId: string; previewUrl: string; mediaType: JournalMediaType
 
 function formatBytes(bytes: number): string {
   return `${Math.round(bytes / (1024 * 1024))}MB`;
+}
+
+const VIDEO_EXTENSIONS = ["mov", "mp4", "m4v", "webm", "ogv"];
+const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp", "gif", "heic", "heif"];
+
+/**
+ * Classify a dropped/picked file as photo or video. Falls back to the file
+ * extension because drag sources (notably macOS Photos) sometimes hand over
+ * files with an empty or misleading MIME type.
+ */
+function detectMediaType(file: File): JournalMediaType | null {
+  if (file.type.startsWith("video/")) return "video";
+  if (file.type.startsWith("image/")) return "photo";
+  const ext = file.name.includes(".")
+    ? (file.name.split(".").pop() ?? "").toLowerCase()
+    : "";
+  if (VIDEO_EXTENSIONS.includes(ext)) return "video";
+  if (IMAGE_EXTENSIONS.includes(ext)) return "photo";
+  return null;
 }
 
 /**
@@ -118,11 +137,16 @@ export function JournalPhotoGallery({
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<Media | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const uploadMedia = useCallback(
     async (file: File) => {
-      const isVideo = file.type.startsWith("video/");
-      const mediaType: JournalMediaType = isVideo ? "video" : "photo";
+      const mediaType = detectMediaType(file);
+      if (!mediaType) {
+        setError(`“${file.name}” isn't a supported photo or video format.`);
+        return;
+      }
+      const isVideo = mediaType === "video";
 
       if (file.size > MAX_UPLOAD_BYTES) {
         setError(
@@ -216,7 +240,7 @@ export function JournalPhotoGallery({
       depth = 0;
       setDragging(false);
       const files = Array.from(e.dataTransfer.files).filter(
-        (f) => f.type.startsWith("image/") || f.type.startsWith("video/")
+        (f) => detectMediaType(f) !== null
       );
       files.forEach((f) => void uploadMedia(f));
     };
@@ -264,12 +288,12 @@ export function JournalPhotoGallery({
         </div>
       )}
 
-      {(hasContent || error) && (
+      {(editable || hasContent || error) && (
         <div className="mx-auto w-full max-w-2xl px-6 pt-6">
           {error && (
             <p className="mb-3 font-serif text-xs text-destructive">{error}</p>
           )}
-          {hasContent && (
+          {(editable || hasContent) && (
             <div className="flex flex-wrap gap-4">
               {media.map((item) => (
                 <MediaCard
@@ -304,6 +328,32 @@ export function JournalPhotoGallery({
                   </div>
                 </div>
               ))}
+              {editable && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      Array.from(e.target.files ?? []).forEach(
+                        (f) => void uploadMedia(f)
+                      );
+                      e.target.value = "";
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    aria-label="Add photo or video"
+                    className="flex h-28 w-28 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+                  >
+                    <Plus className="size-5" />
+                    <span className="font-serif text-[11px]">Add</span>
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
