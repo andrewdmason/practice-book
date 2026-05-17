@@ -173,7 +173,7 @@ export async function startFreeformEntry(entryId: string) {
 
   const { data: entry, error: entryErr } = await supabase
     .from("journal_entries")
-    .select("id, status")
+    .select("id, status, opening_candidates")
     .eq("id", entryId)
     .single();
   if (entryErr || !entry) throw new Error("entry not found");
@@ -194,6 +194,16 @@ export async function startFreeformEntry(entryId: string) {
     })
     .eq("id", entryId);
   if (updateErr) throw new Error(updateErr.message);
+
+  // Choosing freeform skips every shown candidate — persist them so future
+  // days don't resurface the same prompts.
+  const shown = (entry.opening_candidates as string[] | null) ?? [];
+  if (shown.length > 0) {
+    const today = await todayLocal();
+    await supabase.from("journal_skipped_questions").insert(
+      shown.map((q) => ({ question: q, entry_id: entryId, skipped_on: today }))
+    );
+  }
 
   revalidatePath("/journal/new");
 }
@@ -235,6 +245,16 @@ export async function pickOpeningQuestion(entryId: string, question: string) {
     .update({ opening_question: question, opening_candidates: null })
     .eq("id", entryId);
   if (updateErr) throw new Error(updateErr.message);
+
+  // The other candidates in the final set were shown but not chosen — persist
+  // them so future days don't resurface the same prompts.
+  const notPicked = candidates.filter((q) => q !== question);
+  if (notPicked.length > 0) {
+    const today = await todayLocal();
+    await supabase.from("journal_skipped_questions").insert(
+      notPicked.map((q) => ({ question: q, entry_id: entryId, skipped_on: today }))
+    );
+  }
 
   revalidatePath("/journal/new");
 }
