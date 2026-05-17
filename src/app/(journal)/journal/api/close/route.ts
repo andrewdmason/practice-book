@@ -34,7 +34,7 @@ const TOOLS = [
   {
     name: "surface_to_agent_chat",
     description:
-      "Post a short message into the separate agent-chat thread for the user to respond to later. Call this when today's conversation contained: explicit feedback about question style or pacing, a mention of a new project / life change worth tracking, or anything the user said is worth remembering long-term. Do NOT modify any agent files yourself — the user reviews each surfaced message in the agent chat and decides whether to apply a change. Phrase the message as a short observation or question the user can quickly accept or redirect (e.g. 'Noticed you said you don't love deadline questions — want me to update SOUL?'). Skip if there's nothing notable; do not infer from tone.",
+      "Post a short message into the separate agent-chat thread for the user to respond to later. Call this when today's conversation contained: explicit feedback about question style or pacing, a mention of a new project / life change worth tracking, or anything the user said is worth remembering long-term. Do NOT modify any agent files yourself — the user reviews each surfaced message in the agent chat and decides whether to apply a change. Phrase the message as a short observation or question the user can quickly accept or redirect (e.g. 'Noticed you said you don't love deadline questions — want me to update Interviewer?'). Skip if there's nothing notable; do not infer from tone.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -109,7 +109,7 @@ The user has finished today's entry.
 
    Phrase each surfaced message as a short observation or question the user can quickly accept or redirect.
 
-   Do not infer from tone or response length. Do not surface things already documented in USER.md or MEMORY.md. If in doubt, don't surface.
+   Do not infer from tone or response length. Do not surface things already documented in Me.md or Interviewer.md. If in doubt, don't surface.
 
 After your tool calls, you may stop. The user does not see the wrap output.`;
 
@@ -177,7 +177,7 @@ After your tool calls, you may stop. The user does not see the wrap output.`;
 
   // Surface messages into the agent chat thread. The user reviews and decides
   // whether to apply any agent-file changes from there. We do NOT modify
-  // SOUL/AGENTS/USER/MEMORY here.
+  // the agent files here.
   let surfacedCount = 0;
   if (surfacedMessages.length > 0) {
     // Dedupe against any prior surfacings tied to this same entry (re-close case)

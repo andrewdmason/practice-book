@@ -10,9 +10,8 @@ import { getUserTimezone, localDate } from "@/lib/date-utils";
 export const OPENING_CANDIDATES_TOOL = {
   name: "propose_questions",
   description:
-    "Propose exactly three opening questions for today's journal entry, one " +
-    "of each flavor. The user will see all three and pick the one they want " +
-    "to answer.",
+    "Propose exactly three opening questions for today's journal entry. The " +
+    "user will see all three and pick the one they want to answer.",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -20,23 +19,16 @@ export const OPENING_CANDIDATES_TOOL = {
         type: "array",
         minItems: 3,
         maxItems: 3,
-        description: "Exactly three questions, one of each flavor.",
+        description: "Exactly three genuinely different questions.",
         items: {
           type: "object",
           properties: {
-            flavor: {
-              type: "string",
-              enum: ["inward", "outward", "thread"],
-              description:
-                "inward = reflective/interior; outward = light/concrete/external; " +
-                "thread = grounded in a specific recent journal entry.",
-            },
             text: {
               type: "string",
               description: "The question itself, in your voice — one or two sentences.",
             },
           },
-          required: ["flavor", "text"],
+          required: ["text"],
         },
       },
     },
@@ -48,11 +40,7 @@ export function buildCandidatesInstruction(rejected: string[]): string {
   const lines: string[] = [
     "",
     "=== Today's question picker ===",
-    "Instead of asking one question, propose exactly three for the user to choose from. Call the `propose_questions` tool with one question of each flavor:",
-    "1. inward — reflective and interior: a feeling, a tension, something unspoken.",
-    "2. outward — light and concrete: a small moment, a plan, something in the day ahead.",
-    "3. thread — grounded in a SPECIFIC recent entry or topic from the history above; reference it naturally. If there is no usable recent history, make this a second concrete, grounded question instead.",
-    "The three must feel genuinely different in mood and angle — never three variations of the same question or the same domain twice. Each should still sound like you (see SOUL): one or two sentences, warm, like a friend texting in the morning.",
+    "Instead of asking a single opening question, propose exactly three for the user to choose from by calling the `propose_questions` tool. See the Interviewer file above — \"The daily set of three\" describes how the three should vary, and the rest of the file describes what makes a good question.",
   ];
   if (rejected.length > 0) {
     lines.push(

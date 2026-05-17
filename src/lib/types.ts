@@ -355,7 +355,7 @@ export type PieceSectionWithChildren = PieceSection & {
 // Journal app
 // ============================================================
 
-export type JournalAgentFileName = "SOUL" | "USER" | "MEMORY";
+export type JournalAgentFileName = "Interviewer" | "Me";
 
 export type JournalAgentFile = {
   id: string;

@@ -10,12 +10,12 @@ import { saveAgentFile } from "@/app/(journal)/journal/actions";
 import { cn } from "@/lib/utils";
 import type { JournalAgentFile, JournalAgentFileName } from "@/lib/types";
 
-const TAB_ORDER: JournalAgentFileName[] = ["SOUL", "USER", "MEMORY"];
+const TAB_ORDER: JournalAgentFileName[] = ["Interviewer", "Me"];
 
 const TAB_DESCRIPTIONS: Record<JournalAgentFileName, string> = {
-  SOUL: "The interviewer's voice and how it asks questions.",
-  USER: "Your life context: who you are, who's around you, what you're working on.",
-  MEMORY: "Accumulated style guide and facts. Tune by chatting with the agent (header icon).",
+  Interviewer:
+    "The interviewer's voice, how it asks questions, and what kinds of questions land. Tune directly or by chatting with the agent (header icon).",
+  Me: "Your life context: who you are, who's around you, what you're working on.",
 };
 
 export function AgentFileEditor({
@@ -23,7 +23,7 @@ export function AgentFileEditor({
 }: {
   files: JournalAgentFile[];
 }) {
-  const [active, setActive] = useState<JournalAgentFileName>("USER");
+  const [active, setActive] = useState<JournalAgentFileName>("Me");
   const fileMap = Object.fromEntries(files.map((f) => [f.name, f.content])) as Record<
     JournalAgentFileName,
     string
