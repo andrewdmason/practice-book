@@ -1,14 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import type { JournalAgentFileName } from "@/lib/types";
 
-const ALLOWED_NAMES: JournalAgentFileName[] = ["SOUL", "USER", "MEMORY"];
+const ALLOWED_NAMES: JournalAgentFileName[] = ["Interviewer", "Me"];
 
 export const AGENT_CHAT_TOOLS = [
   {
     name: "read_agent_file",
     description:
-      "Read the current content of one of the four agent files. " +
-      "All four files are already included in your system prompt, so you " +
+      "Read the current content of one of the agent files. " +
+      "Both files are already included in your system prompt, so you " +
       "rarely need this — only call it after you've made an edit and want to " +
       "verify the resulting state.",
     input_schema: {
@@ -48,7 +48,7 @@ export const AGENT_CHAT_TOOLS = [
     description:
       "Append text to the end of an agent file (with a leading newline if the " +
       "file doesn't already end with one). Convenient for adding a new bullet " +
-      "to MEMORY or a new section to USER without having to specify a find target.",
+      "to Interviewer or a new section to Me without having to specify a find target.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -78,7 +78,7 @@ export const AGENT_CHAT_TOOLS = [
 export type ToolExecResult = {
   // Returned to Claude as the tool_result content.
   toolResult: string;
-  // Short human-readable marker streamed inline to the user (e.g. "[updated USER.md]").
+  // Short human-readable marker streamed inline to the user (e.g. "[updated Me.md]").
   marker?: string;
   isError?: boolean;
 };

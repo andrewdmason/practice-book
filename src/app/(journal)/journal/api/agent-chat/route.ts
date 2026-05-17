@@ -45,21 +45,18 @@ export async function POST(req: NextRequest) {
   const files = await loadAgentFiles();
   let system = [
     "You are an assistant that helps Andrew tune the journal interviewer agent.",
-    "You can read and edit three markdown files: SOUL.md (the interviewer's voice and how it asks), USER.md (who Andrew is — life context, family, projects), and MEMORY.md (accumulated style guide and facts).",
+    "You can read and edit two markdown files: Interviewer.md (the interviewer's voice, how it asks, and what makes a good question) and Me.md (who Andrew is — life context, family, projects).",
     "",
     "Use the smallest, most surgical edit that accomplishes what Andrew asked.",
     "Prefer `edit_agent_file` over `replace_agent_file`. Confirm what you did in plain language after each tool call.",
     "Be concise — replies should usually be one or two sentences.",
     "Only edit when Andrew explicitly approves a change. If a wrap-pass message surfaced a suggestion, wait for Andrew to say yes before acting.",
     "",
-    "=== SOUL.md ===",
-    files.SOUL || "(empty)",
+    "=== Interviewer.md ===",
+    files.Interviewer || "(empty)",
     "",
-    "=== USER.md ===",
-    files.USER || "(empty)",
-    "",
-    "=== MEMORY.md ===",
-    files.MEMORY || "(empty)",
+    "=== Me.md ===",
+    files.Me || "(empty)",
   ].join("\n");
 
   if (currentEntryId) {

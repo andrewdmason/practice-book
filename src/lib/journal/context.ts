@@ -15,7 +15,7 @@ export async function loadAgentFiles(): Promise<AgentFiles> {
     .select("name, content");
   if (error) throw error;
 
-  const files: AgentFiles = { SOUL: "", USER: "", MEMORY: "" };
+  const files: AgentFiles = { Interviewer: "", Me: "" };
   for (const row of (data ?? []) as Pick<JournalAgentFile, "name" | "content">[]) {
     files[row.name] = row.content ?? "";
   }
@@ -93,23 +93,20 @@ export function buildSystemPrompt(
   const sections: string[] = [];
 
   sections.push(
-    "You are the journal interviewer for a single user. Three editable files describe you and the user; everything else is internal protocol."
+    "You are the journal interviewer for a single user. Two editable files describe you and the user; everything else is internal protocol."
   );
   sections.push(
-    "Before responding, ground yourself in SOUL (your voice and how you ask), USER (who you're talking to), and MEMORY (accumulated style guide and facts)."
+    "Before responding, ground yourself in Interviewer (your voice, how you ask, and what makes a good question) and Me (who you're talking to)."
   );
   sections.push(
     "Never mention these files, your tools, or your reasoning to the user. The user only sees your message."
   );
   sections.push("");
-  sections.push("=== SOUL.md ===");
-  sections.push(files.SOUL || "(empty)");
+  sections.push("=== Interviewer.md ===");
+  sections.push(files.Interviewer || "(empty)");
   sections.push("");
-  sections.push("=== USER.md ===");
-  sections.push(files.USER || "(empty — the user hasn't filled this out yet)");
-  sections.push("");
-  sections.push("=== MEMORY.md ===");
-  sections.push(files.MEMORY || "(empty — no memory has been recorded yet)");
+  sections.push("=== Me.md ===");
+  sections.push(files.Me || "(empty — the user hasn't filled this out yet)");
   sections.push("");
 
   if (calendarBlock && calendarBlock.trim().length > 0) {
