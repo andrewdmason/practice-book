@@ -1,16 +1,28 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
-import { Loader2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { Loader2, Play, Plus, X } from "lucide-react";
+import type { JournalMediaType } from "@/lib/types";
 import {
   createSignedPhotoUrl,
   deleteEntryPhoto,
   updatePhotoCaption,
 } from "@/app/(journal)/journal/actions";
-import { uploadJournalPhoto } from "@/lib/journal/photo-upload";
+import {
+  MAX_UPLOAD_BYTES,
+  detectMediaType,
+  formatBytes,
+  uploadJournalMedia,
+} from "@/lib/journal/photo-upload";
 
-type Photo = { id: string; displayUrl: string; caption: string | null };
-type Pending = { tempId: string; previewUrl: string };
+type Media = {
+  id: string;
+  mediaType: JournalMediaType;
+  displayUrl: string;
+  videoUrl: string | null;
+  caption: string | null;
+};
+type Pending = { tempId: string; previewUrl: string; mediaType: JournalMediaType };
 
 export function JournalPhotoGallery({
   entryId,
@@ -18,27 +30,57 @@ export function JournalPhotoGallery({
   editable,
 }: {
   entryId: string;
-  initialPhotos: Photo[];
+  initialPhotos: Media[];
   editable: boolean;
 }) {
-  const [photos, setPhotos] = useState<Photo[]>(initialPhotos);
+  const [media, setMedia] = useState<Media[]>(initialPhotos);
   const [pending, setPending] = useState<Pending[]>([]);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lightbox, setLightbox] = useState<Photo | null>(null);
+  const [lightbox, setLightbox] = useState<Media | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const uploadPhoto = useCallback(
+  const uploadMedia = useCallback(
     async (file: File) => {
+      const mediaType = detectMediaType(file);
+      if (!mediaType) {
+        setError(`“${file.name}” isn't a supported photo or video format.`);
+        return;
+      }
+      const isVideo = mediaType === "video";
+
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setError(
+          `“${file.name}” is ${formatBytes(file.size)} — files must be under ${formatBytes(
+            MAX_UPLOAD_BYTES
+          )}.`
+        );
+        return;
+      }
+
       const tempId = crypto.randomUUID();
       const previewUrl = URL.createObjectURL(file);
-      setPending((p) => [...p, { tempId, previewUrl }]);
+      setPending((p) => [...p, { tempId, previewUrl, mediaType }]);
       setError(null);
       try {
-        const { id, displayPath } = await uploadJournalPhoto(entryId, file);
+        const { id, displayPath, originalPath } = await uploadJournalMedia(
+          entryId,
+          file
+        );
         const displayUrl = await createSignedPhotoUrl(displayPath);
-        setPhotos((ps) => [...ps, { id, displayUrl, caption: null }]);
+        const videoUrl = isVideo
+          ? await createSignedPhotoUrl(originalPath)
+          : null;
+        setMedia((ms) => [
+          ...ms,
+          { id, mediaType, displayUrl, videoUrl, caption: null },
+        ]);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to upload photo");
+        setError(
+          e instanceof Error
+            ? e.message
+            : `Failed to upload ${isVideo ? "video" : "photo"}`
+        );
       } finally {
         URL.revokeObjectURL(previewUrl);
         setPending((p) => p.filter((x) => x.tempId !== tempId));
@@ -74,10 +116,10 @@ export function JournalPhotoGallery({
       e.preventDefault();
       depth = 0;
       setDragging(false);
-      const files = Array.from(e.dataTransfer.files).filter((f) =>
-        f.type.startsWith("image/")
+      const files = Array.from(e.dataTransfer.files).filter(
+        (f) => detectMediaType(f) !== null
       );
-      files.forEach((f) => void uploadPhoto(f));
+      files.forEach((f) => void uploadMedia(f));
     };
 
     window.addEventListener("dragenter", onEnter);
@@ -90,7 +132,7 @@ export function JournalPhotoGallery({
       window.removeEventListener("dragover", onOver);
       window.removeEventListener("drop", onDrop);
     };
-  }, [editable, uploadPhoto]);
+  }, [editable, uploadMedia]);
 
   useEffect(() => {
     if (!lightbox) return;
@@ -105,56 +147,90 @@ export function JournalPhotoGallery({
   }, [lightbox]);
 
   const handleDelete = (id: string) => {
-    setPhotos((ps) => ps.filter((p) => p.id !== id));
+    setMedia((ms) => ms.filter((m) => m.id !== id));
     void deleteEntryPhoto(id).catch((e) => {
-      setError(e instanceof Error ? e.message : "Failed to delete photo");
+      setError(e instanceof Error ? e.message : "Failed to delete item");
     });
   };
 
-  const hasContent = photos.length > 0 || pending.length > 0;
+  const hasContent = media.length > 0 || pending.length > 0;
 
   return (
     <>
       {editable && dragging && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="rounded-xl border-2 border-dashed border-foreground/40 px-10 py-8 font-serif text-sm text-muted-foreground">
-            Drop photo to attach
+            Drop photo or video to attach
           </div>
         </div>
       )}
 
-      {(hasContent || error) && (
+      {(editable || hasContent || error) && (
         <div className="mx-auto w-full max-w-2xl px-6 pt-6">
           {error && (
             <p className="mb-3 font-serif text-xs text-destructive">{error}</p>
           )}
-          {hasContent && (
+          {(editable || hasContent) && (
             <div className="flex flex-wrap gap-4">
-              {photos.map((photo) => (
-                <PhotoCard
-                  key={photo.id}
-                  photo={photo}
+              {media.map((item) => (
+                <MediaCard
+                  key={item.id}
+                  media={item}
                   editable={editable}
-                  onDelete={() => handleDelete(photo.id)}
-                  onOpen={() => setLightbox(photo)}
+                  onDelete={() => handleDelete(item.id)}
+                  onOpen={() => setLightbox(item)}
                 />
               ))}
               {pending.map((p) => (
                 <div
                   key={p.tempId}
-                  className="relative h-28 w-28 overflow-hidden rounded-md border border-border"
+                  className="relative h-28 w-28 overflow-hidden rounded-md border border-border bg-muted"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={p.previewUrl}
-                    alt=""
-                    className="h-full w-full object-cover opacity-50"
-                  />
+                  {p.mediaType === "video" ? (
+                    <video
+                      src={p.previewUrl}
+                      muted
+                      className="h-full w-full object-cover opacity-50"
+                    />
+                  ) : (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={p.previewUrl}
+                      alt=""
+                      className="h-full w-full object-cover opacity-50"
+                    />
+                  )}
                   <div className="absolute inset-0 flex items-center justify-center">
                     <Loader2 className="size-5 animate-spin text-foreground" />
                   </div>
                 </div>
               ))}
+              {editable && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*,video/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      Array.from(e.target.files ?? []).forEach(
+                        (f) => void uploadMedia(f)
+                      );
+                      e.target.value = "";
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    aria-label="Add photo or video"
+                    className="flex h-28 w-28 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+                  >
+                    <Plus className="size-5" />
+                    <span className="font-serif text-[11px]">Add</span>
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -177,12 +253,22 @@ export function JournalPhotoGallery({
             className="flex max-h-full max-w-full flex-col items-center gap-3"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={lightbox.displayUrl}
-              alt={lightbox.caption ?? ""}
-              className="max-h-[85vh] max-w-full rounded-lg object-contain"
-            />
+            {lightbox.mediaType === "video" && lightbox.videoUrl ? (
+              <video
+                src={lightbox.videoUrl}
+                poster={lightbox.displayUrl}
+                controls
+                autoPlay
+                className="max-h-[85vh] max-w-full rounded-lg"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={lightbox.displayUrl}
+                alt={lightbox.caption ?? ""}
+                className="max-h-[85vh] max-w-full rounded-lg object-contain"
+              />
+            )}
             {lightbox.caption && (
               <figcaption className="font-serif text-sm text-white/70">
                 {lightbox.caption}
@@ -195,26 +281,26 @@ export function JournalPhotoGallery({
   );
 }
 
-function PhotoCard({
-  photo,
+function MediaCard({
+  media,
   editable,
   onDelete,
   onOpen,
 }: {
-  photo: Photo;
+  media: Media;
   editable: boolean;
   onDelete: () => void;
   onOpen: () => void;
 }) {
-  const [caption, setCaption] = useState(photo.caption ?? "");
-  const [savedCaption, setSavedCaption] = useState(photo.caption ?? "");
+  const [caption, setCaption] = useState(media.caption ?? "");
+  const [savedCaption, setSavedCaption] = useState(media.caption ?? "");
   const [, startTransition] = useTransition();
 
   const saveCaption = () => {
     if (caption === savedCaption) return;
     setSavedCaption(caption);
     startTransition(async () => {
-      await updatePhotoCaption(photo.id, caption);
+      await updatePhotoCaption(media.id, caption);
     });
   };
 
@@ -224,20 +310,29 @@ function PhotoCard({
         <button
           type="button"
           onClick={onOpen}
-          aria-label="View photo"
+          aria-label={media.mediaType === "video" ? "Play video" : "View photo"}
           className="block h-full w-full"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={photo.displayUrl}
-            alt={photo.caption ?? ""}
+            src={media.displayUrl}
+            alt={media.caption ?? ""}
             className="h-full w-full object-cover"
           />
+          {media.mediaType === "video" && (
+            <span className="absolute inset-0 flex items-center justify-center">
+              <span className="rounded-full bg-black/55 p-2">
+                <Play className="size-4 fill-white text-white" />
+              </span>
+            </span>
+          )}
         </button>
         {editable && (
           <button
             type="button"
-            aria-label="Delete photo"
+            aria-label={
+              media.mediaType === "video" ? "Delete video" : "Delete photo"
+            }
             onClick={onDelete}
             className="absolute right-1 top-1 rounded-full bg-background/80 p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover/photo:opacity-100"
           >
@@ -254,9 +349,9 @@ function PhotoCard({
           className="w-full bg-transparent font-serif text-xs text-muted-foreground placeholder:text-muted-foreground/50 focus:text-foreground focus:outline-none"
         />
       ) : (
-        photo.caption && (
+        media.caption && (
           <figcaption className="font-serif text-xs text-muted-foreground">
-            {photo.caption}
+            {media.caption}
           </figcaption>
         )
       )}

@@ -384,9 +384,12 @@ export type JournalEntry = {
   updated_at: string;
 };
 
+export type JournalMediaType = "photo" | "video";
+
 export type JournalEntryPhoto = {
   id: string;
   entry_id: string;
+  media_type: JournalMediaType;
   original_path: string;
   display_path: string;
   caption: string | null;

@@ -3,10 +3,11 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { JournalEntry } from "@/lib/types";
+import { Play } from "lucide-react";
+import type { JournalEntry, JournalMediaType } from "@/lib/types";
 
 type HistoryEntry = JournalEntry & {
-  photos: { id: string; displayUrl: string }[];
+  photos: { id: string; displayUrl: string; mediaType: JournalMediaType }[];
 };
 
 // A just-closed entry whose wrap pass (title/summary/pull_quote) hasn't landed
@@ -77,7 +78,7 @@ export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
                   {e.photos.slice(0, 3).map((photo) => (
                     <div
                       key={photo.id}
-                      className="h-52 min-w-0 flex-1 overflow-hidden rounded-lg bg-muted"
+                      className="relative h-52 min-w-0 flex-1 overflow-hidden rounded-lg bg-muted"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -85,6 +86,13 @@ export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
                         alt=""
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                       />
+                      {photo.mediaType === "video" && (
+                        <span className="absolute inset-0 flex items-center justify-center">
+                          <span className="rounded-full bg-black/55 p-3">
+                            <Play className="size-5 fill-white text-white" />
+                          </span>
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
