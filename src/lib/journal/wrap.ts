@@ -126,6 +126,11 @@ After your tool calls, you may stop. The user does not see the wrap output.`;
       max_tokens: 2048,
       system,
       tools: TOOLS,
+      // Force a tool call. The system prompt is the empathetic interviewer
+      // persona; with the default "auto" the model can answer a heavy entry
+      // with caring prose instead of calling write_wrap, leaving the entry
+      // with no summary. "any" still allows surface_to_agent_chat alongside it.
+      tool_choice: { type: "any" },
       messages: turns,
     });
   } catch (err) {
@@ -160,14 +165,27 @@ After your tool calls, you may stop. The user does not see the wrap output.`;
     }
   }
 
-  if (summary || title || pullQuote !== null) {
-    const update: Record<string, unknown> = { summary_stale: false };
-    if (summary !== null) update.summary = summary;
-    if (title !== null) update.title = title;
-    // pull_quote can be set to null explicitly when the AI chose not to surface one
-    update.pull_quote = pullQuote;
-    await supabase.from("journal_entries").update(update).eq("id", entryId);
+  // write_wrap requires summary and title, so missing both means the model
+  // never called it. Treat that as a failure rather than silently writing
+  // nothing — otherwise the entry stays untitled with no signal to the user.
+  if (!summary && !title) {
+    console.error(
+      "[journal/wrap] model returned no write_wrap call for entry",
+      entryId
+    );
+    return {
+      ok: false,
+      error: "the model didn't produce a summary — try again",
+      status: 502,
+    };
   }
+
+  const update: Record<string, unknown> = { summary_stale: false };
+  if (summary !== null) update.summary = summary;
+  if (title !== null) update.title = title;
+  // pull_quote can be set to null explicitly when the AI chose not to surface one
+  update.pull_quote = pullQuote;
+  await supabase.from("journal_entries").update(update).eq("id", entryId);
 
   // Surface messages into the agent chat thread. The user reviews and decides
   // whether to apply any agent-file changes from there. We do NOT modify
