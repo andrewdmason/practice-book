@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/journal/today";
+import { runWrap } from "@/lib/journal/wrap";
 import type {
   JournalAgentChatMessage,
   JournalAgentFileName,
@@ -335,6 +336,18 @@ export async function closeEntry(entryId: string): Promise<void> {
     .eq("status", "open");
   if (error) throw new Error(error.message);
   revalidatePath("/journal");
+}
+
+/**
+ * Re-run the wrap pass (summary/title/pull_quote) for a closed entry. Used to
+ * recover entries whose original fire-and-forget wrap never landed — e.g. the
+ * close request failed silently or the Claude call errored.
+ */
+export async function regenerateEntryWrap(entryId: string): Promise<void> {
+  const result = await runWrap(entryId);
+  if (!result.ok) throw new Error(result.error);
+  revalidatePath("/journal");
+  revalidatePath(`/journal/${entryId}`);
 }
 
 export async function reopenEntry(entryId: string) {
