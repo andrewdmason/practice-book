@@ -6,6 +6,7 @@ import {
 } from "@/lib/journal/context";
 import { loadCalendarBlock } from "@/lib/journal/calendar";
 import { getUserTimezone, localDate } from "@/lib/date-utils";
+import { createClient } from "@/lib/supabase/server";
 
 export const OPENING_CANDIDATES_TOOL = {
   name: "propose_questions",
@@ -36,7 +37,16 @@ export const OPENING_CANDIDATES_TOOL = {
   },
 };
 
-export function buildCandidatesInstruction(rejected: string[]): string {
+/**
+ * Window (in days) of recently-shown-but-not-picked questions fed back to the
+ * model as a soft avoid.
+ */
+const RECENTLY_SHOWN_DAYS = 14;
+
+export function buildCandidatesInstruction(
+  rejected: string[],
+  recentlyShown: string[] = []
+): string {
   const lines: string[] = [
     "",
     "=== Today's question picker ===",
@@ -49,7 +59,33 @@ export function buildCandidatesInstruction(rejected: string[]): string {
       ...rejected.map((q, i) => `${i + 1}. ${q}`)
     );
   }
+  if (recentlyShown.length > 0) {
+    lines.push(
+      "",
+      "The questions below were shown to the user on recent days and not chosen. Don't repeat any of them word-for-word, but the underlying topics are fine to revisit if today's context makes them relevant:",
+      ...recentlyShown.map((q, i) => `${i + 1}. ${q}`)
+    );
+  }
   return lines.join("\n");
+}
+
+/**
+ * Load the distinct questions the picker showed but the user didn't choose,
+ * within the last `RECENTLY_SHOWN_DAYS` days.
+ */
+export async function loadRecentlyShown(today: string): Promise<string[]> {
+  const cutoff = new Date(`${today}T00:00:00Z`);
+  cutoff.setUTCDate(cutoff.getUTCDate() - RECENTLY_SHOWN_DAYS);
+  const cutoffDate = cutoff.toISOString().slice(0, 10);
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("journal_skipped_questions")
+    .select("question")
+    .gte("skipped_on", cutoffDate);
+  if (error) throw error;
+
+  return [...new Set((data ?? []).map((r) => r.question as string))];
 }
 
 /**
@@ -63,15 +99,16 @@ export async function generateCandidates(
 ): Promise<string[]> {
   const tz = await getUserTimezone();
   const today = localDate(new Date(), tz);
-  const [files, history, calendarBlock] = await Promise.all([
+  const [files, history, calendarBlock, recentlyShown] = await Promise.all([
     loadAgentFiles(),
     loadHistory(today, entryId),
     loadCalendarBlock(today, tz),
+    loadRecentlyShown(today),
   ]);
   const system =
     buildSystemPrompt(files, history, today, calendarBlock) +
     "\n" +
-    buildCandidatesInstruction(rejected);
+    buildCandidatesInstruction(rejected, recentlyShown);
 
   const client = anthropic();
   const message = await client.messages.create({

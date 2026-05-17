@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateCandidates } from "@/lib/journal/opening-candidates";
+import { getUserTimezone, localDate } from "@/lib/date-utils";
 
 export const runtime = "nodejs";
 
@@ -46,6 +47,15 @@ export async function POST(req: NextRequest) {
   }
 
   const rejected = (entry.opening_candidates as string[] | null) ?? [];
+
+  // Persist the rejected set so future days don't resurface the same prompts.
+  if (rejected.length > 0) {
+    const tz = await getUserTimezone();
+    const today = localDate(new Date(), tz);
+    await supabase.from("journal_skipped_questions").insert(
+      rejected.map((q) => ({ question: q, entry_id: entryId, skipped_on: today }))
+    );
+  }
 
   let candidates: string[];
   try {
