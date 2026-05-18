@@ -12,7 +12,7 @@ export default async function JournalPage() {
   const { data } = await supabase
     .from("journal_entries")
     .select(
-      "id, entry_date, status, opening_question, summary, title, pull_quote, summary_stale, closed_at, created_at, updated_at"
+      "id, entry_date, status, opening_question, freeform_started_at, summary, title, pull_quote, summary_stale, closed_at, created_at, updated_at"
     );
 
   // Sort newest-first by created_at (ignoring entry_date, since it's a date
@@ -23,10 +23,23 @@ export default async function JournalPage() {
   );
 
   const photosByEntry = await getEntriesPhotos(entries.map((e) => e.id));
-  const entriesWithPhotos = entries.map((e) => ({
-    ...e,
-    photos: photosByEntry[e.id] ?? [],
-  }));
+  const entriesWithPhotos = entries
+    .map((e) => ({
+      ...e,
+      photos: photosByEntry[e.id] ?? [],
+    }))
+    // Hide abandoned entries: an open entry never started (no opening question
+    // picked, no freeform writing) with nothing attached is a row left behind
+    // by visiting /journal/new without writing — not a real entry.
+    .filter(
+      (e) =>
+        !(
+          e.status === "open" &&
+          !e.opening_question &&
+          !e.freeform_started_at &&
+          e.photos.length === 0
+        )
+    );
 
   return (
     <div className="mx-auto w-full max-w-2xl px-6 pb-24 pt-12">

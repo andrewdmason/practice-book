@@ -375,6 +375,7 @@ export type JournalEntry = {
   opening_question: string | null;
   opening_candidates: string[] | null;
   candidates_reroll_count: number;
+  freeform_started_at: string | null;
   summary: string | null;
   title: string | null;
   pull_quote: string | null;
