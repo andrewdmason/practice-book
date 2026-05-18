@@ -39,6 +39,39 @@ async function entrySessionDone(
   return Date.now() - new Date(anchor).getTime() >= TIMER_DURATION_MS;
 }
 
+/**
+ * Delete abandoned entries: open entries from a past day that were never
+ * started (no opening question picked, no freeform writing) and have no photos.
+ * These are rows left behind by visiting /journal/new without writing — an
+ * entry row is inserted on page load, so navigating away leaves an empty one.
+ * Today's empty entry is kept so it can be resumed by getOrCreateTodayEntry.
+ */
+async function pruneAbandonedEntries(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  today: string
+): Promise<void> {
+  const { data: stale } = await supabase
+    .from("journal_entries")
+    .select("id")
+    .eq("status", "open")
+    .is("opening_question", null)
+    .is("freeform_started_at", null)
+    .neq("entry_date", today);
+  if (!stale || stale.length === 0) return;
+
+  const ids = stale.map((r) => r.id as string);
+  const { data: photoRows } = await supabase
+    .from("journal_entry_photos")
+    .select("entry_id")
+    .in("entry_id", ids);
+  const withPhotos = new Set((photoRows ?? []).map((r) => r.entry_id as string));
+
+  const toDelete = ids.filter((id) => !withPhotos.has(id));
+  if (toDelete.length > 0) {
+    await supabase.from("journal_entries").delete().in("id", toDelete);
+  }
+}
+
 export async function getOrCreateTodayEntry(): Promise<{
   id: string;
   status: "open" | "closed";
@@ -51,6 +84,8 @@ export async function getOrCreateTodayEntry(): Promise<{
   const date = await todayLocal();
   const columns =
     "id, status, opening_question, opening_candidates, candidates_reroll_count, freeform_started_at";
+
+  await pruneAbandonedEntries(supabase, date);
 
   // Most recent *open* entry for today. /journal/new resumes an in-progress
   // thread, but only while its writing session is still live: a finished
