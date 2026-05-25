@@ -63,7 +63,7 @@ export default async function EntryPage({
       <JournalPhotoGallery
         entryId={entry.id}
         initialPhotos={photos}
-        editable={false}
+        editable
       />
       <ChatSurface
         entryId={entry.id}
