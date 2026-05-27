@@ -49,25 +49,99 @@ export type QuestionCategory = {
   weight: number;
 };
 
+const QUESTION_MIX_TOOL = {
+  name: "set_question_mix",
+  description:
+    "Record the user's recipe for the morning set of three opening questions, as a weighted list of categories.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      categories: {
+        type: "array",
+        description:
+          "Each distinct category of question the user wants in the daily mix. Empty if the file gives no usable recipe.",
+        items: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description:
+                "Short identifier, kebab-case (e.g. `recent-calendar`, `deep-introspective`). Used internally; the user never sees it.",
+            },
+            description: {
+              type: "string",
+              description:
+                "One-sentence description of what a question in this category looks like, paraphrased from the user's own words.",
+            },
+            weight: {
+              type: "number",
+              description:
+                "Relative likelihood of this category being picked on a given morning. If the user gave explicit percentages, use those numbers. Otherwise infer a rough weight from prose cues (e.g. \"lean concrete most days\" → higher weight on concrete; \"rare\" or \"high-risk\" → lower weight). Weights don't need to sum to 100.",
+            },
+          },
+          required: ["name", "description", "weight"],
+        },
+      },
+    },
+    required: ["categories"],
+  },
+};
+
+const QUESTION_MIX_MODEL =
+  process.env.JOURNAL_INTERPRETER_MODEL ?? "claude-haiku-4-5-20251001";
+
 /**
- * Pull a weighted category list out of the Interviewer file. Scans the whole
- * document for lines shaped like `25% name — description` (em dash, en dash,
- * or hyphen-with-whitespace). Bullet markers and section headings are
- * optional — the tiptap editor stores list items as plain paragraphs, so we
- * can't require markdown bullets or a `## The daily set of three` heading.
- * Returns [] if nothing matches; callers fall back to the prose instruction.
+ * Ask a small model to read the Interviewer file and extract the user's
+ * recipe for the daily set of three as a weighted category list. The file is
+ * a free-text field — the user might list explicit percentages, write prose
+ * like "lean concrete most days", or describe categories without naming them.
+ * The interpreter handles all of that; if it finds nothing usable it returns
+ * an empty list and callers fall back to the prose-only instruction.
+ *
+ * A bad/missing response is non-fatal: we log and return [] so the morning
+ * still works.
  */
-export function parseQuestionMix(interviewer: string): QuestionCategory[] {
-  const lineRe =
-    /^\s*(?:[-*]\s*)?(\d+)\s*%\s+(\S.*?)\s+(?:[—–]|-)\s+(.+?)\s*$/gm;
-  const out: QuestionCategory[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = lineRe.exec(interviewer)) !== null) {
-    const weight = parseInt(m[1], 10);
-    if (weight <= 0) continue;
-    out.push({ weight, name: m[2].trim(), description: m[3].trim() });
+export async function interpretQuestionMix(
+  interviewer: string
+): Promise<QuestionCategory[]> {
+  if (!interviewer.trim()) return [];
+  try {
+    const client = anthropic();
+    const message = await client.messages.create({
+      model: QUESTION_MIX_MODEL,
+      max_tokens: 1024,
+      system:
+        "You read a free-form 'Interviewer' configuration file that describes how a journal app's AI should choose its three daily opening questions. Your only job is to extract the user's intended recipe for those three questions as a weighted list of categories, and report it by calling the `set_question_mix` tool.\n\nHow to read the file:\n- If the user lists explicit percentages or weights for question categories, use those weights and names directly.\n- If the user describes categories in prose (\"lean concrete most days\", \"rare upcoming-event questions\", \"reserve deeply reflective for the right moment\"), infer reasonable relative weights from the prose cues.\n- If the file is purely about voice/style with no notion of question-type variety, return an empty `categories` list.\n- Don't invent categories that aren't in the file. Don't merge distinct categories. Don't editorialise.",
+      tools: [QUESTION_MIX_TOOL],
+      tool_choice: { type: "tool", name: "set_question_mix" },
+      messages: [
+        {
+          role: "user",
+          content: `Here is the Interviewer file:\n\n${interviewer}\n\nExtract the recipe.`,
+        },
+      ],
+    });
+    const toolUse = message.content.find((b) => b.type === "tool_use");
+    if (!toolUse || toolUse.type !== "tool_use") return [];
+    const input = toolUse.input as {
+      categories?: { name?: unknown; description?: unknown; weight?: unknown }[];
+    };
+    const out: QuestionCategory[] = [];
+    for (const c of input.categories ?? []) {
+      const name = typeof c.name === "string" ? c.name.trim() : "";
+      const description =
+        typeof c.description === "string" ? c.description.trim() : "";
+      const weight = typeof c.weight === "number" ? c.weight : NaN;
+      if (!name || !description || !Number.isFinite(weight) || weight <= 0) {
+        continue;
+      }
+      out.push({ name, description, weight });
+    }
+    return out;
+  } catch (err) {
+    console.warn("interpretQuestionMix failed; falling back to prose instruction", err);
+    return [];
   }
-  return out;
 }
 
 /**
@@ -175,7 +249,8 @@ export async function generateCandidates(
     loadCalendarBlock(today, tz),
     loadRecentlyShown(today),
   ]);
-  const sampled = sampleQuestionMix(parseQuestionMix(files.Interviewer), 3);
+  const mix = await interpretQuestionMix(files.Interviewer);
+  const sampled = sampleQuestionMix(mix, 3);
   const system =
     buildSystemPrompt(files, history, today, calendarBlock) +
     "\n" +
