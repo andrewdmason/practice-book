@@ -50,22 +50,19 @@ export type QuestionCategory = {
 };
 
 /**
- * Pull a weighted category list out of the Interviewer file's
- * "## The daily set of three" section. Recognises lines shaped like
- * `- 25% name — description` (em dash, en dash, or hyphen). Returns [] if no
- * such section/lines exist — callers fall back to the prose-only instruction.
+ * Pull a weighted category list out of the Interviewer file. Scans the whole
+ * document for lines shaped like `25% name — description` (em dash, en dash,
+ * or hyphen-with-whitespace). Bullet markers and section headings are
+ * optional — the tiptap editor stores list items as plain paragraphs, so we
+ * can't require markdown bullets or a `## The daily set of three` heading.
+ * Returns [] if nothing matches; callers fall back to the prose instruction.
  */
 export function parseQuestionMix(interviewer: string): QuestionCategory[] {
-  const section = interviewer.match(
-    /##\s+The daily set of three[\s\S]*?(?=\n##\s+|$)/i
-  );
-  if (!section) return [];
-  // Separator is em dash, en dash, or a hyphen with whitespace on BOTH sides
-  // (so `recent-calendar` survives intact as the name).
-  const lineRe = /^\s*[-*]\s*(\d+)\s*%\s+(\S.*?)\s+(?:[—–]|-)\s+(.+?)\s*$/gm;
+  const lineRe =
+    /^\s*(?:[-*]\s*)?(\d+)\s*%\s+(\S.*?)\s+(?:[—–]|-)\s+(.+?)\s*$/gm;
   const out: QuestionCategory[] = [];
   let m: RegExpExecArray | null;
-  while ((m = lineRe.exec(section[0])) !== null) {
+  while ((m = lineRe.exec(interviewer)) !== null) {
     const weight = parseInt(m[1], 10);
     if (weight <= 0) continue;
     out.push({ weight, name: m[2].trim(), description: m[3].trim() });
