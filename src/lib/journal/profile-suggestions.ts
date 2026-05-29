@@ -1,5 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import type { JournalProfileSuggestionChangeType } from "@/lib/types";
+import type {
+  JournalProfileSuggestionChangeType,
+  JournalProfileSuggestionTarget,
+} from "@/lib/types";
 
 export type UserFileChange = {
   change_type: JournalProfileSuggestionChangeType;
@@ -12,22 +15,28 @@ export type ApplyResult =
   | { ok: false; error: string };
 
 /**
- * Apply a single proposed change to the `User` profile doc in
+ * Apply a single proposed change to a profile doc (`Present` or `Past`) in
  * `journal_agent_files`. For edit/remove, `find` must match exactly once.
  *
  *  - `add`    → append `replace` to the end (leading newline if needed)
  *  - `edit`   → replace the single occurrence of `find` with `replace`
  *  - `remove` → excise the single occurrence of `find`, tidying blank lines
  */
-export async function applyUserFileChange(change: UserFileChange): Promise<ApplyResult> {
+export async function applyProfileDocChange(
+  targetDoc: JournalProfileSuggestionTarget,
+  change: UserFileChange
+): Promise<ApplyResult> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("journal_agent_files")
     .select("id, content")
-    .eq("name", "User")
+    .eq("name", targetDoc)
     .single();
   if (error || !data) {
-    return { ok: false, error: `User file not found: ${error?.message ?? "missing"}` };
+    return {
+      ok: false,
+      error: `${targetDoc} doc not found: ${error?.message ?? "missing"}`,
+    };
   }
 
   const before = data.content ?? "";

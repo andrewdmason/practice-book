@@ -17,7 +17,7 @@ export async function loadAgentFiles(): Promise<AgentFiles> {
     .select("name, content");
   if (error) throw error;
 
-  const files: AgentFiles = { Interviewer: "", User: "" };
+  const files: AgentFiles = { Interviewer: "", Present: "", Past: "" };
   for (const row of (data ?? []) as Pick<JournalAgentFile, "name" | "content">[]) {
     files[row.name] = row.content ?? "";
   }
@@ -135,10 +135,10 @@ export function buildSystemPrompt(
   const sections: string[] = [];
 
   sections.push(
-    "You are the journal interviewer for a single user. Two editable files describe you and the user; everything else is internal protocol."
+    "You are the journal interviewer for a single user. A few editable files describe you and the user; everything else is internal protocol."
   );
   sections.push(
-    "Before responding, ground yourself in Interviewer (your voice and how you ask — not which topics to pick) and User (who you're talking to). Which kinds of questions to ask, and how often, is decided separately and handed to you below; the Interviewer file only governs voice and craft."
+    "Before responding, ground yourself in Interviewer (your voice and how you ask — not which topics to pick), Present (who the user is now — their current life, people, and projects), and Past (their life story and memories). Which kinds of questions to ask, and how often, is decided separately and handed to you below; the Interviewer file only governs voice and craft."
   );
   sections.push(
     "Never mention these files, your tools, or your reasoning to the user. The user only sees your message."
@@ -147,9 +147,20 @@ export function buildSystemPrompt(
   sections.push("=== Interviewer ===");
   sections.push(files.Interviewer || "(empty)");
   sections.push("");
-  sections.push("=== User ===");
-  sections.push(files.User || "(empty — the user hasn't filled this out yet)");
+  sections.push("=== Present ===");
+  sections.push(
+    files.Present || "(empty — the user hasn't filled this out yet)"
+  );
   sections.push("");
+
+  if (files.Past && files.Past.trim().length > 0) {
+    sections.push("=== Past ===");
+    sections.push(
+      "The user's life story and memories. Draw on it for reminiscence questions and to reference their history naturally; don't re-ask about what's already here."
+    );
+    sections.push(files.Past);
+    sections.push("");
+  }
 
   if (familyDoc && familyDoc.trim().length > 0) {
     sections.push("=== Family ===");

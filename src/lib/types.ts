@@ -355,7 +355,7 @@ export type PieceSectionWithChildren = PieceSection & {
 // Journal app
 // ============================================================
 
-export type JournalAgentFileName = "Interviewer" | "User";
+export type JournalAgentFileName = "Interviewer" | "Present" | "Past";
 
 export type JournalAgentFile = {
   id: string;
@@ -472,17 +472,23 @@ export type JournalProfileSuggestionStatus = "pending" | "accepted" | "dismissed
 
 export type JournalProfileSuggestionChangeType = "add" | "edit" | "remove";
 
+/** Which doc a suggestion targets: the Present (current-life) or Past (life
+ * story) profile doc. */
+export type JournalProfileSuggestionTarget = "Present" | "Past";
+
 /**
- * A passive, discriminating suggestion to update the User profile doc, produced
- * by the wrap pass after an entry closes. Surfaced as a toast the user accepts
- * (auto-applies the change) or dismisses. For `add`, `replace` holds the new
- * text; for `edit`, `find`→`replace`; for `remove`, `find` is excised.
+ * A passive, discriminating suggestion to update one of the user's profile docs
+ * (Present or Past), produced by the wrap pass after an entry closes. Surfaced
+ * as a toast the user accepts (auto-applies the change) or dismisses. For `add`,
+ * `replace` holds the new text; for `edit`, `find`→`replace`; for `remove`,
+ * `find` is excised.
  */
 export type JournalProfileSuggestion = {
   id: string;
   source_entry_id: string | null;
   status: JournalProfileSuggestionStatus;
   change_type: JournalProfileSuggestionChangeType;
+  target_doc: JournalProfileSuggestionTarget;
   find: string | null;
   replace: string | null;
   summary: string;
