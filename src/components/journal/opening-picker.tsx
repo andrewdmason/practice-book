@@ -7,20 +7,28 @@ import {
   pickOpeningQuestion,
   startFreeformEntry,
 } from "@/app/(journal)/journal/actions";
-
-const REROLL_LIMIT = 3;
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { normalizeCandidates, typeLabel } from "@/lib/journal/candidates";
+import type { JournalOpeningCandidate } from "@/lib/types";
 
 export function OpeningPicker({
   entryId,
   initialCandidates,
   initialRerollCount,
+  questionTypeNames = [],
 }: {
   entryId: string;
-  initialCandidates: string[] | null;
+  initialCandidates: JournalOpeningCandidate[] | null;
   initialRerollCount: number;
+  questionTypeNames?: string[];
 }) {
-  const [candidates, setCandidates] = useState<string[]>(
-    initialCandidates && initialCandidates.length === 3 ? initialCandidates : []
+  const [candidates, setCandidates] = useState<JournalOpeningCandidate[]>(() =>
+    normalizeCandidates(initialCandidates)
   );
   const [rerollCount, setRerollCount] = useState(initialRerollCount);
   const [loading, setLoading] = useState(candidates.length === 0);
@@ -35,7 +43,7 @@ export function OpeningPicker({
   useEffect(() => {
     if (initialLoadRef.current) return;
     initialLoadRef.current = true;
-    if (candidates.length === 3) return;
+    if (candidates.length > 0) return;
     void fetchCandidates("/journal/api/opening-candidates");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -48,21 +56,21 @@ export function OpeningPicker({
     return () => cancelAnimationFrame(id);
   }, [candidates]);
 
-  async function fetchCandidates(url: string) {
+  async function fetchCandidates(url: string, extra?: { categoryName?: string }) {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entryId }),
+        body: JSON.stringify({ entryId, ...extra }),
       });
       if (!res.ok) {
         setError((await res.text().catch(() => "")) || "request failed");
         return;
       }
       const data = (await res.json()) as {
-        candidates: string[];
+        candidates: JournalOpeningCandidate[];
         rerollCount: number;
       };
       // Hide before swapping so the new set animates in cleanly.
@@ -77,8 +85,13 @@ export function OpeningPicker({
   }
 
   function handleReroll() {
-    if (loading || picked || rerollCount >= REROLL_LIMIT) return;
+    if (loading || picked) return;
     void fetchCandidates("/journal/api/regenerate-opening");
+  }
+
+  function handleAskSpecific(categoryName: string) {
+    if (loading || picked) return;
+    void fetchCandidates("/journal/api/regenerate-opening", { categoryName });
   }
 
   function handlePick(question: string) {
@@ -130,24 +143,34 @@ export function OpeningPicker({
           <TypingIndicator />
         ) : (
           <ul className="space-y-4">
-            {candidates.map((q, i) => (
-              <li key={`${rerollCount}-${i}`}>
-                <button
-                  type="button"
-                  onClick={() => handlePick(q)}
-                  disabled={loading}
-                  style={{ transitionDelay: `${i * 90}ms` }}
-                  className={
-                    "w-full rounded-lg border border-muted px-5 py-4 text-left font-serif text-lg leading-relaxed text-foreground transition-all duration-500 hover:border-foreground/40 hover:bg-muted/40 disabled:opacity-50 " +
-                    (shown
-                      ? "translate-y-0 opacity-100"
-                      : "translate-y-1 opacity-0")
-                  }
-                >
-                  {q}
-                </button>
-              </li>
-            ))}
+            {candidates.map((c, i) => {
+              const label = typeLabel(c.type);
+              return (
+                <li key={`${rerollCount}-${i}`}>
+                  <button
+                    type="button"
+                    onClick={() => handlePick(c.text)}
+                    disabled={loading}
+                    style={{ transitionDelay: `${i * 90}ms` }}
+                    className={
+                      "w-full rounded-lg border border-muted px-5 py-4 text-left transition-all duration-500 hover:border-foreground/40 hover:bg-muted/40 disabled:opacity-50 " +
+                      (shown
+                        ? "translate-y-0 opacity-100"
+                        : "translate-y-1 opacity-0")
+                    }
+                  >
+                    {label && (
+                      <span className="mb-1.5 block font-serif text-[0.7rem] uppercase tracking-[0.15em] text-muted-foreground">
+                        {label}
+                      </span>
+                    )}
+                    <span className="font-serif text-lg leading-relaxed text-foreground">
+                      {c.text}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
         <button
@@ -176,16 +199,50 @@ export function OpeningPicker({
             try again
           </button>
         ) : (
-          rerollCount < REROLL_LIMIT && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
             <button
               type="button"
               onClick={handleReroll}
               disabled={loading}
               className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-40 disabled:hover:no-underline"
             >
-              {loading ? "thinking…" : "show me three different ones"}
+              {loading
+                ? "thinking…"
+                : candidates.length === 1
+                  ? "show me a different one"
+                  : "show me a different set"}
             </button>
-          )
+            {questionTypeNames.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <button
+                      type="button"
+                      disabled={loading}
+                      className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-40 disabled:hover:no-underline"
+                    />
+                  }
+                >
+                  ask about something specific…
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  side="top"
+                  align="start"
+                  className="max-h-72 w-56 overflow-y-auto"
+                >
+                  {questionTypeNames.map((name) => (
+                    <DropdownMenuItem
+                      key={name}
+                      onClick={() => handleAskSpecific(name)}
+                      className="font-serif"
+                    >
+                      {typeLabel(name)}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         )}
       </div>
     </div>

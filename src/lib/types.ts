@@ -355,7 +355,7 @@ export type PieceSectionWithChildren = PieceSection & {
 // Journal app
 // ============================================================
 
-export type JournalAgentFileName = "Interviewer" | "Me";
+export type JournalAgentFileName = "Interviewer" | "User";
 
 export type JournalAgentFile = {
   id: string;
@@ -366,6 +366,30 @@ export type JournalAgentFile = {
   updated_at: string;
 };
 
+export type JournalQuestionType = {
+  id: string;
+  name: string; // kebab-case identifier
+  base_description: string;
+  style_note: string;
+  weight: number;
+  enabled: boolean;
+  is_builtin: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type JournalSettings = {
+  questions_per_day: number;
+};
+
+/**
+ * One proposed opening question. `type` is the kebab-case question-type name it
+ * was generated for (e.g. "recent-calendar"), or null when it isn't tied to a
+ * specific type. Persisted in `journal_entries.opening_candidates` (jsonb).
+ */
+export type JournalOpeningCandidate = { text: string; type: string | null };
+
 export type JournalEntryStatus = "open" | "closed";
 
 export type JournalEntry = {
@@ -373,7 +397,7 @@ export type JournalEntry = {
   entry_date: string; // YYYY-MM-DD
   status: JournalEntryStatus;
   opening_question: string | null;
-  opening_candidates: string[] | null;
+  opening_candidates: JournalOpeningCandidate[] | null;
   candidates_reroll_count: number;
   freeform_started_at: string | null;
   summary: string | null;

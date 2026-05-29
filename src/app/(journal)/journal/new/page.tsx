@@ -29,6 +29,14 @@ export default async function NewEntryPage({
     .eq("entry_id", entry.id)
     .order("created_at", { ascending: true });
 
+  // All question types (incl. disabled) power the "ask about something
+  // specific" menu in the picker.
+  const { data: typeRows } = await supabase
+    .from("journal_question_types")
+    .select("name")
+    .order("sort_order", { ascending: true });
+  const questionTypeNames = (typeRows ?? []).map((t) => t.name as string);
+
   const messageRows = (msgs ?? []) as JournalMessage[];
   const messages = messageRows.map((m) => ({
     role: m.role,
@@ -58,6 +66,7 @@ export default async function NewEntryPage({
           entryId={entry.id}
           initialCandidates={entry.opening_candidates}
           initialRerollCount={entry.candidates_reroll_count}
+          questionTypeNames={questionTypeNames}
         />
       ) : (
         <ChatSurface

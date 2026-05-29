@@ -5,10 +5,13 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/journal/today";
 import { runWrap } from "@/lib/journal/wrap";
+import { candidateTexts, normalizeCandidates } from "@/lib/journal/candidates";
 import type {
   JournalAgentChatMessage,
   JournalAgentFileName,
   JournalMediaType,
+  JournalOpeningCandidate,
+  JournalQuestionType,
 } from "@/lib/types";
 
 /** The zen timer's five-minute minimum — kept in sync with timer-context.tsx. */
@@ -76,7 +79,7 @@ export async function getOrCreateTodayEntry(): Promise<{
   id: string;
   status: "open" | "closed";
   opening_question: string | null;
-  opening_candidates: string[] | null;
+  opening_candidates: JournalOpeningCandidate[] | null;
   candidates_reroll_count: number;
   freeform_started_at: string | null;
 }> {
@@ -105,7 +108,7 @@ export async function getOrCreateTodayEntry(): Promise<{
       id: existing.id,
       status: existing.status as "open" | "closed",
       opening_question: existing.opening_question,
-      opening_candidates: existing.opening_candidates as string[] | null,
+      opening_candidates: normalizeCandidates(existing.opening_candidates),
       candidates_reroll_count: existing.candidates_reroll_count,
       freeform_started_at: existing.freeform_started_at,
     };
@@ -123,7 +126,7 @@ export async function getOrCreateTodayEntry(): Promise<{
     id: created.id,
     status: created.status as "open" | "closed",
     opening_question: created.opening_question,
-    opening_candidates: created.opening_candidates as string[] | null,
+    opening_candidates: normalizeCandidates(created.opening_candidates),
     candidates_reroll_count: created.candidates_reroll_count,
     freeform_started_at: created.freeform_started_at,
   };
@@ -138,7 +141,7 @@ export async function getEntryById(entryId: string): Promise<{
   id: string;
   status: "open" | "closed";
   opening_question: string | null;
-  opening_candidates: string[] | null;
+  opening_candidates: JournalOpeningCandidate[] | null;
   candidates_reroll_count: number;
   freeform_started_at: string | null;
 }> {
@@ -155,7 +158,7 @@ export async function getEntryById(entryId: string): Promise<{
     id: data.id,
     status: data.status as "open" | "closed",
     opening_question: data.opening_question,
-    opening_candidates: data.opening_candidates as string[] | null,
+    opening_candidates: normalizeCandidates(data.opening_candidates),
     candidates_reroll_count: data.candidates_reroll_count,
     freeform_started_at: data.freeform_started_at,
   };
@@ -233,7 +236,7 @@ export async function startFreeformEntry(entryId: string) {
 
   // Choosing freeform skips every shown candidate — persist them so future
   // days don't resurface the same prompts.
-  const shown = (entry.opening_candidates as string[] | null) ?? [];
+  const shown = candidateTexts(entry.opening_candidates);
   if (shown.length > 0) {
     const today = await todayLocal();
     await supabase.from("journal_skipped_questions").insert(
@@ -259,7 +262,7 @@ export async function pickOpeningQuestion(entryId: string, question: string) {
   if (entryErr || !entry) throw new Error("entry not found");
   if (entry.status !== "open") throw new Error("entry is closed");
 
-  const candidates = (entry.opening_candidates as string[] | null) ?? [];
+  const candidates = candidateTexts(entry.opening_candidates);
   if (!candidates.includes(question)) {
     throw new Error("question is not one of the offered candidates");
   }
@@ -415,6 +418,124 @@ export async function saveAgentFile(
     .from("journal_agent_files")
     .update({ content })
     .eq("name", name);
+  if (error) throw new Error(error.message);
+  revalidatePath("/journal/agent");
+}
+
+export type QuestionTypeUpdate = {
+  id: string;
+  weight: number;
+  style_note: string;
+  base_description: string;
+  enabled: boolean;
+};
+
+/**
+ * Save the whole Questions tab: per-type weight/style/enabled (and, for custom
+ * types, base_description), plus the global questions-per-day setting. Weights
+ * are relative cadence values — the sampler normalizes them, so there's no
+ * total to enforce.
+ */
+export async function saveQuestionConfig(
+  rows: QuestionTypeUpdate[],
+  questionsPerDay: number
+) {
+  if (!Number.isInteger(questionsPerDay) || questionsPerDay < 1 || questionsPerDay > 5) {
+    throw new Error("Questions per day must be between 1 and 5.");
+  }
+
+  const supabase = await createClient();
+
+  const { data: existing, error: loadErr } = await supabase
+    .from("journal_question_types")
+    .select("id, is_builtin");
+  if (loadErr) throw new Error(loadErr.message);
+  const builtinById = new Map(
+    (existing ?? []).map((r) => [r.id as string, r.is_builtin as boolean])
+  );
+
+  for (const row of rows) {
+    const isBuiltin = builtinById.get(row.id);
+    if (isBuiltin === undefined) continue; // unknown id — skip
+    // Built-ins never have their base_description rewritten.
+    const update = isBuiltin
+      ? { weight: row.weight, style_note: row.style_note, enabled: row.enabled }
+      : {
+          weight: row.weight,
+          style_note: row.style_note,
+          enabled: row.enabled,
+          base_description: row.base_description,
+        };
+    const { error } = await supabase
+      .from("journal_question_types")
+      .update(update)
+      .eq("id", row.id);
+    if (error) throw new Error(error.message);
+  }
+
+  const { error: settingsErr } = await supabase
+    .from("journal_settings")
+    .update({ questions_per_day: questionsPerDay })
+    .eq("id", 1);
+  if (settingsErr) throw new Error(settingsErr.message);
+
+  revalidatePath("/journal/agent");
+}
+
+/** Add a user-defined question type. Starts disabled (weight 0) so it doesn't
+ * break the enabled-weights-sum-to-100 invariant until the user rebalances. */
+export async function addCustomQuestionType(
+  name: string,
+  baseDescription: string
+): Promise<JournalQuestionType> {
+  const slug = name.trim().toLowerCase().replace(/\s+/g, "-");
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
+    throw new Error("Name must be letters, numbers, and dashes (e.g. my-topic).");
+  }
+  if (!baseDescription.trim()) {
+    throw new Error("Give the question type a short description.");
+  }
+
+  const supabase = await createClient();
+  const { data: maxRow } = await supabase
+    .from("journal_question_types")
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const sortOrder = (maxRow?.sort_order ?? 0) + 1;
+
+  const { data, error } = await supabase
+    .from("journal_question_types")
+    .insert({
+      name: slug,
+      base_description: baseDescription.trim(),
+      weight: 0,
+      enabled: false,
+      is_builtin: false,
+      sort_order: sortOrder,
+    })
+    .select(
+      "id, name, base_description, style_note, weight, enabled, is_builtin, sort_order, created_at, updated_at"
+    )
+    .single();
+  if (error) {
+    if (error.code === "23505") throw new Error(`A question type named "${slug}" already exists.`);
+    throw new Error(error.message);
+  }
+  revalidatePath("/journal/agent");
+  return data as JournalQuestionType;
+}
+
+/** Delete a custom question type. Built-ins are protected by the `is_builtin`
+ * guard in the query and can only be disabled, never removed. */
+export async function deleteCustomQuestionType(id: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("journal_question_types")
+    .delete()
+    .eq("id", id)
+    .eq("is_builtin", false);
   if (error) throw new Error(error.message);
   revalidatePath("/journal/agent");
 }

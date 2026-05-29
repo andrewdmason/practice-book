@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateCandidates } from "@/lib/journal/opening-candidates";
+import { normalizeCandidates } from "@/lib/journal/candidates";
+import type { JournalOpeningCandidate } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -27,8 +29,8 @@ export async function POST(req: NextRequest) {
 
   // Idempotent: if candidates already exist, return them (handles reload and
   // React StrictMode double-mount).
-  const existing = entry.opening_candidates as string[] | null;
-  if (Array.isArray(existing) && existing.length === 3) {
+  const existing = normalizeCandidates(entry.opening_candidates);
+  if (existing.length > 0) {
     return Response.json({
       candidates: existing,
       rerollCount: entry.candidates_reroll_count,
@@ -47,7 +49,7 @@ export async function POST(req: NextRequest) {
     return new Response("entry already started", { status: 409 });
   }
 
-  let candidates: string[];
+  let candidates: JournalOpeningCandidate[];
   try {
     candidates = await generateCandidates(entryId, []);
   } catch (err) {

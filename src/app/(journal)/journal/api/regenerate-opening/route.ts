@@ -1,17 +1,20 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateCandidates } from "@/lib/journal/opening-candidates";
+import { candidateTexts } from "@/lib/journal/candidates";
 import { getUserTimezone, localDate } from "@/lib/date-utils";
+import type { JournalOpeningCandidate } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-const REROLL_LIMIT = 3;
-
-// Reroll the three-question picker: regenerate a fresh set, avoiding the
-// questions the user just rejected. Capped server-side at REROLL_LIMIT.
+// Reroll the picker: regenerate a fresh set, avoiding the questions the user
+// just rejected. An optional `categoryName` forces the whole new set into a
+// single question type (the user asked for a specific kind). The reroll count
+// is still tracked (it keys the picker's re-animation) but isn't capped.
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as { entryId?: string };
+  const body = (await req.json()) as { entryId?: string; categoryName?: string };
   const entryId = body.entryId;
+  const categoryName = body.categoryName?.trim() || undefined;
   if (!entryId) {
     return new Response("entryId required", { status: 400 });
   }
@@ -42,11 +45,7 @@ export async function POST(req: NextRequest) {
     return new Response("entry already started", { status: 409 });
   }
 
-  if (entry.candidates_reroll_count >= REROLL_LIMIT) {
-    return new Response("reroll limit reached", { status: 409 });
-  }
-
-  const rejected = (entry.opening_candidates as string[] | null) ?? [];
+  const rejected = candidateTexts(entry.opening_candidates);
 
   // Persist the rejected set so future days don't resurface the same prompts.
   if (rejected.length > 0) {
@@ -57,9 +56,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let candidates: string[];
+  let candidates: JournalOpeningCandidate[];
   try {
-    candidates = await generateCandidates(entryId, rejected);
+    candidates = await generateCandidates(entryId, rejected, categoryName);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return new Response(msg, { status: 500 });
