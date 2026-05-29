@@ -396,10 +396,11 @@ export type JournalEntryStatus = "open" | "closed";
  * The kind of entry. "standard" is the reflective entry (picked opening
  * question or freeform writing, with AI follow-ups and a wrap-generated
  * title). "quote" is a frictionless capture of a quote + attribution with no
- * AI engagement. Distinct from JournalQuestionType (categories of opening
- * questions).
+ * AI engagement. "recap" is a pasted-in monthly chatbot recap (a markdown
+ * document with a user-supplied title), also with no AI engagement. Distinct
+ * from JournalQuestionType (categories of opening questions).
  */
-export type JournalEntryType = "standard" | "quote";
+export type JournalEntryType = "standard" | "quote" | "recap";
 
 export type JournalEntry = {
   id: string;
@@ -414,6 +415,7 @@ export type JournalEntry = {
   title: string | null;
   pull_quote: string | null;
   quote_attribution: string | null;
+  recap_body: string | null;
   summary_stale: boolean;
   closed_at: string | null;
   created_at: string;

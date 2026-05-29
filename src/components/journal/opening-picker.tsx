@@ -6,6 +6,7 @@ import { TypingIndicator } from "@/components/journal/typing-indicator";
 import {
   pickOpeningQuestion,
   saveQuoteEntry,
+  saveRecapEntry,
   startFreeformEntry,
 } from "@/app/(journal)/journal/actions";
 import {
@@ -16,6 +17,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { normalizeCandidates, typeLabel } from "@/lib/journal/candidates";
 import type { JournalOpeningCandidate } from "@/lib/types";
+
+// Default recap title seeds the current month, e.g. "May Chatbot Recap". The
+// user edits it if they're pasting a recap for a different month.
+function defaultRecapTitle(): string {
+  const month = new Date().toLocaleString("en-US", { month: "long" });
+  return `${month} Chatbot Recap`;
+}
 
 export function OpeningPicker({
   entryId,
@@ -36,10 +44,13 @@ export function OpeningPicker({
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [shown, setShown] = useState(false);
-  const [mode, setMode] = useState<"pick" | "quote">("pick");
+  const [mode, setMode] = useState<"pick" | "quote" | "recap">("pick");
   const [quoteText, setQuoteText] = useState("");
   const [attribution, setAttribution] = useState("");
   const [savingQuote, setSavingQuote] = useState(false);
+  const [recapTitle, setRecapTitle] = useState(defaultRecapTitle);
+  const [recapBody, setRecapBody] = useState("");
+  const [savingRecap, setSavingRecap] = useState(false);
   const [, startTransition] = useTransition();
   const router = useRouter();
   const initialLoadRef = useRef(false);
@@ -141,6 +152,83 @@ export function OpeningPicker({
         setSavingQuote(false);
       }
     });
+  }
+
+  function handleSaveRecap() {
+    const body = recapBody.trim();
+    if (!body || savingRecap) return;
+    setSavingRecap(true);
+    setError(null);
+    startTransition(async () => {
+      try {
+        await saveRecapEntry(entryId, recapTitle, body);
+        router.push(`/journal/${entryId}`);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        setSavingRecap(false);
+      }
+    });
+  }
+
+  // Recap-compose mode: paste a monthly chatbot recap (markdown) with an
+  // editable title. No question, no follow-ups, no wrap pass.
+  if (mode === "recap") {
+    return (
+      <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6 pb-24 pt-12">
+        <p className="font-serif text-sm uppercase tracking-[0.2em] text-muted-foreground">
+          paste a chatbot recap
+        </p>
+
+        <div className="mt-8 flex-1">
+          <input
+            type="text"
+            value={recapTitle}
+            onChange={(e) => setRecapTitle(e.target.value)}
+            placeholder="title"
+            disabled={savingRecap}
+            className="w-full rounded-lg border border-muted bg-transparent px-5 py-3 font-serif text-lg leading-relaxed text-foreground placeholder:text-muted-foreground/60 focus:border-foreground/40 focus:outline-none disabled:opacity-50"
+          />
+          <textarea
+            autoFocus
+            value={recapBody}
+            onChange={(e) => setRecapBody(e.target.value)}
+            placeholder="paste your monthly recap…"
+            rows={14}
+            disabled={savingRecap}
+            className="mt-4 w-full resize-none rounded-lg border border-muted bg-transparent px-5 py-4 font-serif text-base leading-relaxed text-foreground placeholder:text-muted-foreground/60 focus:border-foreground/40 focus:outline-none disabled:opacity-50"
+          />
+        </div>
+
+        {error && (
+          <div className="mt-6 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 font-mono text-xs text-destructive">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-10 flex items-center gap-x-5">
+          <button
+            type="button"
+            onClick={handleSaveRecap}
+            disabled={!recapBody.trim() || savingRecap}
+            className="font-serif text-sm text-foreground underline-offset-4 hover:underline disabled:opacity-40 disabled:hover:no-underline"
+          >
+            {savingRecap ? "saving…" : "save recap"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (savingRecap) return;
+              setMode("pick");
+              setError(null);
+            }}
+            disabled={savingRecap}
+            className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-40"
+          >
+            cancel
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Quote-compose mode: a frictionless capture with no question, no follow-ups.
@@ -273,6 +361,18 @@ export function OpeningPicker({
           className="mt-4 w-full rounded-lg border border-dashed border-muted px-5 py-4 text-left font-serif text-lg leading-relaxed text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
         >
           save a quote
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (picked) return;
+            setError(null);
+            setMode("recap");
+          }}
+          disabled={!!picked}
+          className="mt-4 w-full rounded-lg border border-dashed border-muted px-5 py-4 text-left font-serif text-lg leading-relaxed text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
+        >
+          paste a chatbot recap
         </button>
       </div>
 
