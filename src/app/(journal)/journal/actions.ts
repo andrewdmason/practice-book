@@ -6,11 +6,12 @@ import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/journal/today";
 import { runWrap } from "@/lib/journal/wrap";
 import { candidateTexts, normalizeCandidates } from "@/lib/journal/candidates";
+import { applyUserFileChange } from "@/lib/journal/profile-suggestions";
 import type {
-  JournalAgentChatMessage,
   JournalAgentFileName,
   JournalMediaType,
   JournalOpeningCandidate,
+  JournalProfileSuggestion,
   JournalQuestionType,
 } from "@/lib/types";
 
@@ -540,25 +541,71 @@ export async function deleteCustomQuestionType(id: string) {
   revalidatePath("/journal/agent");
 }
 
-export async function loadAgentChatMessages(): Promise<JournalAgentChatMessage[]> {
+// ============================================================
+// Profile suggestions (passive User-doc updates surfaced as toasts)
+// ============================================================
+
+export async function loadPendingProfileSuggestions(): Promise<JournalProfileSuggestion[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
-    .from("journal_agent_chat_messages")
-    .select("id, role, content, source_entry_id, created_at")
+    .from("journal_profile_suggestions")
+    .select("id, source_entry_id, status, change_type, find, replace, summary, created_at, resolved_at")
+    .eq("status", "pending")
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []) as JournalAgentChatMessage[];
+  return (data ?? []) as JournalProfileSuggestion[];
 }
 
-export async function latestAgentChatAt(): Promise<string | null> {
+export type AcceptSuggestionResult =
+  | {
+      ok: true;
+      change_type: JournalProfileSuggestion["change_type"];
+      find: string | null;
+      replace: string | null;
+    }
+  | { ok: false; error: string };
+
+export async function acceptProfileSuggestion(id: string): Promise<AcceptSuggestionResult> {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("journal_agent_chat_messages")
-    .select("created_at")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return data?.created_at ?? null;
+  const { data: row, error } = await supabase
+    .from("journal_profile_suggestions")
+    .select("id, status, change_type, find, replace")
+    .eq("id", id)
+    .single();
+  if (error || !row) return { ok: false, error: "Suggestion not found." };
+  if (row.status !== "pending") return { ok: false, error: "Already resolved." };
+
+  const applied = await applyUserFileChange({
+    change_type: row.change_type,
+    find: row.find,
+    replace: row.replace,
+  });
+  if (!applied.ok) {
+    // Resolve it anyway so a stale suggestion doesn't keep reappearing.
+    await supabase
+      .from("journal_profile_suggestions")
+      .update({ status: "dismissed", resolved_at: new Date().toISOString() })
+      .eq("id", id);
+    return { ok: false, error: applied.error };
+  }
+
+  await supabase
+    .from("journal_profile_suggestions")
+    .update({ status: "accepted", resolved_at: new Date().toISOString() })
+    .eq("id", id);
+  revalidatePath("/journal/agent");
+
+  return { ok: true, change_type: row.change_type, find: row.find, replace: row.replace };
+}
+
+export async function dismissProfileSuggestion(id: string): Promise<void> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("journal_profile_suggestions")
+    .update({ status: "dismissed", resolved_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("status", "pending");
+  if (error) throw new Error(error.message);
 }
 
 // ============================================================

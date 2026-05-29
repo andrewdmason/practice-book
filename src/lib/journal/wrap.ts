@@ -29,24 +29,44 @@ const TOOLS = [
     },
   },
   {
-    name: "surface_to_agent_chat",
+    name: "suggest_profile_update",
     description:
-      "Post a short message into the separate agent-chat thread for the user to respond to later. Call this when today's conversation contained: explicit feedback about question style or pacing, a mention of a new project / life change worth tracking, or anything the user said is worth remembering long-term. Do NOT modify any agent files yourself — the user reviews each surfaced message in the agent chat and decides whether to apply a change. Phrase the message as a short observation or question the user can quickly accept or redirect (e.g. 'Noticed you said you don't love deadline questions — want me to update Interviewer?'). Skip if there's nothing notable; do not infer from tone.",
+      "Propose a SINGLE change to the User profile doc — the file describing who the user is, who's around them, and what they're working on. The user reviews your suggestion as a toast and decides whether to apply it; you never edit the file yourself.\n\n" +
+      "The bar is HIGH. Only suggest a change when today's conversation revealed something FUNDAMENTAL and durable:\n" +
+      "  • a new project, role, or commitment the user has genuinely taken on,\n" +
+      "  • a significant life, work, or relationship change, or\n" +
+      "  • a fact already in the profile that is now stale and should be corrected or removed.\n\n" +
+      "Do NOT suggest a change for: every person mentioned, passing moods, one-off events, minor details, or anything already captured in the User doc. Most entries warrant no suggestion at all — when in doubt, don't call this tool.\n\n" +
+      "Call it at most ONCE. Never propose changes to the Interviewer file.\n\n" +
+      "Fields:\n" +
+      "  • change_type: 'add' (append new text), 'edit' (replace existing text), or 'remove' (delete existing text).\n" +
+      "  • For 'edit'/'remove', `find` must be an exact, unique substring of the current User doc.\n" +
+      "  • For 'add'/'edit', `replace` is the new text (a short markdown line/sentence in the doc's style).\n" +
+      "  • summary: one short sentence, phrased as a question the user can accept or wave off (e.g. 'Want me to note that you've started teaching a weekly chamber-music class?').",
     input_schema: {
       type: "object" as const,
       properties: {
-        message: {
+        change_type: { type: "string", enum: ["add", "edit", "remove"] },
+        find: {
           type: "string",
-          description: "The message body to post. One or two sentences.",
+          description: "Exact existing substring to edit or remove. Omit for 'add'.",
+        },
+        replace: {
+          type: "string",
+          description: "New text for 'add' or 'edit'. Omit for 'remove'.",
+        },
+        summary: {
+          type: "string",
+          description: "One short sentence, phrased as a question, shown to the user in the toast.",
         },
       },
-      required: ["message"],
+      required: ["change_type", "summary"],
     },
   },
 ];
 
 export type WrapResult =
-  | { ok: true; summary: string | null; surfacedCount: number }
+  | { ok: true; summary: string | null; suggestionCreated: boolean }
   | { ok: false; error: string; status: number };
 
 /**
@@ -98,6 +118,22 @@ export async function runWrap(entryId: string): Promise<WrapResult> {
     calendarBlock,
     formatNow(new Date(), tz)
   );
+
+  // Recently dismissed suggestions — so the model doesn't re-raise something
+  // the user has already waved off.
+  const { data: dismissed } = await supabase
+    .from("journal_profile_suggestions")
+    .select("summary")
+    .eq("status", "dismissed")
+    .order("resolved_at", { ascending: false })
+    .limit(20);
+  const dismissedBlock =
+    dismissed && dismissed.length > 0
+      ? `\n\nThe user has already declined these suggestions — do not raise them again:\n${dismissed
+          .map((d: { summary: string }) => `- ${d.summary}`)
+          .join("\n")}`
+      : "";
+
   const system =
     baseSystem +
     `\n\n=== Wrap pass ===
@@ -105,14 +141,7 @@ The user has finished today's entry.
 
 1. Call \`write_wrap\` exactly once. It produces a summary, a short evocative title, and (optionally) a verbatim pull quote from something the user said. See the tool description for the bar on each.
 
-2. Then optionally call \`surface_to_agent_chat\` zero or more times. You never modify any agent files yourself — that happens in a separate agent chat where the user explicitly approves each change. Use \`surface_to_agent_chat\` when the conversation contained:
-   - Explicit feedback about question style or interview pacing.
-   - A mention of a new project, life change, or piece of context the agent should know about going forward.
-   - Anything the user said is worth remembering long-term.
-
-   Phrase each surfaced message as a short observation or question the user can quickly accept or redirect.
-
-   Do not infer from tone or response length. Do not surface things already documented in the User or Interviewer files. If in doubt, don't surface.
+2. Then, only if warranted, call \`suggest_profile_update\` exactly once to propose a single change to the User profile doc. The bar is high — see the tool description. Most entries warrant no suggestion. You never edit any file yourself; the user reviews the suggestion as a toast and decides. Never propose Interviewer changes. Do not propose anything already captured in the User doc.${dismissedBlock}
 
 After your tool calls, you may stop. The user does not see the wrap output.`;
 
@@ -135,7 +164,7 @@ After your tool calls, you may stop. The user does not see the wrap output.`;
       // Force a tool call. The system prompt is the empathetic interviewer
       // persona; with the default "auto" the model can answer a heavy entry
       // with caring prose instead of calling write_wrap, leaving the entry
-      // with no summary. "any" still allows surface_to_agent_chat alongside it.
+      // with no summary. "any" still allows suggest_profile_update alongside it.
       tool_choice: { type: "any" },
       messages: turns,
     });
@@ -148,7 +177,12 @@ After your tool calls, you may stop. The user does not see the wrap output.`;
   let summary: string | null = null;
   let title: string | null = null;
   let pullQuote: string | null = null;
-  const surfacedMessages: string[] = [];
+  let suggestion: {
+    change_type: "add" | "edit" | "remove";
+    find: string | null;
+    replace: string | null;
+    summary: string;
+  } | null = null;
 
   for (const block of result.content) {
     if (block.type !== "tool_use") continue;
@@ -162,12 +196,24 @@ After your tool calls, you may stop. The user does not see the wrap output.`;
         const q = input.pull_quote.trim().replace(/^["“]|["”]$/g, "");
         pullQuote = q.length > 0 ? q : null;
       }
-    } else if (
-      block.name === "surface_to_agent_chat" &&
-      typeof input.message === "string"
-    ) {
-      const text = input.message.trim();
-      if (text.length > 0) surfacedMessages.push(text);
+    } else if (block.name === "suggest_profile_update") {
+      const changeType = input.change_type;
+      const sugSummary =
+        typeof input.summary === "string" ? input.summary.trim() : "";
+      const find = typeof input.find === "string" ? input.find : null;
+      const replace = typeof input.replace === "string" ? input.replace : null;
+      // Only keep a well-formed suggestion: a summary, a valid type, and the
+      // fields that type requires.
+      const validType =
+        changeType === "add" || changeType === "edit" || changeType === "remove";
+      const hasRequiredFields =
+        (changeType === "add" && !!replace) ||
+        (changeType === "edit" && !!find && replace !== null) ||
+        (changeType === "remove" && !!find);
+      // Keep only the first suggestion if the model called the tool twice.
+      if (sugSummary && validType && hasRequiredFields && !suggestion) {
+        suggestion = { change_type: changeType, find, replace, summary: sugSummary };
+      }
     }
   }
 
@@ -193,32 +239,30 @@ After your tool calls, you may stop. The user does not see the wrap output.`;
   update.pull_quote = pullQuote;
   await supabase.from("journal_entries").update(update).eq("id", entryId);
 
-  // Surface messages into the agent chat thread. The user reviews and decides
-  // whether to apply any agent-file changes from there. We do NOT modify
-  // the agent files here.
-  let surfacedCount = 0;
-  if (surfacedMessages.length > 0) {
-    // Dedupe against any prior surfacings tied to this same entry (re-close case)
+  // Record at most one profile-update suggestion for the user to accept or
+  // dismiss via a toast. We never modify the User doc here. Guard against
+  // re-closing the same entry (or a wrap regenerate) re-raising a suggestion
+  // the user may have already dismissed: skip if any row already exists for
+  // this entry.
+  let suggestionCreated = false;
+  if (suggestion) {
     const { data: prior } = await supabase
-      .from("journal_agent_chat_messages")
-      .select("content")
+      .from("journal_profile_suggestions")
+      .select("id")
       .eq("source_entry_id", entryId)
-      .eq("role", "assistant");
-    const seen = new Set(
-      (prior ?? []).map((p: { content: string }) => p.content.trim())
-    );
-    const fresh = surfacedMessages.filter((m) => !seen.has(m));
-    if (fresh.length > 0) {
-      await supabase.from("journal_agent_chat_messages").insert(
-        fresh.map((message) => ({
-          role: "assistant",
-          content: message,
-          source_entry_id: entryId,
-        }))
-      );
-      surfacedCount = fresh.length;
+      .limit(1);
+    if (!prior || prior.length === 0) {
+      await supabase.from("journal_profile_suggestions").insert({
+        source_entry_id: entryId,
+        status: "pending",
+        change_type: suggestion.change_type,
+        find: suggestion.find,
+        replace: suggestion.replace,
+        summary: suggestion.summary,
+      });
+      suggestionCreated = true;
     }
   }
 
-  return { ok: true, summary, surfacedCount };
+  return { ok: true, summary, suggestionCreated };
 }

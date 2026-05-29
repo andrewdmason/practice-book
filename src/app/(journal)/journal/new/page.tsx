@@ -1,6 +1,5 @@
 import { ChatSurface } from "@/components/journal/chat-surface";
 import { OpeningPicker } from "@/components/journal/opening-picker";
-import { JournalEntryScope } from "@/components/journal/journal-entry-scope";
 import { JournalPhotoGallery } from "@/components/journal/journal-photo-gallery";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -59,7 +58,6 @@ export default async function NewEntryPage({
 
   return (
     <>
-      <JournalEntryScope id={entry.id} />
       <JournalPhotoGallery entryId={entry.id} initialPhotos={photos} editable />
       {showPicker ? (
         <OpeningPicker

@@ -16,7 +16,7 @@ const TAB_ORDER: Tab[] = ["Interviewer", "User", "Questions"];
 
 const TAB_DESCRIPTIONS: Record<Tab, string> = {
   Interviewer:
-    "The interviewer's voice and how it asks — its personality, not which topics it picks. Tune directly or by chatting with the agent (header icon).",
+    "The interviewer's voice and how it asks — its personality, not which topics it picks. Edit it here directly.",
   User: "Your life context: who you are, who's around you, what you're working on.",
   Questions:
     "The kinds of questions you get each morning, how often each shows up, and how many you're offered.",
@@ -26,12 +26,14 @@ export function AgentSettingsTabs({
   files,
   questionTypes,
   settings,
+  initialTab = "Questions",
 }: {
   files: JournalAgentFile[];
   questionTypes: JournalQuestionType[];
   settings: JournalSettings;
+  initialTab?: Tab;
 }) {
-  const [active, setActive] = useState<Tab>("Questions");
+  const [active, setActive] = useState<Tab>(initialTab);
   const fileMap = Object.fromEntries(files.map((f) => [f.name, f.content])) as Record<
     JournalAgentFileName,
     string
@@ -93,7 +95,7 @@ export function AgentSettingsTabs({
           ))}
         </ul>
         <p className="mt-6 font-serif text-xs italic text-muted-foreground">
-          Edits made via the agent chat sidebar (or here directly) update these timestamps.
+          Edits you make here, or accept from a suggestion, update these timestamps.
         </p>
       </aside>
     </div>

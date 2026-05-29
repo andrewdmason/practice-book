@@ -17,6 +17,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     summary: result.summary,
-    surfacedCount: result.surfacedCount,
+    suggestionCreated: result.suggestionCreated,
   });
 }
