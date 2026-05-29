@@ -36,6 +36,20 @@ export async function loadQuestionTypes(): Promise<JournalQuestionType[]> {
   return (data ?? []) as JournalQuestionType[];
 }
 
+/**
+ * The shared, owner-authored family context doc. Readable by every member (RLS),
+ * so each person's interviewer can know who's in the family. Empty string if
+ * unset.
+ */
+export async function loadFamilyDoc(): Promise<string> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("journal_family")
+    .select("content")
+    .maybeSingle();
+  return data?.content ?? "";
+}
+
 export async function loadSettings(): Promise<JournalSettings> {
   const supabase = await createClient();
   // One settings row per user — RLS scopes this to the caller's row, so no
@@ -115,7 +129,8 @@ export function buildSystemPrompt(
   history: { recent: RecentEntry[]; older: JournalEntry[] },
   today: string,
   calendarBlock?: string | null,
-  nowLabel?: string | null
+  nowLabel?: string | null,
+  familyDoc?: string | null
 ): string {
   const sections: string[] = [];
 
@@ -135,6 +150,15 @@ export function buildSystemPrompt(
   sections.push("=== User ===");
   sections.push(files.User || "(empty — the user hasn't filled this out yet)");
   sections.push("");
+
+  if (familyDoc && familyDoc.trim().length > 0) {
+    sections.push("=== Family ===");
+    sections.push(
+      "Shared context about the user's family, authored by the family's owner. Use it to know who's around them; don't re-ask about people already described here."
+    );
+    sections.push(familyDoc);
+    sections.push("");
+  }
 
   if (calendarBlock && calendarBlock.trim().length > 0) {
     sections.push(calendarBlock);

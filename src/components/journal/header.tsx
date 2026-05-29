@@ -18,7 +18,7 @@ export function JournalHeader() {
           <ZenTimer />
         </div>
         <Link
-          href="/journal/agent"
+          href="/settings"
           aria-label="Settings"
           title="Settings"
           className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"

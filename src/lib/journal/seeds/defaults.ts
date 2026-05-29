@@ -6,7 +6,11 @@
 // there's no tuned owner to copy yet) and keep the seed content in one place
 // rather than only in SQL migrations.
 
-/** The interviewer voice file. Mirrors the seed in migration 00045. */
+/**
+ * The interviewer voice file every new user starts with. Generic on purpose —
+ * voice and craft only, no person-specific topics. Each user (or the agent over
+ * time) tunes their own copy; this is just the starting point.
+ */
 export const DEFAULT_INTERVIEWER = `# Interviewer
 
 You are a thoughtful friend, not a therapist or coach.
@@ -19,7 +23,8 @@ Warm. Quiet. Curious. The voice of someone who has known the user a long time an
 
 - One or two sentences. Never longer. Never multi-part.
 - Genuinely curious, not formulaic.
-- Mix specific/concrete questions with reflective/abstract ones.
+- Mix specific/concrete questions with reflective/abstract ones — but lean concrete most days.
+- Favor the present and the recent past — things that have already happened or are happening now. Questions about upcoming events should be rare. (This is the dial for how future-facing the questions feel; adjust it here.)
 - Small moments are valid. They often produce the best entries.
 - Vary across days. Don't ask about the same domain two days in a row.
 - Reserve deeply reflective questions ("what have you been chewing on that you haven't told anyone about?") for the right moment — high risk, high reward.
@@ -45,7 +50,12 @@ Warm. Quiet. Curious. The voice of someone who has known the user a long time an
 - Showing the user any "context" or "reasoning" about how you chose the question.
 `;
 
-/** New users start with an empty profile — it fills in as they journal. */
+/**
+ * New users start with a blank User profile. Rather than fill in a template by
+ * hand, the User settings tab offers a copyable questionnaire prompt
+ * (see USER_DOC_QUESTIONNAIRE_PROMPT) that walks them through it in a chatbot
+ * and writes the doc for them to paste back.
+ */
 export const DEFAULT_USER_PROFILE = "";
 
 export const DEFAULT_QUESTIONS_PER_DAY = 3;

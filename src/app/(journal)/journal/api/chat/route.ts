@@ -4,6 +4,7 @@ import { anthropic, JOURNAL_MODEL } from "@/lib/journal/anthropic";
 import {
   buildSystemPrompt,
   loadAgentFiles,
+  loadFamilyDoc,
   loadHistory,
   messagesAsAnthropicTurns,
 } from "@/lib/journal/context";
@@ -69,17 +70,19 @@ export async function POST(req: NextRequest) {
   // Assemble system prompt
   const tz = await getUserTimezone();
   const today = localDate(new Date(), tz);
-  const [files, history, calendarBlock] = await Promise.all([
+  const [files, history, calendarBlock, familyDoc] = await Promise.all([
     loadAgentFiles(),
     loadHistory(today, entryId),
     loadCalendarBlock(today, tz),
+    loadFamilyDoc(),
   ]);
   const system = buildSystemPrompt(
     files,
     history,
     today,
     calendarBlock,
-    formatNow(new Date(), tz)
+    formatNow(new Date(), tz),
+    familyDoc
   );
 
   const turns = messagesAsAnthropicTurns(thread);

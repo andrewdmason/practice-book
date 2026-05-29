@@ -505,7 +505,7 @@ export async function saveAgentFile(
     .update({ content })
     .eq("name", name);
   if (error) throw new Error(error.message);
-  revalidatePath("/journal/agent");
+  revalidatePath("/settings", "layout");
 }
 
 export type QuestionTypeUpdate = {
@@ -568,7 +568,7 @@ export async function saveQuestionConfig(
     .upsert({ user_id: userId, questions_per_day: questionsPerDay });
   if (settingsErr) throw new Error(settingsErr.message);
 
-  revalidatePath("/journal/agent");
+  revalidatePath("/settings", "layout");
 }
 
 /** Add a user-defined question type. Starts disabled (weight 0) so it doesn't
@@ -614,7 +614,7 @@ export async function addCustomQuestionType(
     if (error.code === "23505") throw new Error(`A question type named "${slug}" already exists.`);
     throw new Error(error.message);
   }
-  revalidatePath("/journal/agent");
+  revalidatePath("/settings", "layout");
   return data as JournalQuestionType;
 }
 
@@ -628,7 +628,7 @@ export async function deleteCustomQuestionType(id: string) {
     .eq("id", id)
     .eq("is_builtin", false);
   if (error) throw new Error(error.message);
-  revalidatePath("/journal/agent");
+  revalidatePath("/settings", "layout");
 }
 
 // ============================================================
@@ -683,7 +683,7 @@ export async function acceptProfileSuggestion(id: string): Promise<AcceptSuggest
     .from("journal_profile_suggestions")
     .update({ status: "accepted", resolved_at: new Date().toISOString() })
     .eq("id", id);
-  revalidatePath("/journal/agent");
+  revalidatePath("/settings", "layout");
 
   return { ok: true, change_type: row.change_type, find: row.find, replace: row.replace };
 }

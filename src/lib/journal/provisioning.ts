@@ -3,6 +3,7 @@ import {
   BUILTIN_QUESTION_TYPES,
   DEFAULT_INTERVIEWER,
   DEFAULT_QUESTIONS_PER_DAY,
+  DEFAULT_USER_PROFILE,
 } from "@/lib/journal/seeds/defaults";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -22,7 +23,6 @@ type TemplateQuestionType = {
 };
 
 type SeedTemplate = {
-  interviewer: string;
   questionTypes: TemplateQuestionType[];
   questionsPerDay: number;
 };
@@ -78,15 +78,23 @@ async function seedJournal(
 ): Promise<void> {
   const template = await resolveTemplate(admin, userId, isOwner);
 
-  // Interviewer voice (copied/tuned) + an empty User profile to fill in.
+  // Every new user starts from the same clean defaults for these two docs: a
+  // generic interviewer voice and a User profile template of section headers to
+  // fill in. They're never copied from another user (which would carry over
+  // personal content).
   await admin.from("journal_agent_files").insert([
     {
       user_id: userId,
       name: "Interviewer",
-      content: template.interviewer,
+      content: DEFAULT_INTERVIEWER,
       agent_writable: true,
     },
-    { user_id: userId, name: "User", content: "", agent_writable: false },
+    {
+      user_id: userId,
+      name: "User",
+      content: DEFAULT_USER_PROFILE,
+      agent_writable: false,
+    },
   ]);
 
   await admin.from("journal_question_types").insert(
@@ -102,9 +110,10 @@ async function seedJournal(
 }
 
 /**
- * Where a new member's seed comes from: copy the owner's *tuned* Interviewer +
- * question types + settings when an owner is already set up; otherwise fall back
- * to code defaults (the very first owner on a fresh database).
+ * Where a new member's question types + settings come from: copy the owner's
+ * tuned set when an owner is already set up; otherwise fall back to code
+ * defaults (the very first owner on a fresh database). The Interviewer and User
+ * docs are NOT sourced here — they always come from the clean defaults.
  */
 async function resolveTemplate(
   admin: AdminClient,
@@ -128,33 +137,25 @@ async function loadTemplateFromUser(
   admin: AdminClient,
   sourceUserId: string
 ): Promise<SeedTemplate> {
-  const [{ data: interviewerFile }, { data: qts }, { data: settings }] =
-    await Promise.all([
-      admin
-        .from("journal_agent_files")
-        .select("content")
-        .eq("user_id", sourceUserId)
-        .eq("name", "Interviewer")
-        .maybeSingle(),
-      admin
-        .from("journal_question_types")
-        .select(
-          "name, base_description, style_note, weight, enabled, is_builtin, sort_order"
-        )
-        .eq("user_id", sourceUserId)
-        .order("sort_order", { ascending: true }),
-      admin
-        .from("journal_settings")
-        .select("questions_per_day")
-        .eq("user_id", sourceUserId)
-        .maybeSingle(),
-    ]);
+  const [{ data: qts }, { data: settings }] = await Promise.all([
+    admin
+      .from("journal_question_types")
+      .select(
+        "name, base_description, style_note, weight, enabled, is_builtin, sort_order"
+      )
+      .eq("user_id", sourceUserId)
+      .order("sort_order", { ascending: true }),
+    admin
+      .from("journal_settings")
+      .select("questions_per_day")
+      .eq("user_id", sourceUserId)
+      .maybeSingle(),
+  ]);
 
   // If the owner somehow has no tuned rows, fall back to code defaults so the
   // new member still gets a working journal.
   const fallback = defaultTemplate();
   return {
-    interviewer: interviewerFile?.content ?? fallback.interviewer,
     questionTypes:
       qts && qts.length > 0
         ? (qts as TemplateQuestionType[])
@@ -165,7 +166,6 @@ async function loadTemplateFromUser(
 
 function defaultTemplate(): SeedTemplate {
   return {
-    interviewer: DEFAULT_INTERVIEWER,
     questionTypes: BUILTIN_QUESTION_TYPES.map((qt) => ({
       name: qt.name,
       base_description: qt.base_description,

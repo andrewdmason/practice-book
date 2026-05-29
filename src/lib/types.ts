@@ -383,6 +383,15 @@ export type JournalSettings = {
   questions_per_day: number;
 };
 
+/** A family member: the sign-in allowlist + per-member provisioning record. */
+export type JournalMember = {
+  email: string;
+  name: string | null;
+  is_owner: boolean;
+  user_id: string | null;
+  seeded_at: string | null;
+};
+
 /**
  * One proposed opening question. `type` is the kebab-case question-type name it
  * was generated for (e.g. "recent-calendar"), or null when it isn't tied to a

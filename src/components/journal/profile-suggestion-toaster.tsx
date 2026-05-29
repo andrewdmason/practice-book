@@ -157,7 +157,7 @@ export function ProfileSuggestionToaster() {
               </DialogClose>
               <Button
                 render={
-                  <Link href="/journal/agent?tab=User" onClick={() => setApplied(null)} />
+                  <Link href="/settings/user" onClick={() => setApplied(null)} />
                 }
               >
                 View full profile
