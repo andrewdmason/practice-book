@@ -15,12 +15,16 @@ export default async function JournalPage() {
       "id, entry_date, status, entry_type, opening_question, freeform_started_at, summary, title, pull_quote, quote_attribution, summary_stale, closed_at, created_at, updated_at"
     );
 
-  // Sort newest-first by created_at (ignoring entry_date, since it's a date
-  // and ties happen constantly with multiple threads per day). Doing this
-  // client-side defends against any chained-order quirks in supabase-js.
-  const entries = ((data ?? []) as JournalEntry[]).sort((a, b) =>
-    a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0
-  );
+  // Sort newest-first by entry_date — the date shown in the feed — with
+  // created_at breaking ties within a day (multiple threads per day are
+  // common). For standard/quote entries entry_date is the creation day, so
+  // this matches creation order; recaps deliberately set entry_date apart from
+  // paste time, and sorting on it keeps them in their dated slot. Done
+  // client-side to defend against any chained-order quirks in supabase-js.
+  const entries = ((data ?? []) as JournalEntry[]).sort((a, b) => {
+    if (a.entry_date !== b.entry_date) return a.entry_date < b.entry_date ? 1 : -1;
+    return a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0;
+  });
 
   const photosByEntry = await getEntriesPhotos(entries.map((e) => e.id));
   const entriesWithPhotos = entries
