@@ -3,7 +3,6 @@ import Link from "next/link";
 import { ChatSurface } from "@/components/journal/chat-surface";
 import { EntryTitle } from "@/components/journal/entry-title";
 import { QuoteEntryView } from "@/components/journal/quote-entry-view";
-import { JournalEntryScope } from "@/components/journal/journal-entry-scope";
 import { JournalPhotoGallery } from "@/components/journal/journal-photo-gallery";
 import { createClient } from "@/lib/supabase/server";
 import { getEntryPhotos } from "@/app/(journal)/journal/actions";
@@ -46,7 +45,6 @@ export default async function EntryPage({
 
   return (
     <div className="flex flex-1 flex-col">
-      <JournalEntryScope id={entry.id} />
       <div className="mx-auto w-full max-w-2xl px-6 pt-8">
         <Link
           href="/journal"

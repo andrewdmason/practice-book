@@ -457,14 +457,26 @@ export type JournalEntrySummary = {
   summary: string | null;
 };
 
-export type JournalAgentChatRole = "user" | "assistant" | "system";
+export type JournalProfileSuggestionStatus = "pending" | "accepted" | "dismissed";
 
-export type JournalAgentChatMessage = {
+export type JournalProfileSuggestionChangeType = "add" | "edit" | "remove";
+
+/**
+ * A passive, discriminating suggestion to update the User profile doc, produced
+ * by the wrap pass after an entry closes. Surfaced as a toast the user accepts
+ * (auto-applies the change) or dismisses. For `add`, `replace` holds the new
+ * text; for `edit`, `find`→`replace`; for `remove`, `find` is excised.
+ */
+export type JournalProfileSuggestion = {
   id: string;
-  role: JournalAgentChatRole;
-  content: string;
   source_entry_id: string | null;
+  status: JournalProfileSuggestionStatus;
+  change_type: JournalProfileSuggestionChangeType;
+  find: string | null;
+  replace: string | null;
+  summary: string;
   created_at: string;
+  resolved_at: string | null;
 };
 
 export type PieceVideo = {

@@ -8,7 +8,16 @@ import type {
 
 export const dynamic = "force-dynamic";
 
-export default async function AgentPage() {
+type Tab = JournalAgentFile["name"] | "Questions";
+const VALID_TABS: Tab[] = ["Interviewer", "User", "Questions"];
+
+export default async function AgentPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const { tab } = await searchParams;
+  const initialTab: Tab = VALID_TABS.includes(tab as Tab) ? (tab as Tab) : "Questions";
   const supabase = await createClient();
   const [filesRes, typesRes, settingsRes] = await Promise.all([
     supabase
@@ -32,7 +41,12 @@ export default async function AgentPage() {
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 pb-24 pt-12">
-      <AgentSettingsTabs files={files} questionTypes={questionTypes} settings={settings} />
+      <AgentSettingsTabs
+        files={files}
+        questionTypes={questionTypes}
+        settings={settings}
+        initialTab={initialTab}
+      />
     </div>
   );
 }
