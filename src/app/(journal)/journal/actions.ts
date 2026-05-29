@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { todayLocal } from "@/lib/journal/today";
 import { runWrap } from "@/lib/journal/wrap";
+import { summarizeRecap } from "@/lib/journal/recap-summary";
 import { candidateTexts, normalizeCandidates } from "@/lib/journal/candidates";
 import { applyUserFileChange } from "@/lib/journal/profile-suggestions";
 import type {
@@ -371,6 +372,146 @@ export async function updateQuoteEntry(
     })
     .eq("id", entryId)
     .eq("entry_type", "quote");
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/journal");
+  revalidatePath(`/journal/${entryId}`);
+}
+
+const MONTH_NAMES = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+];
+
+/**
+ * Derive a recap's feed date from its title: the first day of the month *after*
+ * the month named in the title (e.g. "April Chatbot Recap" → May 1; "December
+ * Chatbot Recap" → January 1 of the next year). This surfaces a month-end recap
+ * at the top of the feed at the start of the following month. If no month name
+ * is found, fall back to the first of the month after today. Built from UTC
+ * parts so the date-only column doesn't drift across timezones.
+ */
+function recapEntryDate(title: string): string {
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const lower = title.toLowerCase();
+  const monthIndex = MONTH_NAMES.findIndex((name) => lower.includes(name));
+
+  // No month in the title: fall back to the first of the month after today.
+  if (monthIndex === -1) {
+    const d = new Date(Date.UTC(year, now.getUTCMonth() + 1, 1));
+    return d.toISOString().slice(0, 10);
+  }
+
+  // First day of the month after the title's month (December rolls into
+  // January of the next year automatically).
+  let target = new Date(Date.UTC(year, monthIndex + 1, 1));
+  // If that lands more than a month in the future, the title's month belongs to
+  // last year (e.g. pasting the December recap in early January) — roll back.
+  const cutoff = new Date(Date.UTC(year, now.getUTCMonth() + 1, 2));
+  if (target.getTime() > cutoff.getTime()) {
+    target = new Date(Date.UTC(year - 1, monthIndex + 1, 1));
+  }
+
+  return target.toISOString().slice(0, 10);
+}
+
+/**
+ * Save a recap entry: a pasted-in monthly chatbot recap. Like saveQuoteEntry,
+ * it reuses the fresh open entry the picker is operating on, closes it
+ * immediately, and runs no wrap pass. The markdown goes in `recap_body`, the
+ * user-supplied title in `title`, and the feed date is derived from the title's
+ * month (see recapEntryDate).
+ */
+export async function saveRecapEntry(
+  entryId: string,
+  title: string,
+  body: string
+) {
+  const trimmedBody = body.trim();
+  if (!trimmedBody) throw new Error("recap is empty");
+  const trimmedTitle = title.trim() || "Chatbot Recap";
+
+  const supabase = await createClient();
+
+  const { data: entry, error: entryErr } = await supabase
+    .from("journal_entries")
+    .select("id, status")
+    .eq("id", entryId)
+    .single();
+  if (entryErr || !entry) throw new Error("entry not found");
+  if (entry.status !== "open") throw new Error("entry is closed");
+
+  const { count, error: countErr } = await supabase
+    .from("journal_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("entry_id", entryId);
+  if (countErr) throw new Error(countErr.message);
+  if ((count ?? 0) > 0) throw new Error("entry already started");
+
+  // A one-sentence AI subtitle for the feed. Resilient: null on any failure,
+  // so a recap still saves even if the summary call doesn't land.
+  const summary = await summarizeRecap(trimmedBody);
+
+  const { error: updateErr } = await supabase
+    .from("journal_entries")
+    .update({
+      entry_type: "recap",
+      title: trimmedTitle,
+      recap_body: trimmedBody,
+      summary,
+      entry_date: recapEntryDate(trimmedTitle),
+      opening_candidates: null,
+      status: "closed",
+      closed_at: new Date().toISOString(),
+    })
+    .eq("id", entryId);
+  if (updateErr) throw new Error(updateErr.message);
+
+  revalidatePath("/journal");
+  revalidatePath(`/journal/${entryId}`);
+}
+
+/**
+ * Edit an existing recap entry's title and body. Re-derives the feed date from
+ * the (possibly changed) title so fixing the month also moves the entry.
+ */
+export async function updateRecapEntry(
+  entryId: string,
+  title: string,
+  body: string
+) {
+  const trimmedBody = body.trim();
+  if (!trimmedBody) throw new Error("recap is empty");
+  const trimmedTitle = title.trim() || "Chatbot Recap";
+
+  // Re-summarize the edited body. Only overwrite the existing subtitle when the
+  // call succeeds, so a transient failure doesn't blank out a good summary.
+  const summary = await summarizeRecap(trimmedBody);
+
+  const update: Record<string, unknown> = {
+    title: trimmedTitle,
+    recap_body: trimmedBody,
+    entry_date: recapEntryDate(trimmedTitle),
+  };
+  if (summary) update.summary = summary;
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("journal_entries")
+    .update(update)
+    .eq("id", entryId)
+    .eq("entry_type", "recap");
   if (error) throw new Error(error.message);
 
   revalidatePath("/journal");

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ChatSurface } from "@/components/journal/chat-surface";
 import { EntryTitle } from "@/components/journal/entry-title";
 import { QuoteEntryView } from "@/components/journal/quote-entry-view";
+import { RecapEntryView } from "@/components/journal/recap-entry-view";
 import { JournalPhotoGallery } from "@/components/journal/journal-photo-gallery";
 import { createClient } from "@/lib/supabase/server";
 import { getEntryPhotos } from "@/app/(journal)/journal/actions";
@@ -21,7 +22,7 @@ export default async function EntryPage({
   const { data: entryRow } = await supabase
     .from("journal_entries")
     .select(
-      "id, entry_date, status, entry_type, opening_question, summary, title, pull_quote, quote_attribution, summary_stale, closed_at, created_at, updated_at"
+      "id, entry_date, status, entry_type, opening_question, summary, title, pull_quote, quote_attribution, recap_body, summary_stale, closed_at, created_at, updated_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -42,6 +43,7 @@ export default async function EntryPage({
 
   const photos = await getEntryPhotos(entry.id);
   const isQuote = entry.entry_type === "quote";
+  const isRecap = entry.entry_type === "recap";
 
   return (
     <div className="flex flex-1 flex-col">
@@ -61,6 +63,12 @@ export default async function EntryPage({
             quote={entry.pull_quote ?? ""}
             attribution={entry.quote_attribution}
           />
+        ) : isRecap ? (
+          <RecapEntryView
+            entryId={entry.id}
+            title={entry.title?.trim() || "Untitled"}
+            body={entry.recap_body ?? ""}
+          />
         ) : (
           <EntryTitle
             entryId={entry.id}
@@ -73,8 +81,9 @@ export default async function EntryPage({
         initialPhotos={photos}
         editable
       />
-      {/* Quote entries have no conversation — no transcript, no reply box. */}
-      {!isQuote && (
+      {/* Only standard entries have a conversation — no transcript or reply
+          box for quote and recap entries. */}
+      {entry.entry_type === "standard" && (
         <ChatSurface
           entryId={entry.id}
           initialStatus={entry.status}
