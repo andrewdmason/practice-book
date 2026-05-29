@@ -75,6 +75,7 @@ export function formatCalendarBlock(
   results: FeedResult[],
   today: string,
   tz: string,
+  now: Date = new Date(),
 ): string {
   if (results.length === 0) return "";
 
@@ -130,7 +131,17 @@ export function formatCalendarBlock(
     });
     lines.push(formatDateLabel(key, d));
     for (const ev of dayEvents) {
-      lines.push(formatEventLine(ev, tz));
+      // Only "today" is ambiguous about past vs. future — other days are
+      // settled by their label. Mark today's timed events relative to now so
+      // recent vs. upcoming questions don't treat a later-today event as past.
+      let note = "";
+      if (d === 0 && !ev.allDay) {
+        note =
+          ev.start.getTime() <= now.getTime()
+            ? " — already happened"
+            : " — hasn't happened yet";
+      }
+      lines.push(formatEventLine(ev, tz) + note);
     }
   }
 

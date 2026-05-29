@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import type { JournalAgentFileName } from "@/lib/types";
 
-const ALLOWED_NAMES: JournalAgentFileName[] = ["Interviewer", "Me"];
+const ALLOWED_NAMES: JournalAgentFileName[] = ["Interviewer", "User"];
 
 export const AGENT_CHAT_TOOLS = [
   {
@@ -78,7 +78,7 @@ export const AGENT_CHAT_TOOLS = [
 export type ToolExecResult = {
   // Returned to Claude as the tool_result content.
   toolResult: string;
-  // Short human-readable marker streamed inline to the user (e.g. "[updated Me.md]").
+  // Short human-readable marker streamed inline to the user (e.g. "[updated User]").
   marker?: string;
   isError?: boolean;
 };
@@ -130,13 +130,13 @@ export async function executeAgentChatTool(
     const first = current.indexOf(find);
     if (first === -1) {
       return error(
-        `edit_agent_file: \`find\` was not found in ${name}.md. Reread the file and retry with the exact existing text.`
+        `edit_agent_file: \`find\` was not found in ${name}. Reread the file and retry with the exact existing text.`
       );
     }
     const second = current.indexOf(find, first + find.length);
     if (second !== -1) {
       return error(
-        `edit_agent_file: \`find\` matched more than once in ${name}.md. Include more surrounding context so the match is unique.`
+        `edit_agent_file: \`find\` matched more than once in ${name}. Include more surrounding context so the match is unique.`
       );
     }
     const next = current.slice(0, first) + replace + current.slice(first + find.length);
@@ -148,8 +148,8 @@ export async function executeAgentChatTool(
     if (writeErr) return error(`edit_agent_file: ${writeErr.message}`);
 
     return {
-      toolResult: `Edited ${name}.md (replaced ${find.length} chars with ${replace.length}).`,
-      marker: `[updated ${name}.md]`,
+      toolResult: `Edited ${name} (replaced ${find.length} chars with ${replace.length}).`,
+      marker: `[updated ${name}]`,
     };
   }
 
@@ -177,8 +177,8 @@ export async function executeAgentChatTool(
     if (writeErr) return error(`append_to_agent_file: ${writeErr.message}`);
 
     return {
-      toolResult: `Appended ${text.length} chars to ${name}.md.`,
-      marker: `[updated ${name}.md]`,
+      toolResult: `Appended ${text.length} chars to ${name}.`,
+      marker: `[updated ${name}]`,
     };
   }
 
@@ -194,8 +194,8 @@ export async function executeAgentChatTool(
       .eq("name", name);
     if (writeErr) return error(`replace_agent_file: ${writeErr.message}`);
     return {
-      toolResult: `Replaced full contents of ${name}.md (${content.length} chars).`,
-      marker: `[updated ${name}.md]`,
+      toolResult: `Replaced full contents of ${name} (${content.length} chars).`,
+      marker: `[updated ${name}]`,
     };
   }
 

@@ -53,6 +53,6 @@ export async function loadCalendarBlock(
     }
   }
 
-  const block = formatCalendarBlock(results, today, tz);
+  const block = formatCalendarBlock(results, today, tz, new Date());
   return block === "" ? null : block;
 }

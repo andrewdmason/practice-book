@@ -8,7 +8,7 @@ import {
   messagesAsAnthropicTurns,
 } from "@/lib/journal/context";
 import { loadCalendarBlock } from "@/lib/journal/calendar";
-import { getUserTimezone, localDate } from "@/lib/date-utils";
+import { formatNow, getUserTimezone, localDate } from "@/lib/date-utils";
 import type { JournalMessage } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
   ].join("\n");
 
   const system =
-    buildSystemPrompt(files, history, today, calendarBlock) +
+    buildSystemPrompt(files, history, today, calendarBlock, formatNow(new Date(), tz)) +
     "\n" +
     regenerateInstruction;
 

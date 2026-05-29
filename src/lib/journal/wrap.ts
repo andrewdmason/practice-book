@@ -7,7 +7,7 @@ import {
   messagesAsAnthropicTurns,
 } from "@/lib/journal/context";
 import { loadCalendarBlock } from "@/lib/journal/calendar";
-import { getUserTimezone, localDate } from "@/lib/date-utils";
+import { formatNow, getUserTimezone, localDate } from "@/lib/date-utils";
 import type { JournalMessage } from "@/lib/types";
 
 const TOOLS = [
@@ -91,7 +91,13 @@ export async function runWrap(entryId: string): Promise<WrapResult> {
     loadHistory(today, entryId),
     loadCalendarBlock(today, tz),
   ]);
-  const baseSystem = buildSystemPrompt(files, history, today, calendarBlock);
+  const baseSystem = buildSystemPrompt(
+    files,
+    history,
+    today,
+    calendarBlock,
+    formatNow(new Date(), tz)
+  );
   const system =
     baseSystem +
     `\n\n=== Wrap pass ===
@@ -106,7 +112,7 @@ The user has finished today's entry.
 
    Phrase each surfaced message as a short observation or question the user can quickly accept or redirect.
 
-   Do not infer from tone or response length. Do not surface things already documented in Me.md or Interviewer.md. If in doubt, don't surface.
+   Do not infer from tone or response length. Do not surface things already documented in the User or Interviewer files. If in doubt, don't surface.
 
 After your tool calls, you may stop. The user does not see the wrap output.`;
 

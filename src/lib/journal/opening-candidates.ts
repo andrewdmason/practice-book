@@ -3,39 +3,51 @@ import {
   buildSystemPrompt,
   loadAgentFiles,
   loadHistory,
+  loadQuestionTypes,
+  loadSettings,
 } from "@/lib/journal/context";
 import { loadCalendarBlock } from "@/lib/journal/calendar";
-import { getUserTimezone, localDate } from "@/lib/date-utils";
+import { formatNow, getUserTimezone, localDate } from "@/lib/date-utils";
 import { createClient } from "@/lib/supabase/server";
+import type { JournalOpeningCandidate, JournalQuestionType } from "@/lib/types";
 
-export const OPENING_CANDIDATES_TOOL = {
-  name: "propose_questions",
-  description:
-    "Propose exactly three opening questions for today's journal entry. The " +
-    "user will see all three and pick the one they want to answer.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      questions: {
-        type: "array",
-        minItems: 3,
-        maxItems: 3,
-        description: "Exactly three genuinely different questions.",
-        items: {
-          type: "object",
-          properties: {
-            text: {
-              type: "string",
-              description: "The question itself, in your voice — one or two sentences.",
+export const OPENING_CANDIDATES_TOOL_NAME = "propose_questions";
+
+/**
+ * The candidate tool's shape depends on how many questions the user wants each
+ * day, so we build it per request rather than as a module constant.
+ */
+export function buildOpeningCandidatesTool(n: number) {
+  return {
+    name: OPENING_CANDIDATES_TOOL_NAME,
+    description:
+      `Propose exactly ${n} opening question(s) for today's journal entry. The ` +
+      "user will see all of them and pick the one they want to answer.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        questions: {
+          type: "array",
+          minItems: n,
+          maxItems: n,
+          description: `Exactly ${n} genuinely different question(s).`,
+          items: {
+            type: "object",
+            properties: {
+              text: {
+                type: "string",
+                description:
+                  "ONLY the question itself as the user will read it, in your voice — one or two sentences. Never include your reasoning, the category name, or any explanation of how or why you chose it or whether a constraint could be met.",
+              },
             },
+            required: ["text"],
           },
-          required: ["text"],
         },
       },
+      required: ["questions"],
     },
-    required: ["questions"],
-  },
-};
+  };
+}
 
 /**
  * Window (in days) of recently-shown-but-not-picked questions fed back to the
@@ -49,99 +61,16 @@ export type QuestionCategory = {
   weight: number;
 };
 
-const QUESTION_MIX_TOOL = {
-  name: "set_question_mix",
-  description:
-    "Record the user's recipe for the morning set of three opening questions, as a weighted list of categories.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      categories: {
-        type: "array",
-        description:
-          "Each distinct category of question the user wants in the daily mix. Empty if the file gives no usable recipe.",
-        items: {
-          type: "object",
-          properties: {
-            name: {
-              type: "string",
-              description:
-                "Short identifier, kebab-case (e.g. `recent-calendar`, `deep-introspective`). Used internally; the user never sees it.",
-            },
-            description: {
-              type: "string",
-              description:
-                "One-sentence description of what a question in this category looks like, paraphrased from the user's own words.",
-            },
-            weight: {
-              type: "number",
-              description:
-                "Relative likelihood of this category being picked on a given morning. If the user gave explicit percentages, use those numbers. Otherwise infer a rough weight from prose cues (e.g. \"lean concrete most days\" → higher weight on concrete; \"rare\" or \"high-risk\" → lower weight). Weights don't need to sum to 100.",
-            },
-          },
-          required: ["name", "description", "weight"],
-        },
-      },
-    },
-    required: ["categories"],
-  },
-};
-
-const QUESTION_MIX_MODEL =
-  process.env.JOURNAL_INTERPRETER_MODEL ?? "claude-haiku-4-5-20251001";
-
 /**
- * Ask a small model to read the Interviewer file and extract the user's
- * recipe for the daily set of three as a weighted category list. The file is
- * a free-text field — the user might list explicit percentages, write prose
- * like "lean concrete most days", or describe categories without naming them.
- * The interpreter handles all of that; if it finds nothing usable it returns
- * an empty list and callers fall back to the prose-only instruction.
- *
- * A bad/missing response is non-fatal: we log and return [] so the morning
- * still works.
+ * Build a `QuestionCategory` from a stored question type, folding the user's
+ * free-text style note onto the locked base description.
  */
-export async function interpretQuestionMix(
-  interviewer: string
-): Promise<QuestionCategory[]> {
-  if (!interviewer.trim()) return [];
-  try {
-    const client = anthropic();
-    const message = await client.messages.create({
-      model: QUESTION_MIX_MODEL,
-      max_tokens: 1024,
-      system:
-        "You read a free-form 'Interviewer' configuration file that describes how a journal app's AI should choose its three daily opening questions. Your only job is to extract the user's intended recipe for those three questions as a weighted list of categories, and report it by calling the `set_question_mix` tool.\n\nHow to read the file:\n- If the user lists explicit percentages or weights for question categories, use those weights and names directly.\n- If the user describes categories in prose (\"lean concrete most days\", \"rare upcoming-event questions\", \"reserve deeply reflective for the right moment\"), infer reasonable relative weights from the prose cues.\n- If the file is purely about voice/style with no notion of question-type variety, return an empty `categories` list.\n- Don't invent categories that aren't in the file. Don't merge distinct categories. Don't editorialise.",
-      tools: [QUESTION_MIX_TOOL],
-      tool_choice: { type: "tool", name: "set_question_mix" },
-      messages: [
-        {
-          role: "user",
-          content: `Here is the Interviewer file:\n\n${interviewer}\n\nExtract the recipe.`,
-        },
-      ],
-    });
-    const toolUse = message.content.find((b) => b.type === "tool_use");
-    if (!toolUse || toolUse.type !== "tool_use") return [];
-    const input = toolUse.input as {
-      categories?: { name?: unknown; description?: unknown; weight?: unknown }[];
-    };
-    const out: QuestionCategory[] = [];
-    for (const c of input.categories ?? []) {
-      const name = typeof c.name === "string" ? c.name.trim() : "";
-      const description =
-        typeof c.description === "string" ? c.description.trim() : "";
-      const weight = typeof c.weight === "number" ? c.weight : NaN;
-      if (!name || !description || !Number.isFinite(weight) || weight <= 0) {
-        continue;
-      }
-      out.push({ name, description, weight });
-    }
-    return out;
-  } catch (err) {
-    console.warn("interpretQuestionMix failed; falling back to prose instruction", err);
-    return [];
-  }
+export function questionTypeToCategory(t: JournalQuestionType): QuestionCategory {
+  return {
+    name: t.name,
+    description: t.base_description + (t.style_note.trim() ? " " + t.style_note.trim() : ""),
+    weight: t.weight,
+  };
 }
 
 /**
@@ -176,24 +105,32 @@ export function sampleQuestionMix(
 }
 
 export function buildCandidatesInstruction(
+  n: number,
   rejected: string[],
   recentlyShown: string[] = [],
-  sampled: QuestionCategory[] = []
+  sampled: QuestionCategory[] = [],
+  forcedCategory?: QuestionCategory
 ): string {
   const lines: string[] = ["", "=== Today's question picker ==="];
-  if (sampled.length === 3) {
+  const voiceNote =
+    "Each question should still sound like you (see the Interviewer file): one or two sentences, warm, like a friend texting in the morning. Each question's text is exactly what the user reads — never narrate your reasoning, name the category, or explain your choice inside it. A category's extra instructions are soft preferences: if one can't be satisfied from the available context, quietly ask a natural question of that category instead — never write about the conflict or that you're skipping or substituting anything.";
+  if (forcedCategory) {
     lines.push(
-      "Propose exactly three opening questions for today by calling the `propose_questions` tool. The three categories below were sampled this morning from the weighted mix in the Interviewer file (\"The daily set of three\"). Produce one question per category, in this order — do not merge, swap, or substitute categories, and do not let two questions collapse into the same domain:"
+      `The user asked specifically for questions of one kind. Propose exactly ${n} opening question(s) by calling the \`propose_questions\` tool, all in this single category — make them genuinely different angles on it, not restatements of one question:`,
+      `- ${forcedCategory.name} — ${forcedCategory.description}`,
+      voiceNote
+    );
+  } else if (sampled.length === n) {
+    lines.push(
+      `Propose exactly ${n} opening question(s) for today by calling the \`propose_questions\` tool. The categories below were sampled this morning from the user's configured question types. Produce one question per category, in this order — do not merge, swap, or substitute categories, and do not let two questions collapse into the same domain:`
     );
     sampled.forEach((c, i) => {
       lines.push(`${i + 1}. ${c.name} — ${c.description}`);
     });
-    lines.push(
-      "Each question should still sound like you (see the rest of the Interviewer file): one or two sentences, warm, like a friend texting in the morning."
-    );
+    lines.push(voiceNote);
   } else {
     lines.push(
-      "Instead of asking a single opening question, propose exactly three for the user to choose from by calling the `propose_questions` tool. See the Interviewer file above — \"The daily set of three\" describes how the three should vary, and the rest of the file describes what makes a good question."
+      `Instead of asking a single opening question, propose exactly ${n} for the user to choose from by calling the \`propose_questions\` tool. Make them genuinely different in mood and angle — never variations of one question, never the same domain twice. ${voiceNote}`
     );
   }
   if (rejected.length > 0) {
@@ -233,36 +170,55 @@ export async function loadRecentlyShown(today: string): Promise<string[]> {
 }
 
 /**
- * Generate three varied opening-question candidates for an entry. `rejected`
- * lists questions the user already turned down (from prior rerolls) so the
- * model avoids repeating them.
+ * Generate the day's varied opening-question candidates for an entry.
+ * `rejected` lists questions the user already turned down (from prior rerolls)
+ * so the model avoids repeating them. When `forcedCategoryName` is given, all
+ * candidates are produced in that single question type (the user asked for a
+ * specific kind), even if that type is currently disabled.
  */
 export async function generateCandidates(
   entryId: string,
-  rejected: string[]
-): Promise<string[]> {
+  rejected: string[],
+  forcedCategoryName?: string
+): Promise<JournalOpeningCandidate[]> {
   const tz = await getUserTimezone();
   const today = localDate(new Date(), tz);
-  const [files, history, calendarBlock, recentlyShown] = await Promise.all([
-    loadAgentFiles(),
-    loadHistory(today, entryId),
-    loadCalendarBlock(today, tz),
-    loadRecentlyShown(today),
-  ]);
-  const mix = await interpretQuestionMix(files.Interviewer);
-  const sampled = sampleQuestionMix(mix, 3);
+  const [files, history, calendarBlock, recentlyShown, questionTypes, settings] =
+    await Promise.all([
+      loadAgentFiles(),
+      loadHistory(today, entryId),
+      loadCalendarBlock(today, tz),
+      loadRecentlyShown(today),
+      loadQuestionTypes(),
+      loadSettings(),
+    ]);
+
+  const n = settings.questions_per_day;
+
+  let sampled: QuestionCategory[] = [];
+  let forced: QuestionCategory | undefined;
+  if (forcedCategoryName) {
+    const t = questionTypes.find((q) => q.name === forcedCategoryName);
+    forced = t ? questionTypeToCategory(t) : undefined;
+  } else {
+    const enabled = questionTypes
+      .filter((t) => t.enabled && t.weight > 0)
+      .map(questionTypeToCategory);
+    sampled = sampleQuestionMix(enabled, n);
+  }
+
   const system =
-    buildSystemPrompt(files, history, today, calendarBlock) +
+    buildSystemPrompt(files, history, today, calendarBlock, formatNow(new Date(), tz)) +
     "\n" +
-    buildCandidatesInstruction(rejected, recentlyShown, sampled);
+    buildCandidatesInstruction(n, rejected, recentlyShown, sampled, forced);
 
   const client = anthropic();
   const message = await client.messages.create({
     model: JOURNAL_MODEL,
     max_tokens: 1024,
     system,
-    tools: [OPENING_CANDIDATES_TOOL],
-    tool_choice: { type: "tool", name: "propose_questions" },
+    tools: [buildOpeningCandidatesTool(n)],
+    tool_choice: { type: "tool", name: OPENING_CANDIDATES_TOOL_NAME },
     messages: [{ role: "user", content: "It's morning. Propose today's questions." }],
   });
 
@@ -274,10 +230,14 @@ export async function generateCandidates(
   const questions = (input.questions ?? [])
     .map((q) => (typeof q.text === "string" ? q.text.trim() : ""))
     .filter((t) => t.length > 0);
-  if (questions.length !== 3) {
-    throw new Error(
-      `expected 3 question candidates, got ${questions.length}`
-    );
+  if (questions.length !== n) {
+    throw new Error(`expected ${n} question candidates, got ${questions.length}`);
   }
-  return questions;
+  // Label each question with the type it was generated for: the forced type
+  // (all questions), the per-slot sampled type (one each, in order), or null
+  // when we fell back to an untyped varied set.
+  return questions.map((text, i) => ({
+    text,
+    type: forced ? forced.name : sampled.length === n ? sampled[i]?.name ?? null : null,
+  }));
 }

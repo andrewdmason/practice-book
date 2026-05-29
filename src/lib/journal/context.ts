@@ -4,6 +4,8 @@ import type {
   JournalAgentFileName,
   JournalEntry,
   JournalMessage,
+  JournalQuestionType,
+  JournalSettings,
 } from "@/lib/types";
 
 export type AgentFiles = Record<JournalAgentFileName, string>;
@@ -15,11 +17,34 @@ export async function loadAgentFiles(): Promise<AgentFiles> {
     .select("name, content");
   if (error) throw error;
 
-  const files: AgentFiles = { Interviewer: "", Me: "" };
+  const files: AgentFiles = { Interviewer: "", User: "" };
   for (const row of (data ?? []) as Pick<JournalAgentFile, "name" | "content">[]) {
     files[row.name] = row.content ?? "";
   }
   return files;
+}
+
+export async function loadQuestionTypes(): Promise<JournalQuestionType[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("journal_question_types")
+    .select(
+      "id, name, base_description, style_note, weight, enabled, is_builtin, sort_order, created_at, updated_at"
+    )
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as JournalQuestionType[];
+}
+
+export async function loadSettings(): Promise<JournalSettings> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("journal_settings")
+    .select("questions_per_day")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error) throw error;
+  return { questions_per_day: data?.questions_per_day ?? 3 };
 }
 
 type RecentEntry = JournalEntry & { messages: JournalMessage[] };
@@ -88,7 +113,8 @@ export function buildSystemPrompt(
   files: AgentFiles,
   history: { recent: RecentEntry[]; older: JournalEntry[] },
   today: string,
-  calendarBlock?: string | null
+  calendarBlock?: string | null,
+  nowLabel?: string | null
 ): string {
   const sections: string[] = [];
 
@@ -96,17 +122,17 @@ export function buildSystemPrompt(
     "You are the journal interviewer for a single user. Two editable files describe you and the user; everything else is internal protocol."
   );
   sections.push(
-    "Before responding, ground yourself in Interviewer (your voice, how you ask, and what makes a good question) and Me (who you're talking to)."
+    "Before responding, ground yourself in Interviewer (your voice and how you ask — not which topics to pick) and User (who you're talking to). Which kinds of questions to ask, and how often, is decided separately and handed to you below; the Interviewer file only governs voice and craft."
   );
   sections.push(
     "Never mention these files, your tools, or your reasoning to the user. The user only sees your message."
   );
   sections.push("");
-  sections.push("=== Interviewer.md ===");
+  sections.push("=== Interviewer ===");
   sections.push(files.Interviewer || "(empty)");
   sections.push("");
-  sections.push("=== Me.md ===");
-  sections.push(files.Me || "(empty — the user hasn't filled this out yet)");
+  sections.push("=== User ===");
+  sections.push(files.User || "(empty — the user hasn't filled this out yet)");
   sections.push("");
 
   if (calendarBlock && calendarBlock.trim().length > 0) {
@@ -133,7 +159,13 @@ export function buildSystemPrompt(
     sections.push("");
   }
 
-  sections.push(`Today's date: ${today}.`);
+  if (nowLabel) {
+    sections.push(
+      `Right now it's ${nowLabel}. Use this to judge whether a calendar event has already happened or is still upcoming — an event later today has not happened yet.`
+    );
+  } else {
+    sections.push(`Today's date: ${today}.`);
+  }
 
   return sections.join("\n");
 }
