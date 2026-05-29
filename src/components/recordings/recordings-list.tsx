@@ -13,12 +13,12 @@ import {
   ChevronDownIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Recording } from "@/app/(app)/recordings/actions";
+import type { Recording } from "@/app/practice/recordings/actions";
 import {
   createSignedPlaybackUrl,
   deleteTaskAudio,
   updateTaskAudioTitle,
-} from "@/app/(app)/timer/audio-actions";
+} from "@/app/practice/timer/audio-actions";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

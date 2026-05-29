@@ -10,7 +10,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { updatePieceStatus } from "@/app/(app)/repertoire/actions";
+import { updatePieceStatus } from "@/app/practice/repertoire/actions";
 import type { Piece } from "@/lib/types";
 
 export function ArchiveDialog({

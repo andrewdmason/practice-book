@@ -19,7 +19,7 @@ import { useLessonView } from "./lesson-view-context";
 import { LessonHeader } from "./lesson-header";
 import { LessonSection } from "./lesson-section";
 import { AddPieceSection } from "./add-piece-section";
-import { reorderLessonSections } from "@/app/(app)/lessons/actions";
+import { reorderLessonSections } from "@/app/practice/lessons/actions";
 import type { LessonEntryWithPiece } from "@/lib/types";
 
 export function SingleLessonView() {

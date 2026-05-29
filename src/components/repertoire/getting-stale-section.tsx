@@ -36,7 +36,7 @@ export function GettingStaleSection({
               className="flex items-center justify-between text-sm"
             >
               <Link
-                href={`/repertoire/${piece.id}`}
+                href={`/practice/repertoire/${piece.id}`}
                 className="text-amber-900 hover:underline truncate"
               >
                 {piece.name}

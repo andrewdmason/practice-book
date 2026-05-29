@@ -14,7 +14,7 @@ export function WorkRow({
   return (
     <div className="px-3 py-2 text-sm">
       <Link
-        href={`/repertoire/works/${work.id}`}
+        href={`/practice/repertoire/works/${work.id}`}
         className="font-medium hover:underline"
       >
         {work.name}
@@ -26,7 +26,7 @@ export function WorkRow({
             <Fragment key={piece.id}>
               {i > 0 && ", "}
               <Link
-                href={`/repertoire/${piece.id}`}
+                href={`/practice/repertoire/${piece.id}`}
                 className="hover:underline"
               >
                 {piece.name}

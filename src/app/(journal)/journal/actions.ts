@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requireUserId } from "@/lib/journal/auth";
 import { todayLocal } from "@/lib/journal/today";
 import { runWrap } from "@/lib/journal/wrap";
 import { summarizeRecap } from "@/lib/journal/recap-summary";
@@ -116,9 +117,10 @@ export async function getOrCreateTodayEntry(): Promise<{
     };
   }
 
+  const userId = await requireUserId(supabase);
   const { data: created, error } = await supabase
     .from("journal_entries")
-    .insert({ entry_date: date, status: "open" })
+    .insert({ entry_date: date, status: "open", user_id: userId })
     .select(columns)
     .single();
   if (error || !created) {
@@ -173,6 +175,7 @@ export async function getEntryById(entryId: string): Promise<{
  */
 export async function createFreeformEntry(): Promise<string> {
   const supabase = await createClient();
+  const userId = await requireUserId(supabase);
   const date = await todayLocal();
   const { data, error } = await supabase
     .from("journal_entries")
@@ -180,6 +183,7 @@ export async function createFreeformEntry(): Promise<string> {
       entry_date: date,
       status: "open",
       freeform_started_at: new Date().toISOString(),
+      user_id: userId,
     })
     .select("id")
     .single();
@@ -241,8 +245,9 @@ export async function startFreeformEntry(entryId: string) {
   const shown = candidateTexts(entry.opening_candidates);
   if (shown.length > 0) {
     const today = await todayLocal();
+    const userId = await requireUserId(supabase);
     await supabase.from("journal_skipped_questions").insert(
-      shown.map((q) => ({ question: q, entry_id: entryId, skipped_on: today }))
+      shown.map((q) => ({ question: q, entry_id: entryId, skipped_on: today, user_id: userId }))
     );
   }
 
@@ -255,6 +260,7 @@ export async function startFreeformEntry(entryId: string) {
  */
 export async function pickOpeningQuestion(entryId: string, question: string) {
   const supabase = await createClient();
+  const userId = await requireUserId(supabase);
 
   const { data: entry, error: entryErr } = await supabase
     .from("journal_entries")
@@ -278,7 +284,7 @@ export async function pickOpeningQuestion(entryId: string, question: string) {
 
   const { error: msgErr } = await supabase
     .from("journal_messages")
-    .insert({ entry_id: entryId, role: "assistant", content: question });
+    .insert({ entry_id: entryId, role: "assistant", content: question, user_id: userId });
   if (msgErr) throw new Error(msgErr.message);
 
   const { error: updateErr } = await supabase
@@ -293,7 +299,7 @@ export async function pickOpeningQuestion(entryId: string, question: string) {
   if (notPicked.length > 0) {
     const today = await todayLocal();
     await supabase.from("journal_skipped_questions").insert(
-      notPicked.map((q) => ({ question: q, entry_id: entryId, skipped_on: today }))
+      notPicked.map((q) => ({ question: q, entry_id: entryId, skipped_on: today, user_id: userId }))
     );
   }
 
@@ -537,9 +543,10 @@ export async function appendUserMessage(entryId: string, content: string) {
   if (entryErr || !entry) throw new Error("entry not found");
   if (entry.status !== "open") throw new Error("entry is closed");
 
+  const userId = await requireUserId(supabase);
   const { error } = await supabase
     .from("journal_messages")
-    .insert({ entry_id: entryId, role: "user", content: trimmed });
+    .insert({ entry_id: entryId, role: "user", content: trimmed, user_id: userId });
   if (error) throw new Error(error.message);
 }
 
@@ -639,7 +646,7 @@ export async function saveAgentFile(
     .update({ content })
     .eq("name", name);
   if (error) throw new Error(error.message);
-  revalidatePath("/journal/agent");
+  revalidatePath("/settings", "layout");
 }
 
 export type QuestionTypeUpdate = {
@@ -693,13 +700,16 @@ export async function saveQuestionConfig(
     if (error) throw new Error(error.message);
   }
 
+  // Settings is one row per user (keyed by user_id, not the old id=1 singleton);
+  // RLS scopes the update to the caller's row. Upsert so a member whose row
+  // wasn't seeded yet still gets one.
+  const userId = await requireUserId(supabase);
   const { error: settingsErr } = await supabase
     .from("journal_settings")
-    .update({ questions_per_day: questionsPerDay })
-    .eq("id", 1);
+    .upsert({ user_id: userId, questions_per_day: questionsPerDay });
   if (settingsErr) throw new Error(settingsErr.message);
 
-  revalidatePath("/journal/agent");
+  revalidatePath("/settings", "layout");
 }
 
 /** Add a user-defined question type. Starts disabled (weight 0) so it doesn't
@@ -717,6 +727,7 @@ export async function addCustomQuestionType(
   }
 
   const supabase = await createClient();
+  const userId = await requireUserId(supabase);
   const { data: maxRow } = await supabase
     .from("journal_question_types")
     .select("sort_order")
@@ -734,6 +745,7 @@ export async function addCustomQuestionType(
       enabled: false,
       is_builtin: false,
       sort_order: sortOrder,
+      user_id: userId,
     })
     .select(
       "id, name, base_description, style_note, weight, enabled, is_builtin, sort_order, created_at, updated_at"
@@ -743,7 +755,7 @@ export async function addCustomQuestionType(
     if (error.code === "23505") throw new Error(`A question type named "${slug}" already exists.`);
     throw new Error(error.message);
   }
-  revalidatePath("/journal/agent");
+  revalidatePath("/settings", "layout");
   return data as JournalQuestionType;
 }
 
@@ -757,7 +769,7 @@ export async function deleteCustomQuestionType(id: string) {
     .eq("id", id)
     .eq("is_builtin", false);
   if (error) throw new Error(error.message);
-  revalidatePath("/journal/agent");
+  revalidatePath("/settings", "layout");
 }
 
 // ============================================================
@@ -812,7 +824,7 @@ export async function acceptProfileSuggestion(id: string): Promise<AcceptSuggest
     .from("journal_profile_suggestions")
     .update({ status: "accepted", resolved_at: new Date().toISOString() })
     .eq("id", id);
-  revalidatePath("/journal/agent");
+  revalidatePath("/settings", "layout");
 
   return { ok: true, change_type: row.change_type, find: row.find, replace: row.replace };
 }
@@ -883,6 +895,7 @@ export async function attachEntryPhoto(
   mediaType: "photo" | "video" = "photo"
 ): Promise<string> {
   const supabase = await createClient();
+  const userId = await requireUserId(supabase);
   const { data, error } = await supabase
     .from("journal_entry_photos")
     .insert({
@@ -890,6 +903,7 @@ export async function attachEntryPhoto(
       original_path: originalPath,
       display_path: displayPath,
       media_type: mediaType,
+      user_id: userId,
     })
     .select("id")
     .single();

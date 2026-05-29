@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { Textarea } from "@/components/ui/textarea";
-import { updatePieceNotes } from "@/app/(app)/repertoire/actions";
+import { updatePieceNotes } from "@/app/practice/repertoire/actions";
 
 export function PieceNotes({
   pieceId,

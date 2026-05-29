@@ -1,7 +1,7 @@
 "use client";
 
 import { formatMinutes } from "@/lib/timer-utils";
-import type { PieceSparklinePoint } from "@/app/(app)/lessons/stats-actions";
+import type { PieceSparklinePoint } from "@/app/practice/lessons/stats-actions";
 
 export function LessonSparkline({
   points,

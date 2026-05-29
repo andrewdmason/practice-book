@@ -2,6 +2,7 @@ import { anthropic, JOURNAL_MODEL } from "@/lib/journal/anthropic";
 import {
   buildSystemPrompt,
   loadAgentFiles,
+  loadFamilyDoc,
   loadHistory,
   loadQuestionTypes,
   loadSettings,
@@ -183,7 +184,7 @@ export async function generateCandidates(
 ): Promise<JournalOpeningCandidate[]> {
   const tz = await getUserTimezone();
   const today = localDate(new Date(), tz);
-  const [files, history, calendarBlock, recentlyShown, questionTypes, settings] =
+  const [files, history, calendarBlock, recentlyShown, questionTypes, settings, familyDoc] =
     await Promise.all([
       loadAgentFiles(),
       loadHistory(today, entryId),
@@ -191,6 +192,7 @@ export async function generateCandidates(
       loadRecentlyShown(today),
       loadQuestionTypes(),
       loadSettings(),
+      loadFamilyDoc(),
     ]);
 
   const n = settings.questions_per_day;
@@ -208,7 +210,7 @@ export async function generateCandidates(
   }
 
   const system =
-    buildSystemPrompt(files, history, today, calendarBlock, formatNow(new Date(), tz)) +
+    buildSystemPrompt(files, history, today, calendarBlock, formatNow(new Date(), tz), familyDoc) +
     "\n" +
     buildCandidatesInstruction(n, rejected, recentlyShown, sampled, forced);
 

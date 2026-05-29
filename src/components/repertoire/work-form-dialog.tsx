@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   createWork,
   updateWork,
-} from "@/app/(app)/repertoire/actions";
+} from "@/app/practice/repertoire/actions";
 import type { Work } from "@/lib/types";
 
 export function WorkFormDialog({

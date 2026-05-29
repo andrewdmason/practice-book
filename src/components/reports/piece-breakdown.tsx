@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2Icon } from "lucide-react";
 import { formatMinutes } from "@/lib/timer-utils";
-import { getPieceBreakdownData } from "@/app/(app)/reports/actions";
+import { getPieceBreakdownData } from "@/app/practice/reports/actions";
 import type { PieceBreakdownData } from "@/lib/types";
 
 const CHART_VAR_NAMES = [

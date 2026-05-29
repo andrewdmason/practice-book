@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { supabaseUrl, supabaseAnonKey } from "@/lib/supabase/config";
+import { ensureProvisioned } from "@/lib/journal/provisioning";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -35,13 +36,14 @@ export async function GET(request: Request) {
         data: { user },
       } = await supabase.auth.getUser();
 
-      // Single-user lockdown
-      const authorizedEmail = process.env.AUTHORIZED_EMAIL;
-      if (authorizedEmail && user?.email !== authorizedEmail) {
+      // Family allowlist: only emails the owner has added may sign in. First
+      // sign-in also seeds the member's per-user journal.
+      const membership = user
+        ? await ensureProvisioned(user)
+        : { allowed: false as const };
+      if (!membership.allowed) {
         await supabase.auth.signOut();
-        return NextResponse.redirect(
-          `${origin}/login?error=unauthorized`
-        );
+        return NextResponse.redirect(`${origin}/login?error=unauthorized`);
       }
 
       return NextResponse.redirect(origin);

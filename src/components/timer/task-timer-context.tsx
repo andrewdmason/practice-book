@@ -13,7 +13,7 @@ import {
   updateTaskRemaining,
   startTaskTimer as startTaskTimerAction,
   stopTaskTimer as stopTaskTimerAction,
-} from "@/app/(app)/timer/task-actions";
+} from "@/app/practice/timer/task-actions";
 import type { Piece, PieceKind, SectionStatus } from "@/lib/types";
 
 const STORAGE_KEY = "practice-task-timer-state";
@@ -182,7 +182,7 @@ export function TaskTimerProvider({
       void (async () => {
         try {
           const { getTaskWithDetails } = await import(
-            "@/app/(app)/timer/task-actions"
+            "@/app/practice/timer/task-actions"
           );
           const task = await getTaskWithDetails(restoredTaskId!);
           if (!task) return;
@@ -308,7 +308,7 @@ export function TaskTimerProvider({
 
   const refreshDailyTotal = useCallback(async () => {
     try {
-      const { getTodaySummary } = await import("@/app/(app)/timer/actions");
+      const { getTodaySummary } = await import("@/app/practice/timer/actions");
       const summary = await getTodaySummary();
       const total = summary.reduce((sum, e) => sum + e.total_seconds, 0);
       setBaseDailySeconds(total);

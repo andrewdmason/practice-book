@@ -29,7 +29,7 @@ import {
   updateSectionName,
   updateSectionNotes,
   updateSectionTargetTempo,
-} from "@/app/(app)/repertoire/section-actions";
+} from "@/app/practice/repertoire/section-actions";
 import type {
   PieceSectionWithChildren,
   PieceSection,

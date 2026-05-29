@@ -18,7 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { reopenLesson } from "@/app/(app)/lessons/actions";
+import { reopenLesson } from "@/app/practice/lessons/actions";
 import { cn } from "@/lib/utils";
 import { localDate } from "@/lib/date-utils";
 
@@ -52,13 +52,13 @@ export function LessonHeader() {
 
   const handleNav = (id: string | null) => {
     if (!id) return;
-    router.push(`/lessons/${id}`);
+    router.push(`/practice/lessons/${id}`);
   };
 
   const handleReopen = () => {
     startReopen(async () => {
       await reopenLesson(lesson.id);
-      router.push(`/lessons/${lesson.id}`);
+      router.push(`/practice/lessons/${lesson.id}`);
       router.refresh();
     });
   };

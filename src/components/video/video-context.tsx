@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import type { PieceVideo, PieceSectionTimestamp } from "@/lib/types";
-import { getVideos, getTimestamps } from "@/app/(app)/repertoire/video-actions";
+import { getVideos, getTimestamps } from "@/app/practice/repertoire/video-actions";
 
 /* ------------------------------------------------------------------ */
 /*  Minimal YT types (avoids @types/youtube dependency)                */

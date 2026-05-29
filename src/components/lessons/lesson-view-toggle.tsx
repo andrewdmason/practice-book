@@ -33,7 +33,7 @@ export function LessonViewToggle({ mode }: { mode: LessonViewMode }) {
 
   const go = (target: LessonViewMode) => {
     setStoredLessonViewMode(target);
-    router.push(target === "single" ? "/lessons/upcoming" : "/lessons/list");
+    router.push(target === "single" ? "/practice/lessons/upcoming" : "/practice/lessons/list");
   };
 
   return (

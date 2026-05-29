@@ -10,7 +10,7 @@ import {
   Tooltip,
 } from "recharts";
 import { formatMinutes } from "@/lib/timer-utils";
-import type { OverviewTrendPoint } from "@/app/(app)/lessons/stats-actions";
+import type { OverviewTrendPoint } from "@/app/practice/lessons/stats-actions";
 
 function formatLabel(label: string): string {
   if (label === "Upcoming") return "Upcoming";

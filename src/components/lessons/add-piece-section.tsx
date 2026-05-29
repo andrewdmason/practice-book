@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
-import { addPieceToLesson } from "@/app/(app)/lessons/actions";
+import { addPieceToLesson } from "@/app/practice/lessons/actions";
 import type { LessonEntryWithPiece } from "@/lib/types";
 
 export function AddPieceSection({

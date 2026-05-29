@@ -10,7 +10,7 @@ import { formatElapsed } from "@/lib/timer-utils";
 import {
   createTask,
   getNextTaskForToday,
-} from "@/app/(app)/timer/task-actions";
+} from "@/app/practice/timer/task-actions";
 import { localDate } from "@/lib/date-utils";
 import {
   emitOptimisticTask,

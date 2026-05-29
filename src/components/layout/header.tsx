@@ -13,11 +13,11 @@ import {
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { label: "Practice Log", href: "/" },
-  { label: "Lessons", href: "/lessons" },
-  { label: "Repertoire", href: "/repertoire" },
-  { label: "Reports", href: "/reports" },
-  { label: "Recordings", href: "/recordings" },
+  { label: "Practice Log", href: "/practice" },
+  { label: "Lessons", href: "/practice/lessons" },
+  { label: "Repertoire", href: "/practice/repertoire" },
+  { label: "Reports", href: "/practice/reports" },
+  { label: "Recordings", href: "/practice/recordings" },
 ];
 
 function NavLink({
@@ -67,7 +67,7 @@ export function Header() {
   const pathname = usePathname();
 
   function isActive(href: string) {
-    if (href === "/") return pathname === "/";
+    if (href === "/practice") return pathname === "/practice";
     return pathname.startsWith(href);
   }
 

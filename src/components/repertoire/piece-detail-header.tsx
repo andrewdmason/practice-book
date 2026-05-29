@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "./status-badge";
 import { ArchiveDialog } from "./archive-dialog";
 import { WorkPicker } from "./work-picker";
-import { updatePieceDetails, updatePieceStatus } from "@/app/(app)/repertoire/actions";
+import { updatePieceDetails, updatePieceStatus } from "@/app/practice/repertoire/actions";
 import type { Piece, Work } from "@/lib/types";
 
 export function PieceDetailHeader({

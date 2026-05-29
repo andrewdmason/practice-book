@@ -5,7 +5,7 @@ import { PencilIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { updateWork } from "@/app/(app)/repertoire/actions";
+import { updateWork } from "@/app/practice/repertoire/actions";
 import type { Work } from "@/lib/types";
 
 export function WorkDetailHeader({ work }: { work: Work }) {

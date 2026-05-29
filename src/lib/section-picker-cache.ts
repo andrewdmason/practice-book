@@ -1,4 +1,4 @@
-import { getSectionPickerData } from "@/app/(app)/timer/task-actions";
+import { getSectionPickerData } from "@/app/practice/timer/task-actions";
 import type { PieceSection } from "@/lib/types";
 
 export type SectionPickerData = {

@@ -3,6 +3,7 @@ import { anthropic, JOURNAL_MODEL } from "@/lib/journal/anthropic";
 import {
   buildSystemPrompt,
   loadAgentFiles,
+  loadFamilyDoc,
   loadHistory,
   messagesAsAnthropicTurns,
 } from "@/lib/journal/context";
@@ -79,7 +80,7 @@ export async function runWrap(entryId: string): Promise<WrapResult> {
 
   const { data: entry, error: entryErr } = await supabase
     .from("journal_entries")
-    .select("id, entry_date, status, summary")
+    .select("id, entry_date, status, summary, user_id")
     .eq("id", entryId)
     .single();
   if (entryErr || !entry) {
@@ -106,17 +107,19 @@ export async function runWrap(entryId: string): Promise<WrapResult> {
 
   const tz = await getUserTimezone();
   const today = localDate(new Date(), tz);
-  const [files, history, calendarBlock] = await Promise.all([
+  const [files, history, calendarBlock, familyDoc] = await Promise.all([
     loadAgentFiles(),
     loadHistory(today, entryId),
     loadCalendarBlock(today, tz),
+    loadFamilyDoc(),
   ]);
   const baseSystem = buildSystemPrompt(
     files,
     history,
     today,
     calendarBlock,
-    formatNow(new Date(), tz)
+    formatNow(new Date(), tz),
+    familyDoc
   );
 
   // Recently dismissed suggestions — so the model doesn't re-raise something
@@ -254,6 +257,7 @@ After your tool calls, you may stop. The user does not see the wrap output.`;
     if (!prior || prior.length === 0) {
       await supabase.from("journal_profile_suggestions").insert({
         source_entry_id: entryId,
+        user_id: entry.user_id,
         status: "pending",
         change_type: suggestion.change_type,
         find: suggestion.find,

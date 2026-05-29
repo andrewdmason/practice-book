@@ -39,7 +39,7 @@ import {
   moveTaskToDate,
   completeTask,
   uncompleteTask,
-} from "@/app/(app)/timer/task-actions";
+} from "@/app/practice/timer/task-actions";
 import {
   emitOptimisticTask,
   emitOptimisticTaskDelete,
