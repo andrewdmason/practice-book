@@ -15,6 +15,8 @@ type HistoryEntry = JournalEntry & {
 // showing the generating state instead of spinning forever.
 function isGenerating(e: JournalEntry): boolean {
   if (e.status !== "closed") return false;
+  // Quote entries never run a wrap pass, so a titleless one isn't "generating".
+  if (e.entry_type === "quote") return false;
   if (e.title && e.title.trim().length > 0) return false;
   if (!e.closed_at) return false;
   return Date.now() - Date.parse(e.closed_at) < 60_000;
@@ -59,6 +61,27 @@ export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
                 <p className="mt-2 font-serif text-2xl italic leading-tight text-muted-foreground/50 animate-pulse">
                   summing up…
                 </p>
+              ) : e.entry_type === "quote" ? (
+                // Quote entries read as a pulled quote: italic heading with an
+                // oversized hanging quotation mark, then an em-dashed
+                // attribution — visually distinct from the upright titles
+                // around them.
+                <>
+                  <p className="mt-2 font-serif text-2xl italic leading-tight text-foreground group-hover:underline group-hover:underline-offset-4 group-hover:decoration-foreground/30">
+                    <span
+                      aria-hidden
+                      className="mr-1 align-[-0.2em] font-serif text-4xl not-italic leading-none text-muted-foreground/40"
+                    >
+                      “
+                    </span>
+                    {displayTitle(e)}
+                  </p>
+                  {e.quote_attribution && (
+                    <p className="mt-3 font-serif text-base italic leading-relaxed text-muted-foreground">
+                      — {e.quote_attribution}
+                    </p>
+                  )}
+                </>
               ) : (
                 <>
                   <p className="mt-2 font-serif text-2xl leading-tight text-foreground group-hover:underline group-hover:underline-offset-4 group-hover:decoration-foreground/30">
@@ -106,6 +129,8 @@ export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
 }
 
 function displayTitle(e: JournalEntry): string {
+  // Quote entries have no AI title — the quote itself is the heading.
+  if (e.entry_type === "quote") return e.pull_quote?.trim() || "untitled quote";
   if (e.title && e.title.trim().length > 0) return e.title;
   if (e.summary && e.summary.trim().length > 0) return e.summary;
   if (e.opening_question && e.opening_question.trim().length > 0) return e.opening_question;

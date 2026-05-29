@@ -12,7 +12,7 @@ export default async function JournalPage() {
   const { data } = await supabase
     .from("journal_entries")
     .select(
-      "id, entry_date, status, opening_question, freeform_started_at, summary, title, pull_quote, summary_stale, closed_at, created_at, updated_at"
+      "id, entry_date, status, entry_type, opening_question, freeform_started_at, summary, title, pull_quote, quote_attribution, summary_stale, closed_at, created_at, updated_at"
     );
 
   // Sort newest-first by created_at (ignoring entry_date, since it's a date
