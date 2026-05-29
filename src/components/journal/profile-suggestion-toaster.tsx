@@ -124,7 +124,9 @@ export function ProfileSuggestionToaster() {
                   disabled={busy}
                   onClick={() => handleAccept(current.id)}
                 >
-                  Add to profile
+                  {current.target_doc === "Past"
+                    ? "Add to life story"
+                    : "Add to profile"}
                 </Button>
               </div>
             </Toast>
@@ -135,34 +137,49 @@ export function ProfileSuggestionToaster() {
       <Dialog open={applied !== null} onOpenChange={(o) => !o && setApplied(null)}>
         {applied && (
           <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Profile updated</DialogTitle>
-              <DialogDescription>
-                {applied.change_type === "remove"
-                  ? "Removed from your profile:"
-                  : applied.change_type === "edit"
-                    ? "Updated in your profile:"
-                    : "Added to your profile:"}
-              </DialogDescription>
-            </DialogHeader>
+            {(() => {
+              const docLabel =
+                applied.target_doc === "Past" ? "life story" : "profile";
+              return (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>
+                      {applied.target_doc === "Past"
+                        ? "Life story updated"
+                        : "Profile updated"}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {applied.change_type === "remove"
+                        ? `Removed from your ${docLabel}:`
+                        : applied.change_type === "edit"
+                          ? `Updated in your ${docLabel}:`
+                          : `Added to your ${docLabel}:`}
+                    </DialogDescription>
+                  </DialogHeader>
 
-            <SuggestionPreview applied={applied} />
+                  <SuggestionPreview applied={applied} />
 
-            <DialogFooter>
-              <DialogClose
-                render={<Button variant="outline" />}
-                onClick={() => setApplied(null)}
-              >
-                Done
-              </DialogClose>
-              <Button
-                render={
-                  <Link href="/settings/user" onClick={() => setApplied(null)} />
-                }
-              >
-                View full profile
-              </Button>
-            </DialogFooter>
+                  <DialogFooter>
+                    <DialogClose
+                      render={<Button variant="outline" />}
+                      onClick={() => setApplied(null)}
+                    >
+                      Done
+                    </DialogClose>
+                    <Button
+                      render={
+                        <Link
+                          href="/settings/user"
+                          onClick={() => setApplied(null)}
+                        />
+                      }
+                    >
+                      View full {docLabel}
+                    </Button>
+                  </DialogFooter>
+                </>
+              );
+            })()}
           </DialogContent>
         )}
       </Dialog>

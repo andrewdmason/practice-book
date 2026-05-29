@@ -8,7 +8,7 @@ import { todayLocal } from "@/lib/journal/today";
 import { runWrap } from "@/lib/journal/wrap";
 import { summarizeRecap } from "@/lib/journal/recap-summary";
 import { candidateTexts, normalizeCandidates } from "@/lib/journal/candidates";
-import { applyUserFileChange } from "@/lib/journal/profile-suggestions";
+import { applyProfileDocChange } from "@/lib/journal/profile-suggestions";
 import type {
   JournalAgentFileName,
   JournalMediaType,
@@ -780,7 +780,7 @@ export async function loadPendingProfileSuggestions(): Promise<JournalProfileSug
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("journal_profile_suggestions")
-    .select("id, source_entry_id, status, change_type, find, replace, summary, created_at, resolved_at")
+    .select("id, source_entry_id, status, change_type, target_doc, find, replace, summary, created_at, resolved_at")
     .eq("status", "pending")
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
@@ -791,6 +791,7 @@ export type AcceptSuggestionResult =
   | {
       ok: true;
       change_type: JournalProfileSuggestion["change_type"];
+      target_doc: JournalProfileSuggestion["target_doc"];
       find: string | null;
       replace: string | null;
     }
@@ -800,13 +801,13 @@ export async function acceptProfileSuggestion(id: string): Promise<AcceptSuggest
   const supabase = await createClient();
   const { data: row, error } = await supabase
     .from("journal_profile_suggestions")
-    .select("id, status, change_type, find, replace")
+    .select("id, status, change_type, target_doc, find, replace")
     .eq("id", id)
     .single();
   if (error || !row) return { ok: false, error: "Suggestion not found." };
   if (row.status !== "pending") return { ok: false, error: "Already resolved." };
 
-  const applied = await applyUserFileChange({
+  const applied = await applyProfileDocChange(row.target_doc, {
     change_type: row.change_type,
     find: row.find,
     replace: row.replace,
@@ -826,7 +827,13 @@ export async function acceptProfileSuggestion(id: string): Promise<AcceptSuggest
     .eq("id", id);
   revalidatePath("/settings", "layout");
 
-  return { ok: true, change_type: row.change_type, find: row.find, replace: row.replace };
+  return {
+    ok: true,
+    change_type: row.change_type,
+    target_doc: row.target_doc,
+    find: row.find,
+    replace: row.replace,
+  };
 }
 
 export async function dismissProfileSuggestion(id: string): Promise<void> {

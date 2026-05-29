@@ -3,7 +3,18 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 
-export function UserDocPrompt({ prompt }: { prompt: string }) {
+/**
+ * A copy-to-clipboard card for a "paste this into a chatbot" interview prompt.
+ * Used for both the Present (profile) and Past (life story) docs — `result`
+ * names what the chatbot writes so the copy reads naturally for either.
+ */
+export function UserDocPrompt({
+  prompt,
+  result = "profile",
+}: {
+  prompt: string;
+  result?: string;
+}) {
   const [copied, setCopied] = useState(false);
 
   async function copyPrompt() {
@@ -23,7 +34,7 @@ export function UserDocPrompt({ prompt }: { prompt: string }) {
       </p>
       <p className="mt-1 font-serif text-xs italic text-muted-foreground">
         Copy this prompt, paste it into a chatbot like ChatGPT or Claude, and
-        answer its questions. It&apos;ll write your profile — paste the result
+        answer its questions. It&apos;ll write your {result} — paste the result
         back here.
       </p>
       <button

@@ -2,8 +2,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   BUILTIN_QUESTION_TYPES,
   DEFAULT_INTERVIEWER,
+  DEFAULT_PAST_PROFILE,
+  DEFAULT_PRESENT_PROFILE,
   DEFAULT_QUESTIONS_PER_DAY,
-  DEFAULT_USER_PROFILE,
 } from "@/lib/journal/seeds/defaults";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -78,10 +79,10 @@ async function seedJournal(
 ): Promise<void> {
   const template = await resolveTemplate(admin, userId, isOwner);
 
-  // Every new user starts from the same clean defaults for these two docs: a
-  // generic interviewer voice and a User profile template of section headers to
-  // fill in. They're never copied from another user (which would carry over
-  // personal content).
+  // Every new user starts from the same clean defaults for these docs: a generic
+  // interviewer voice, an empty Present (current-life) profile, and an empty Past
+  // (life-story) doc. They're never copied from another user (which would carry
+  // over personal content).
   await admin.from("journal_agent_files").insert([
     {
       user_id: userId,
@@ -91,8 +92,14 @@ async function seedJournal(
     },
     {
       user_id: userId,
-      name: "User",
-      content: DEFAULT_USER_PROFILE,
+      name: "Present",
+      content: DEFAULT_PRESENT_PROFILE,
+      agent_writable: false,
+    },
+    {
+      user_id: userId,
+      name: "Past",
+      content: DEFAULT_PAST_PROFILE,
       agent_writable: false,
     },
   ]);
@@ -112,8 +119,8 @@ async function seedJournal(
 /**
  * Where a new member's question types + settings come from: copy the owner's
  * tuned set when an owner is already set up; otherwise fall back to code
- * defaults (the very first owner on a fresh database). The Interviewer and User
- * docs are NOT sourced here — they always come from the clean defaults.
+ * defaults (the very first owner on a fresh database). The Interviewer, Present,
+ * and Past docs are NOT sourced here — they always come from the clean defaults.
  */
 async function resolveTemplate(
   admin: AdminClient,

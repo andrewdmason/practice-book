@@ -144,6 +144,7 @@ const MIDDLE_MIX: Record<string, number> = {
   "sensory-moment": 3,
   intentions: 3,
   curveball: 3,
+  reminiscence: 1,
   "deep-introspective": 1,
   "unresolved-loop": 1,
 };
@@ -162,6 +163,7 @@ const HIGH_MIX: Record<string, number> = {
   "sensory-moment": 3,
   "proud-moment": 3,
   "upcoming-calendar": 3,
+  reminiscence: 3,
   curveball: 1,
   imagination: 1,
 };
@@ -179,6 +181,7 @@ const ADULT_MIX: Record<string, number> = {
   intentions: 3,
   "unresolved-loop": 3,
   relationship: 3,
+  reminiscence: 3,
   curveball: 1,
   "sensory-moment": 3,
 };

@@ -8,7 +8,7 @@ const TABS = [
     label: "User",
     href: "/settings/user",
     description:
-      "Your life context: who you are, who's around you, what you're working on.",
+      "Your life context — Present (who you are now) and Past (your life story).",
   },
   {
     label: "Interviewer",
