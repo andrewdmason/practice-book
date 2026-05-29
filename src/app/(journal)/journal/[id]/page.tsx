@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChatSurface } from "@/components/journal/chat-surface";
 import { EntryTitle } from "@/components/journal/entry-title";
+import { QuoteEntryView } from "@/components/journal/quote-entry-view";
 import { JournalPhotoGallery } from "@/components/journal/journal-photo-gallery";
 import { createClient } from "@/lib/supabase/server";
 import { getEntryPhotos } from "@/app/(journal)/journal/actions";
@@ -20,7 +21,7 @@ export default async function EntryPage({
   const { data: entryRow } = await supabase
     .from("journal_entries")
     .select(
-      "id, entry_date, status, opening_question, summary, title, pull_quote, summary_stale, closed_at, created_at, updated_at"
+      "id, entry_date, status, entry_type, opening_question, summary, title, pull_quote, quote_attribution, summary_stale, closed_at, created_at, updated_at"
     )
     .eq("id", id)
     .maybeSingle();
@@ -40,6 +41,7 @@ export default async function EntryPage({
   }));
 
   const photos = await getEntryPhotos(entry.id);
+  const isQuote = entry.entry_type === "quote";
 
   return (
     <div className="flex flex-1 flex-col">
@@ -53,22 +55,33 @@ export default async function EntryPage({
         <p className="mt-6 font-serif text-sm text-muted-foreground tabular-nums">
           {formatDate(entry.entry_date)}
         </p>
-        <EntryTitle
-          entryId={entry.id}
-          title={entry.title?.trim() || "Untitled"}
-        />
+        {isQuote ? (
+          <QuoteEntryView
+            entryId={entry.id}
+            quote={entry.pull_quote ?? ""}
+            attribution={entry.quote_attribution}
+          />
+        ) : (
+          <EntryTitle
+            entryId={entry.id}
+            title={entry.title?.trim() || "Untitled"}
+          />
+        )}
       </div>
       <JournalPhotoGallery
         entryId={entry.id}
         initialPhotos={photos}
         editable
       />
-      <ChatSurface
-        entryId={entry.id}
-        initialStatus={entry.status}
-        initialMessages={messages}
-        viewMode="history"
-      />
+      {/* Quote entries have no conversation — no transcript, no reply box. */}
+      {!isQuote && (
+        <ChatSurface
+          entryId={entry.id}
+          initialStatus={entry.status}
+          initialMessages={messages}
+          viewMode="history"
+        />
+      )}
     </div>
   );
 }

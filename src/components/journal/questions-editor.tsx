@@ -1,17 +1,7 @@
 "use client";
 
 import { useState, useTransition, type ComponentType } from "react";
-import {
-  ChevronRight,
-  Plus,
-  Signal,
-  SignalHigh,
-  SignalLow,
-  SignalMedium,
-  SignalZero,
-  StickyNote,
-  Trash2,
-} from "lucide-react";
+import { Ban, ChevronRight, Plus, StickyNote, Trash2 } from "lucide-react";
 import {
   addCustomQuestionType,
   deleteCustomQuestionType,
@@ -34,28 +24,58 @@ const MIN_PER_DAY = 1;
 const MAX_PER_DAY = 5;
 
 /**
- * Cadence tiers, most → least frequent, then Off. The `weight` values are the
+ * A signal-style bar ramp drawing exactly `count` bars (1–3), shortest first.
+ * Unlike lucide's Signal* icons it never renders a faded extra bar, so "High"
+ * reads as three bars, not four.
+ */
+function bars(count: number): ComponentType<{ className?: string }> {
+  const BARS = [
+    { x: 6, y1: 15 },
+    { x: 12, y1: 11 },
+    { x: 18, y1: 6 },
+  ];
+  function Bars({ className }: { className?: string }) {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        className={className}
+        aria-hidden="true"
+      >
+        {BARS.slice(0, count).map((b) => (
+          <line key={b.x} x1={b.x} y1={b.y1} x2={b.x} y2={20} />
+        ))}
+      </svg>
+    );
+  }
+  return Bars;
+}
+
+/**
+ * Priority tiers, highest → lowest, then Off. The `weight` values are the
  * relative weights written to the row (the sampler normalizes them); the UI
  * never exposes the numbers. Icons form an issue-tracker-style priority ramp.
  */
-type CadenceKey = "daily" | "several" | "weekly" | "rare" | "off";
+type PriorityKey = "high" | "medium" | "low" | "off";
 
-const CADENCE: {
-  key: CadenceKey;
+const PRIORITIES: {
+  key: PriorityKey;
   label: string;
   weight: number;
   Icon: ComponentType<{ className?: string }>;
 }[] = [
-  { key: "daily", label: "Daily", weight: 12, Icon: Signal },
-  { key: "several", label: "Several times a week", weight: 6, Icon: SignalHigh },
-  { key: "weekly", label: "Once a week", weight: 3, Icon: SignalMedium },
-  { key: "rare", label: "Less than once a week", weight: 1, Icon: SignalLow },
-  { key: "off", label: "Off", weight: 0, Icon: SignalZero },
+  { key: "high", label: "High", weight: 9, Icon: bars(3) },
+  { key: "medium", label: "Medium", weight: 3, Icon: bars(2) },
+  { key: "low", label: "Low", weight: 1, Icon: bars(1) },
+  { key: "off", label: "Off", weight: 0, Icon: Ban },
 ];
 
-const ACTIVE_TIERS = CADENCE.filter((t) => t.key !== "off");
+const ACTIVE_TIERS = PRIORITIES.filter((t) => t.key !== "off");
 
-function cadenceFor(row: { enabled: boolean; weight: number }): CadenceKey {
+function priorityFor(row: { enabled: boolean; weight: number }): PriorityKey {
   if (!row.enabled) return "off";
   // Snap to the active tier whose weight is closest to the stored weight.
   let best = ACTIVE_TIERS[0];
@@ -138,8 +158,8 @@ export function QuestionsEditor({
     touch();
   }
 
-  function setCadence(id: string, key: CadenceKey) {
-    const tier = CADENCE.find((t) => t.key === key)!;
+  function setPriority(id: string, key: PriorityKey) {
+    const tier = PRIORITIES.find((t) => t.key === key)!;
     if (key === "off") {
       patch(id, { enabled: false });
     } else {
@@ -225,7 +245,7 @@ export function QuestionsEditor({
 
       <div className="divide-y divide-border rounded-lg border border-border">
         {builtins.map((r) => (
-          <QuestionRow key={r.id} row={r} onPatch={patch} onCadence={setCadence} />
+          <QuestionRow key={r.id} row={r} onPatch={patch} onPriority={setPriority} />
         ))}
       </div>
 
@@ -247,7 +267,7 @@ export function QuestionsEditor({
                   key={r.id}
                   row={r}
                   onPatch={patch}
-                  onCadence={setCadence}
+                  onPriority={setPriority}
                   onDelete={() => handleDelete(r.id)}
                 />
               ))}
@@ -286,7 +306,7 @@ export function QuestionsEditor({
                 </Button>
               </div>
               <p className="mt-2 font-serif text-xs italic text-muted-foreground">
-                New types start Off — set a cadence to add them to the rotation.
+                New types start Off — set a priority to add them to the rotation.
               </p>
             </div>
           ) : (
@@ -324,12 +344,12 @@ export function QuestionsEditor({
 function QuestionRow({
   row,
   onPatch,
-  onCadence,
+  onPriority,
   onDelete,
 }: {
   row: Row;
   onPatch: (id: string, p: Partial<Row>) => void;
-  onCadence: (id: string, key: CadenceKey) => void;
+  onPriority: (id: string, key: PriorityKey) => void;
   onDelete?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -355,8 +375,8 @@ function QuestionRow({
       >
         <span onClick={stop} className="inline-flex">
           <PriorityPicker
-            value={cadenceFor(row)}
-            onChange={(key) => onCadence(row.id, key)}
+            value={priorityFor(row)}
+            onChange={(key) => onPriority(row.id, key)}
           />
         </span>
         <ChevronRight
@@ -431,10 +451,10 @@ function PriorityPicker({
   value,
   onChange,
 }: {
-  value: CadenceKey;
-  onChange: (key: CadenceKey) => void;
+  value: PriorityKey;
+  onChange: (key: PriorityKey) => void;
 }) {
-  const current = CADENCE.find((t) => t.key === value)!;
+  const current = PRIORITIES.find((t) => t.key === value)!;
   const CurrentIcon = current.Icon;
   const off = value === "off";
 
@@ -442,19 +462,19 @@ function PriorityPicker({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="ghost" size="icon-sm" aria-label={`Cadence: ${current.label}`} />
+          <Button variant="ghost" size="icon-sm" aria-label={`Priority: ${current.label}`} />
         }
       >
         <CurrentIcon
           className={cn("h-4 w-4", off ? "text-muted-foreground/60" : "text-foreground")}
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-60" align="start">
+      <DropdownMenuContent className="w-44" align="start">
         <DropdownMenuRadioGroup
           value={value}
-          onValueChange={(v) => onChange(v as CadenceKey)}
+          onValueChange={(v) => onChange(v as PriorityKey)}
         >
-          {CADENCE.map((t) => {
+          {PRIORITIES.map((t) => {
             const Icon = t.Icon;
             return (
               <DropdownMenuRadioItem key={t.key} value={t.key}>

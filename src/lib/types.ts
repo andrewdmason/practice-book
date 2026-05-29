@@ -392,10 +392,20 @@ export type JournalOpeningCandidate = { text: string; type: string | null };
 
 export type JournalEntryStatus = "open" | "closed";
 
+/**
+ * The kind of entry. "standard" is the reflective entry (picked opening
+ * question or freeform writing, with AI follow-ups and a wrap-generated
+ * title). "quote" is a frictionless capture of a quote + attribution with no
+ * AI engagement. Distinct from JournalQuestionType (categories of opening
+ * questions).
+ */
+export type JournalEntryType = "standard" | "quote";
+
 export type JournalEntry = {
   id: string;
   entry_date: string; // YYYY-MM-DD
   status: JournalEntryStatus;
+  entry_type: JournalEntryType;
   opening_question: string | null;
   opening_candidates: JournalOpeningCandidate[] | null;
   candidates_reroll_count: number;
@@ -403,6 +413,7 @@ export type JournalEntry = {
   summary: string | null;
   title: string | null;
   pull_quote: string | null;
+  quote_attribution: string | null;
   summary_stale: boolean;
   closed_at: string | null;
   created_at: string;

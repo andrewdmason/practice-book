@@ -300,6 +300,84 @@ export async function pickOpeningQuestion(entryId: string, question: string) {
 }
 
 /**
+ * Save a quote entry: a frictionless capture with no AI engagement. Reuses the
+ * fresh open entry the picker is operating on, stores the quote in `pull_quote`
+ * and the optional attribution in `quote_attribution`, and closes the entry
+ * immediately — there's no conversation, no timer, and no wrap pass, so no
+ * title/summary is ever generated.
+ */
+export async function saveQuoteEntry(
+  entryId: string,
+  quote: string,
+  attribution: string
+) {
+  const trimmedQuote = quote.trim();
+  if (!trimmedQuote) throw new Error("quote is empty");
+  const trimmedAttribution = attribution.trim();
+
+  const supabase = await createClient();
+
+  const { data: entry, error: entryErr } = await supabase
+    .from("journal_entries")
+    .select("id, status")
+    .eq("id", entryId)
+    .single();
+  if (entryErr || !entry) throw new Error("entry not found");
+  if (entry.status !== "open") throw new Error("entry is closed");
+
+  const { count, error: countErr } = await supabase
+    .from("journal_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("entry_id", entryId);
+  if (countErr) throw new Error(countErr.message);
+  if ((count ?? 0) > 0) throw new Error("entry already started");
+
+  const { error: updateErr } = await supabase
+    .from("journal_entries")
+    .update({
+      entry_type: "quote",
+      pull_quote: trimmedQuote,
+      quote_attribution: trimmedAttribution || null,
+      opening_candidates: null,
+      status: "closed",
+      closed_at: new Date().toISOString(),
+    })
+    .eq("id", entryId);
+  if (updateErr) throw new Error(updateErr.message);
+
+  revalidatePath("/journal");
+  revalidatePath(`/journal/${entryId}`);
+}
+
+/**
+ * Edit an existing quote entry's quote text and attribution. The quote-entry
+ * counterpart to EntryTitle's inline edit on standard entries.
+ */
+export async function updateQuoteEntry(
+  entryId: string,
+  quote: string,
+  attribution: string
+) {
+  const trimmedQuote = quote.trim();
+  if (!trimmedQuote) throw new Error("quote is empty");
+  const trimmedAttribution = attribution.trim();
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("journal_entries")
+    .update({
+      pull_quote: trimmedQuote,
+      quote_attribution: trimmedAttribution || null,
+    })
+    .eq("id", entryId)
+    .eq("entry_type", "quote");
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/journal");
+  revalidatePath(`/journal/${entryId}`);
+}
+
+/**
  * Append a user message to an entry without generating an interviewer reply.
  * Used once the five-minute timer is done: the user can keep writing, but the
  * conversation is over — the agent is no longer asked to respond.
