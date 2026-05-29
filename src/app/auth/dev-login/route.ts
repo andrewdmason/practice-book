@@ -1,12 +1,9 @@
-import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { supabaseUrl, supabaseAnonKey } from "@/lib/supabase/config";
-
-// Local Supabase well-known service role key (never used in production)
-const SERVICE_ROLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { ensureProvisioned } from "@/lib/journal/provisioning";
 
 export async function GET(request: Request) {
   if (process.env.NODE_ENV !== "development") {
@@ -20,18 +17,19 @@ export async function GET(request: Request) {
     );
   }
 
-  const email = process.env.AUTHORIZED_EMAIL;
+  // Sign in as any family member for local testing. Defaults to the owner.
+  const { searchParams } = new URL(request.url);
+  const ownerEmail = process.env.AUTHORIZED_EMAIL;
+  const email = (searchParams.get("email") ?? ownerEmail)?.toLowerCase().trim();
   if (!email) {
     return NextResponse.json(
-      { error: "AUTHORIZED_EMAIL not set" },
+      { error: "No email given and AUTHORIZED_EMAIL not set" },
       { status: 500 }
     );
   }
 
   // Use admin client to create/get user and generate a link
-  const admin = createClient(supabaseUrl, SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+  const admin = createAdminClient();
 
   // Ensure user exists
   const { data: users } = await admin.auth.admin.listUsers();
@@ -50,6 +48,16 @@ export async function GET(request: Request) {
     }
     userId = newUser.user.id;
   }
+
+  // Dev convenience: make sure this email is on the family allowlist so you can
+  // sign in as the owner or as a kid to test provisioning + per-user isolation.
+  // (In production the owner adds members explicitly.)
+  await admin
+    .from("journal_members")
+    .upsert(
+      { email, user_id: userId, is_owner: email === ownerEmail?.toLowerCase().trim() },
+      { onConflict: "email" }
+    );
 
   // Generate a magic link
   const { data: linkData, error: linkError } =
@@ -107,6 +115,9 @@ export async function GET(request: Request) {
       { status: 500 }
     );
   }
+
+  // Seed this member's journal on first dev-login (idempotent thereafter).
+  await ensureProvisioned({ id: userId, email });
 
   return NextResponse.redirect(origin);
 }

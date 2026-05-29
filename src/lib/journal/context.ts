@@ -38,10 +38,11 @@ export async function loadQuestionTypes(): Promise<JournalQuestionType[]> {
 
 export async function loadSettings(): Promise<JournalSettings> {
   const supabase = await createClient();
+  // One settings row per user — RLS scopes this to the caller's row, so no
+  // explicit filter is needed (the old id=1 singleton column is gone).
   const { data, error } = await supabase
     .from("journal_settings")
     .select("questions_per_day")
-    .eq("id", 1)
     .maybeSingle();
   if (error) throw error;
   return { questions_per_day: data?.questions_per_day ?? 3 };

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog";
 import { Search, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { searchTypeahead, searchAll } from "@/app/(app)/search/actions";
+import { searchTypeahead, searchAll } from "@/app/practice/search/actions";
 import { TypeaheadItem, SearchResultItem } from "./search-result-item";
 import type { SearchResult, TypeaheadResult, SearchResultType } from "@/lib/types";
 

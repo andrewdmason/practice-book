@@ -16,7 +16,7 @@ import {
 import {
   updatePieceField,
   createWork,
-} from "@/app/(app)/repertoire/actions";
+} from "@/app/practice/repertoire/actions";
 import type { Piece, Work } from "@/lib/types";
 
 const ADD_NEW = "__add_new__";
@@ -146,7 +146,7 @@ export function WorkPicker({
     return (
       <span className="inline-flex items-center gap-1.5">
         <Link
-          href={`/repertoire/works/${work.id}`}
+          href={`/practice/repertoire/works/${work.id}`}
           className="hover:text-foreground transition-colors"
         >
           {work.name}

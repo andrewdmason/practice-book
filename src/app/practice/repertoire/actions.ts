@@ -8,9 +8,9 @@ import type {
 } from "@/lib/types";
 
 function revalidateRepertoire(pieceId?: string) {
-  revalidatePath("/repertoire");
+  revalidatePath("/practice/repertoire");
   if (pieceId) {
-    revalidatePath(`/repertoire/${pieceId}`);
+    revalidatePath(`/practice/repertoire/${pieceId}`);
   }
 }
 

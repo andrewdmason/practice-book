@@ -24,7 +24,7 @@ import {
   createPiece,
   updatePiece,
   createWork,
-} from "@/app/(app)/repertoire/actions";
+} from "@/app/practice/repertoire/actions";
 import type { Piece, Work, PieceStatus } from "@/lib/types";
 import { PIECE_STATUSES, PIECE_STATUS_LABELS } from "@/lib/types";
 

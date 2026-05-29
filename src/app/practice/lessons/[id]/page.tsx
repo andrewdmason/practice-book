@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getLesson } from "@/app/(app)/lessons/actions";
+import { getLesson } from "@/app/practice/lessons/actions";
 import { TwoColumnLayout } from "@/components/layout/two-column-layout";
 import { SingleLessonView } from "@/components/lessons/single-lesson-view";
 import { LessonFocusPanel } from "@/components/lessons/lesson-focus-panel";

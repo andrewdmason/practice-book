@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { updateTaskField } from "@/app/(app)/timer/task-actions";
+import { updateTaskField } from "@/app/practice/timer/task-actions";
 
 type MetronomeContextValue = {
   bpm: number;

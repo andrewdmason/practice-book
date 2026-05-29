@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { completeLesson } from "@/app/(app)/lessons/actions";
+import { completeLesson } from "@/app/practice/lessons/actions";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +32,7 @@ export function CompleteLessonDialog({
     startTransition(async () => {
       const newUpcomingId = await completeLesson(lessonId, date);
       onOpenChange(false);
-      router.push(`/lessons/${newUpcomingId}`);
+      router.push(`/practice/lessons/${newUpcomingId}`);
       router.refresh();
     });
   };

@@ -57,7 +57,7 @@ export async function attachTaskAudio(
     })
     .eq("id", taskId);
   if (error) throw new Error(error.message);
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 export async function updateTaskAudioTitle(
@@ -70,8 +70,8 @@ export async function updateTaskAudioTitle(
     .update({ audio_title: audioTitle })
     .eq("id", taskId);
   if (error) throw new Error(error.message);
-  revalidatePath("/");
-  revalidatePath("/recordings");
+  revalidatePath("/practice");
+  revalidatePath("/practice/recordings");
 }
 
 export async function updateTaskAudioTrim(
@@ -88,8 +88,8 @@ export async function updateTaskAudioTrim(
     })
     .eq("id", taskId);
   if (error) throw new Error(error.message);
-  revalidatePath("/");
-  revalidatePath("/recordings");
+  revalidatePath("/practice");
+  revalidatePath("/practice/recordings");
 }
 
 export async function createSignedPlaybackUrl(
@@ -128,5 +128,5 @@ export async function deleteTaskAudio(taskId: string): Promise<void> {
     })
     .eq("id", taskId);
   if (error) throw new Error(error.message);
-  revalidatePath("/");
+  revalidatePath("/practice");
 }

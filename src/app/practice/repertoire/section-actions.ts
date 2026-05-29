@@ -11,10 +11,10 @@ import type {
 } from "@/lib/types";
 
 function revalidate(pieceId?: string) {
-  revalidatePath("/");
-  revalidatePath("/repertoire");
+  revalidatePath("/practice");
+  revalidatePath("/practice/repertoire");
   if (pieceId) {
-    revalidatePath(`/repertoire/${pieceId}`);
+    revalidatePath(`/practice/repertoire/${pieceId}`);
   }
 }
 
@@ -247,7 +247,7 @@ export async function reorderSections(sectionIds: string[]) {
     return { error: error.message };
   }
 
-  revalidatePath("/");
+  revalidatePath("/practice");
   return { success: true };
 }
 

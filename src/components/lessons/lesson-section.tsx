@@ -10,7 +10,7 @@ import { useLessonView } from "./lesson-view-context";
 import {
   deleteLessonEntry,
   updateLessonEntry,
-} from "@/app/(app)/lessons/actions";
+} from "@/app/practice/lessons/actions";
 import type { LessonEntryWithPiece } from "@/lib/types";
 import { cn } from "@/lib/utils";
 

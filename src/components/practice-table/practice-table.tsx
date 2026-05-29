@@ -33,8 +33,8 @@ import {
   reorderTasks,
   rollOverUnfinishedTasks,
   updateTasksSession,
-} from "@/app/(app)/timer/task-actions";
-import { getFeedPage } from "@/app/(app)/feed/actions";
+} from "@/app/practice/timer/task-actions";
+import { getFeedPage } from "@/app/practice/feed/actions";
 import {
   createTaskOptimistic,
   emitOptimisticTask,

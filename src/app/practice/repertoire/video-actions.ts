@@ -5,10 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import type { PieceVideo, PieceSectionTimestamp } from "@/lib/types";
 
 function revalidate(pieceId?: string) {
-  revalidatePath("/");
-  revalidatePath("/repertoire");
+  revalidatePath("/practice");
+  revalidatePath("/practice/repertoire");
   if (pieceId) {
-    revalidatePath(`/repertoire/${pieceId}`);
+    revalidatePath(`/practice/repertoire/${pieceId}`);
   }
 }
 
@@ -143,7 +143,7 @@ export async function upsertTimestamp(
     return { error: error.message };
   }
 
-  revalidatePath("/");
+  revalidatePath("/practice");
   return { success: true };
 }
 
@@ -160,6 +160,6 @@ export async function deleteTimestamp(sectionId: string, videoId: string) {
     return { error: error.message };
   }
 
-  revalidatePath("/");
+  revalidatePath("/practice");
   return { success: true };
 }

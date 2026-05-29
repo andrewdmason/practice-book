@@ -11,7 +11,7 @@ import {
 import {
   deleteTask,
   updateTaskField,
-} from "@/app/(app)/timer/task-actions";
+} from "@/app/practice/timer/task-actions";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import {
   emitOptimisticTaskDelete,

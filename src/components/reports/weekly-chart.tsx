@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatMinutes } from "@/lib/timer-utils";
-import { getWeeklyPracticeData } from "@/app/(app)/reports/actions";
+import { getWeeklyPracticeData } from "@/app/practice/reports/actions";
 import type { WeeklyPracticeData } from "@/lib/types";
 
 const STORAGE_KEY = "weeklyChart:weekStartDay";

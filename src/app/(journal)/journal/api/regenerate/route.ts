@@ -8,6 +8,7 @@ import {
   messagesAsAnthropicTurns,
 } from "@/lib/journal/context";
 import { loadCalendarBlock } from "@/lib/journal/calendar";
+import { requireUserId } from "@/lib/journal/auth";
 import { formatNow, getUserTimezone, localDate } from "@/lib/date-utils";
 import type { JournalMessage } from "@/lib/types";
 
@@ -23,6 +24,7 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = await createClient();
+  const userId = await requireUserId(supabase);
 
   const { data: entry, error: entryErr } = await supabase
     .from("journal_entries")
@@ -122,13 +124,13 @@ export async function POST(req: NextRequest) {
         if (trimmed.length > 0) {
           await supabase
             .from("journal_messages")
-            .insert({ entry_id: entryId, role: "assistant", content: trimmed });
+            .insert({ entry_id: entryId, role: "assistant", content: trimmed, user_id: userId });
         } else {
           // Generation produced nothing — restore the original question so
           // the thread isn't left short a turn.
           await supabase
             .from("journal_messages")
-            .insert({ entry_id: entryId, role: "assistant", content: rejected });
+            .insert({ entry_id: entryId, role: "assistant", content: rejected, user_id: userId });
         }
 
         controller.close();
@@ -137,7 +139,7 @@ export async function POST(req: NextRequest) {
         if (full.trim().length === 0) {
           await supabase
             .from("journal_messages")
-            .insert({ entry_id: entryId, role: "assistant", content: rejected });
+            .insert({ entry_id: entryId, role: "assistant", content: rejected, user_id: userId });
         }
         controller.enqueue(encoder.encode(`\n\n[error: ${msg}]`));
         controller.close();

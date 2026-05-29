@@ -8,6 +8,7 @@ import {
   messagesAsAnthropicTurns,
 } from "@/lib/journal/context";
 import { loadCalendarBlock } from "@/lib/journal/calendar";
+import { requireUserId } from "@/lib/journal/auth";
 import { formatNow, getUserTimezone, localDate } from "@/lib/date-utils";
 import type { JournalMessage } from "@/lib/types";
 
@@ -24,6 +25,7 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = await createClient();
+  const userId = await requireUserId(supabase);
 
   // Confirm entry exists & is open
   const { data: entry, error: entryErr } = await supabase
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest) {
   {
     const { data: inserted, error: insertErr } = await supabase
       .from("journal_messages")
-      .insert({ entry_id: entryId, role: "user", content: userMessage.trim() })
+      .insert({ entry_id: entryId, role: "user", content: userMessage.trim(), user_id: userId })
       .select("id, entry_id, role, content, created_at")
       .single();
     if (insertErr || !inserted) {
@@ -112,7 +114,7 @@ export async function POST(req: NextRequest) {
         if (trimmed.length > 0) {
           await supabase
             .from("journal_messages")
-            .insert({ entry_id: entryId, role: "assistant", content: trimmed });
+            .insert({ entry_id: entryId, role: "assistant", content: trimmed, user_id: userId });
         }
 
         controller.close();

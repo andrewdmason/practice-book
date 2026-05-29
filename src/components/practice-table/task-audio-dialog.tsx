@@ -41,7 +41,7 @@ import {
   deleteTaskAudio,
   updateTaskAudioTitle,
   updateTaskAudioTrim,
-} from "@/app/(app)/timer/audio-actions";
+} from "@/app/practice/timer/audio-actions";
 
 const BUCKET = "task-audio";
 const MAX_RECORDING_SECONDS = 3600;

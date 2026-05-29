@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { requireUserId } from "@/lib/journal/auth";
 import { generateCandidates } from "@/lib/journal/opening-candidates";
 import { candidateTexts } from "@/lib/journal/candidates";
 import { getUserTimezone, localDate } from "@/lib/date-utils";
@@ -20,6 +21,7 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = await createClient();
+  const userId = await requireUserId(supabase);
 
   const { data: entry, error: entryErr } = await supabase
     .from("journal_entries")
@@ -52,7 +54,7 @@ export async function POST(req: NextRequest) {
     const tz = await getUserTimezone();
     const today = localDate(new Date(), tz);
     await supabase.from("journal_skipped_questions").insert(
-      rejected.map((q) => ({ question: q, entry_id: entryId, skipped_on: today }))
+      rejected.map((q) => ({ question: q, entry_id: entryId, skipped_on: today, user_id: userId }))
     );
   }
 

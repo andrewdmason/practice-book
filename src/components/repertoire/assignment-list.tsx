@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { CheckCircle2Icon, PlusIcon, Trash2Icon } from "lucide-react";
-import { toggleAssignmentCompleted, createAssignment, deleteAssignment } from "@/app/(app)/focus-panel/actions";
+import { toggleAssignmentCompleted, createAssignment, deleteAssignment } from "@/app/practice/focus-panel/actions";
 import type { Assignment } from "@/lib/types";
 
 export function AssignmentList({ pieceId, initialAssignments }: { pieceId?: string; initialAssignments: Assignment[] }) {

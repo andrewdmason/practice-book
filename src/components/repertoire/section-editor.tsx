@@ -36,7 +36,7 @@ import {
   updateSectionNotes,
   updatePieceTargetTempo,
   deleteSection,
-} from "@/app/(app)/repertoire/section-actions";
+} from "@/app/practice/repertoire/section-actions";
 import {
   createVideo,
   deleteVideo,
@@ -45,7 +45,7 @@ import {
   getTimestamps,
   updateVideoTimeRange,
   upsertTimestamp,
-} from "@/app/(app)/repertoire/video-actions";
+} from "@/app/practice/repertoire/video-actions";
 import type {
   PieceSectionWithChildren,
   PieceSection,

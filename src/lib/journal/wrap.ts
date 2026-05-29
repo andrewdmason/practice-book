@@ -79,7 +79,7 @@ export async function runWrap(entryId: string): Promise<WrapResult> {
 
   const { data: entry, error: entryErr } = await supabase
     .from("journal_entries")
-    .select("id, entry_date, status, summary")
+    .select("id, entry_date, status, summary, user_id")
     .eq("id", entryId)
     .single();
   if (entryErr || !entry) {
@@ -254,6 +254,7 @@ After your tool calls, you may stop. The user does not see the wrap output.`;
     if (!prior || prior.length === 0) {
       await supabase.from("journal_profile_suggestions").insert({
         source_entry_id: entryId,
+        user_id: entry.user_id,
         status: "pending",
         change_type: suggestion.change_type,
         find: suggestion.find,

@@ -7,7 +7,7 @@ import {
   addLessonEntryForPiece,
   updateLessonEntry,
   deleteLessonEntry,
-} from "@/app/(app)/lessons/actions";
+} from "@/app/practice/lessons/actions";
 import { LessonViewToggle } from "@/components/lessons/lesson-view-toggle";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { formatMinutes } from "@/lib/timer-utils";

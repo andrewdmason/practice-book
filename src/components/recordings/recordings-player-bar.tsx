@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { createSignedPlaybackUrl } from "@/app/(app)/timer/audio-actions";
-import type { Recording } from "@/app/(app)/recordings/actions";
+import { createSignedPlaybackUrl } from "@/app/practice/timer/audio-actions";
+import type { Recording } from "@/app/practice/recordings/actions";
 
 type Props = {
   recording: Recording | null;

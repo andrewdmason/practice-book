@@ -193,7 +193,7 @@ export async function createTask(
 
   if (error || !data) throw new Error(error?.message ?? "Failed to create task");
 
-  revalidatePath("/");
+  revalidatePath("/practice");
   return {
     id: data.id,
     timer_seconds: data.timer_seconds,
@@ -246,7 +246,7 @@ export async function updateTaskField(
     .update({ [field]: value })
     .eq("id", taskId);
 
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 /**
@@ -264,7 +264,7 @@ export async function updateTaskSection(
   if (metronomeSpeed !== undefined) update.metronome_speed = metronomeSpeed;
 
   await supabase.from("practice_tasks").update(update).eq("id", taskId);
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 /**
@@ -325,7 +325,7 @@ export async function completeTask(taskId: string) {
     .update({ completed: true, completed_at: new Date().toISOString() })
     .eq("id", taskId);
 
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 export async function uncompleteTask(taskId: string) {
@@ -336,7 +336,7 @@ export async function uncompleteTask(taskId: string) {
     .update({ completed: false, completed_at: null })
     .eq("id", taskId);
 
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 export async function deleteTask(taskId: string) {
@@ -347,7 +347,7 @@ export async function deleteTask(taskId: string) {
     .delete()
     .eq("id", taskId);
 
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 export async function duplicateTask(
@@ -398,7 +398,7 @@ export async function duplicateTask(
 
   if (error || !newTask) throw new Error(error?.message ?? "Failed to duplicate task");
 
-  revalidatePath("/");
+  revalidatePath("/practice");
   return { id: newTask.id, date: targetDate };
 }
 
@@ -441,7 +441,7 @@ export async function moveTaskToDate(
     })
     .eq("id", taskId);
 
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 export async function moveTasksToDate(
@@ -473,7 +473,7 @@ export async function moveTasksToDate(
     )
   );
 
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 export async function updateTaskRemaining(taskId: string, remainingSeconds: number) {
@@ -505,7 +505,7 @@ export async function stopTaskTimer(taskId: string, remainingSeconds: number) {
     })
     .eq("id", taskId);
 
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 export async function getNextTaskForToday(
@@ -591,7 +591,7 @@ export async function rollOverUnfinishedTasks(): Promise<number> {
     )
   );
 
-  revalidatePath("/");
+  revalidatePath("/practice");
   return toRoll.length;
 }
 
@@ -606,5 +606,5 @@ export async function reorderTasks(taskIds: string[]) {
   );
 
   await Promise.all(updates);
-  revalidatePath("/");
+  revalidatePath("/practice");
 }

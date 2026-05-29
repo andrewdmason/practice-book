@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useTaskTimer } from "@/components/timer/task-timer-context";
 import { TimeSummary } from "@/components/timer/time-summary";
-import { getTodaySummary } from "@/app/(app)/timer/actions";
+import { getTodaySummary } from "@/app/practice/timer/actions";
 import {
   getAllOpenAssignments,
   getAssignmentsForPiece,
@@ -48,10 +48,10 @@ import {
   updateAssignmentText,
   updateAssignmentMetronome,
   reorderAssignments,
-} from "@/app/(app)/focus-panel/actions";
-import type { AssignmentWithPiece } from "@/app/(app)/focus-panel/actions";
+} from "@/app/practice/focus-panel/actions";
+import type { AssignmentWithPiece } from "@/app/practice/focus-panel/actions";
 import { cn } from "@/lib/utils";
-import { getSections } from "@/app/(app)/repertoire/section-actions";
+import { getSections } from "@/app/practice/repertoire/section-actions";
 import {
   createTaskOptimistic,
   emitOptimisticTask,
@@ -410,7 +410,7 @@ function PieceDetail({ pieceId, knownPiece }: { pieceId: string; knownPiece: Pie
               )}
               {!systemPiece && (
                 <Link
-                  href={`/repertoire/${pieceId}`}
+                  href={`/practice/repertoire/${pieceId}`}
                   className="p-1 text-muted-foreground hover:text-foreground transition-colors"
                   title="Open repertoire page"
                 >

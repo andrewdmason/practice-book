@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { localDate, getUserTimezone } from "@/lib/date-utils";
-import { getTimeSummaryForDateRange } from "@/app/(app)/feed/actions";
+import { getTimeSummaryForDateRange } from "@/app/practice/feed/actions";
 import type {
   LessonDay,
   LessonEntryWithPiece,
@@ -336,7 +336,7 @@ export async function completeLesson(
     .single();
   if (insertErr) throw new Error(insertErr.message);
 
-  revalidatePath("/lessons", "layout");
+  revalidatePath("/practice/lessons", "layout");
   return newLesson!.id;
 }
 
@@ -374,7 +374,7 @@ export async function reopenLesson(lessonId: string): Promise<void> {
     .update({ date: null })
     .eq("lesson_id", lessonId);
 
-  revalidatePath("/lessons", "layout");
+  revalidatePath("/practice/lessons", "layout");
 }
 
 export async function addPieceToLesson(
@@ -407,7 +407,7 @@ export async function addPieceToLesson(
   });
   if (error) throw new Error(error.message);
 
-  revalidatePath("/lessons", "layout");
+  revalidatePath("/practice/lessons", "layout");
 }
 
 export async function reorderLessonSections(
@@ -424,7 +424,7 @@ export async function reorderLessonSections(
         .eq("lesson_id", lessonId)
     )
   );
-  revalidatePath("/lessons", "layout");
+  revalidatePath("/practice/lessons", "layout");
 }
 
 export async function addLessonEntryForPiece(
@@ -455,14 +455,14 @@ export async function updateLessonEntry(
     .update(patch)
     .eq("id", id);
   if (error) throw new Error(error.message);
-  revalidatePath("/lessons", "layout");
+  revalidatePath("/practice/lessons", "layout");
 }
 
 export async function deleteLessonEntry(id: string): Promise<void> {
   const supabase = await createClient();
   const { error } = await supabase.from("lesson_entries").delete().eq("id", id);
   if (error) throw new Error(error.message);
-  revalidatePath("/lessons", "layout");
+  revalidatePath("/practice/lessons", "layout");
 }
 
 function escapeHtml(str: string): string {
@@ -542,5 +542,5 @@ export async function addNoteToUpcomingLesson(
     if (error) throw new Error(error.message);
   }
 
-  revalidatePath("/lessons", "layout");
+  revalidatePath("/practice/lessons", "layout");
 }

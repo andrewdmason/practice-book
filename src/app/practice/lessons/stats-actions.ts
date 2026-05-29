@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { localDate, getUserTimezone } from "@/lib/date-utils";
-import { getTimeSummaryForDateRange } from "@/app/(app)/feed/actions";
+import { getTimeSummaryForDateRange } from "@/app/practice/feed/actions";
 import type { LessonTimeSummary, SectionStatus } from "@/lib/types";
 
 const addDays = (dateStr: string, days: number): string => {

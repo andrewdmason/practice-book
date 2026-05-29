@@ -20,10 +20,10 @@ const ProgressGrid = dynamic(() =>
 import { Separator } from "@/components/ui/separator";
 import {
   getAssignmentsForPiece,
-} from "@/app/(app)/focus-panel/actions";
-import { getSections, getProgressSnapshots } from "@/app/(app)/repertoire/section-actions";
-import { getVideos, getTimestamps } from "@/app/(app)/repertoire/video-actions";
-import { getPieceCumulativeData, getPieceCompletionByWeek } from "@/app/(app)/reports/actions";
+} from "@/app/practice/focus-panel/actions";
+import { getSections, getProgressSnapshots } from "@/app/practice/repertoire/section-actions";
+import { getVideos, getTimestamps } from "@/app/practice/repertoire/video-actions";
+import { getPieceCumulativeData, getPieceCompletionByWeek } from "@/app/practice/reports/actions";
 import type { Piece, Work } from "@/lib/types";
 
 export default async function PieceDetailPage({
@@ -73,7 +73,7 @@ export default async function PieceDetailPage({
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6">
       <Link
-        href="/repertoire"
+        href="/practice/repertoire"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
       >
         <ArrowLeftIcon className="size-3.5" />

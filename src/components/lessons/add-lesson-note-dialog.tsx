@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { addNoteToUpcomingLesson } from "@/app/(app)/lessons/actions";
+import { addNoteToUpcomingLesson } from "@/app/practice/lessons/actions";
 import {
   Dialog,
   DialogContent,

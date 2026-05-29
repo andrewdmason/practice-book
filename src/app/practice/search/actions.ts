@@ -39,7 +39,7 @@ export async function searchTypeahead(
         name: p.name,
         composer: p.composer,
         type: "piece",
-        url: `/repertoire/${p.id}`,
+        url: `/practice/repertoire/${p.id}`,
       });
     }
   }
@@ -51,7 +51,7 @@ export async function searchTypeahead(
         name: w.name,
         composer: w.composer,
         type: "work",
-        url: `/repertoire/works/${w.id}`,
+        url: `/practice/repertoire/works/${w.id}`,
       });
     }
   }

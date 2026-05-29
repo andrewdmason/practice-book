@@ -7,7 +7,7 @@ import { SearchProvider } from "@/components/search/search-provider";
 import { TimezoneProvider } from "@/components/timezone-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { createClient } from "@/lib/supabase/server";
-import { getTodaySummary } from "@/app/(app)/timer/actions";
+import { getTodaySummary } from "@/app/practice/timer/actions";
 import type { Piece } from "@/lib/types";
 
 export default async function AppLayout({

@@ -25,7 +25,7 @@ import { formatMinutes } from "@/lib/timer-utils";
 import {
   getPieceCumulativeData,
   getCompletedAssignmentsForPiece,
-} from "@/app/(app)/reports/actions";
+} from "@/app/practice/reports/actions";
 import type {
   PieceWeeklyCumulativeData,
   PieceOption,
@@ -158,7 +158,7 @@ export function PieceProgress({
       // Update URL
       const params = new URLSearchParams(searchParams.toString());
       params.set("piece", pieceId);
-      router.replace(`/reports?${params.toString()}`, { scroll: false });
+      router.replace(`/practice/reports?${params.toString()}`, { scroll: false });
 
       loadPieceData(pieceId);
     },

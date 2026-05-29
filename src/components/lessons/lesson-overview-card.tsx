@@ -9,7 +9,7 @@ import {
   getLessonOverviewTrend,
   type LessonOverviewExtras,
   type OverviewTrendPoint,
-} from "@/app/(app)/lessons/stats-actions";
+} from "@/app/practice/lessons/stats-actions";
 import { LessonOverviewTrend } from "./lesson-overview-trend";
 import { cn } from "@/lib/utils";
 

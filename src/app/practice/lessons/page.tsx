@@ -9,7 +9,7 @@ export default function LessonsPage() {
 
   useEffect(() => {
     const mode = getStoredLessonViewMode();
-    router.replace(mode === "list" ? "/lessons/list" : "/lessons/upcoming");
+    router.replace(mode === "list" ? "/practice/lessons/list" : "/practice/lessons/upcoming");
   }, [router]);
 
   return null;

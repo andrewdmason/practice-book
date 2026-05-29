@@ -10,7 +10,7 @@ import { LessonSparkline } from "./lesson-sparkline";
 import {
   getLessonPieceStats,
   type LessonPieceStats,
-} from "@/app/(app)/lessons/stats-actions";
+} from "@/app/practice/lessons/stats-actions";
 import {
   SECTION_STATUS_LABELS,
   type SectionStatus,
@@ -65,7 +65,7 @@ export function LessonPieceCard({
             )}
           </div>
           <Link
-            href={`/repertoire/${pieceId}`}
+            href={`/practice/repertoire/${pieceId}`}
             className="text-muted-foreground hover:text-foreground"
             title="Open piece detail"
           >

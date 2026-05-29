@@ -54,7 +54,7 @@ export async function toggleAssignmentCompleted(assignmentId: string, completed:
     throw new Error(error.message);
   }
 
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 export async function createAssignment(
@@ -84,7 +84,7 @@ export async function createAssignment(
     throw new Error(error.message);
   }
 
-  revalidatePath("/");
+  revalidatePath("/practice");
   return data as Assignment;
 }
 
@@ -96,7 +96,7 @@ export async function reorderAssignments(assignmentIds: string[]) {
   );
 
   await Promise.all(updates);
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 export async function deleteAssignment(assignmentId: string) {
@@ -111,7 +111,7 @@ export async function deleteAssignment(assignmentId: string) {
     throw new Error(error.message);
   }
 
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 export async function updateAssignmentText(assignmentId: string, text: string) {
@@ -126,7 +126,7 @@ export async function updateAssignmentText(assignmentId: string, text: string) {
     throw new Error(error.message);
   }
 
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 export async function updateAssignmentMetronome(
@@ -144,7 +144,7 @@ export async function updateAssignmentMetronome(
     throw new Error(error.message);
   }
 
-  revalidatePath("/");
+  revalidatePath("/practice");
 }
 
 export async function createTaskFromAssignment(
@@ -182,7 +182,7 @@ export async function createTaskFromAssignment(
     throw new Error(error?.message ?? "Failed to create task from assignment");
   }
 
-  revalidatePath("/");
+  revalidatePath("/practice");
   return data.id;
 }
 

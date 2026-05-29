@@ -1,4 +1,4 @@
-import { createTask } from "@/app/(app)/timer/task-actions";
+import { createTask } from "@/app/practice/timer/task-actions";
 import type { PieceKind, SectionStatus, TaskWithDetails } from "@/lib/types";
 
 export type OptimisticTaskDetail = {

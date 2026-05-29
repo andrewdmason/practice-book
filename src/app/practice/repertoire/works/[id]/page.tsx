@@ -7,7 +7,7 @@ import { WorkDetailHeader } from "@/components/repertoire/work-detail-header";
 import { Separator } from "@/components/ui/separator";
 import {
   getWorkFocusData,
-} from "@/app/(app)/repertoire/actions";
+} from "@/app/practice/repertoire/actions";
 import type { Work, Piece } from "@/lib/types";
 
 export default async function WorkDetailPage({
@@ -44,7 +44,7 @@ export default async function WorkDetailPage({
   return (
     <div className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:px-6">
       <Link
-        href="/repertoire"
+        href="/practice/repertoire"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4"
       >
         <ArrowLeftIcon className="size-3.5" />
@@ -64,7 +64,7 @@ export default async function WorkDetailPage({
               {pieces.map((piece) => (
                 <Link
                   key={piece.id}
-                  href={`/repertoire/${piece.id}`}
+                  href={`/practice/repertoire/${piece.id}`}
                   className="flex items-center justify-between rounded-md px-3 py-2 hover:bg-muted/50 transition-colors"
                 >
                   <div className="min-w-0 flex-1">
