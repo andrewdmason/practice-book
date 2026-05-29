@@ -171,7 +171,7 @@ function defaultTemplate(): SeedTemplate {
       base_description: qt.base_description,
       style_note: "",
       weight: qt.weight,
-      enabled: true,
+      enabled: qt.weight > 0,
       is_builtin: true,
       sort_order: qt.sort_order,
     })),

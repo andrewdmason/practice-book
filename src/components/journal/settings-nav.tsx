@@ -5,10 +5,10 @@ import { usePathname } from "next/navigation";
 
 const TABS = [
   {
-    label: "Questions",
-    href: "/settings/questions",
+    label: "User",
+    href: "/settings/user",
     description:
-      "The kinds of questions you get each morning, how often each shows up, and how many you're offered.",
+      "Your life context: who you are, who's around you, what you're working on.",
   },
   {
     label: "Interviewer",
@@ -17,10 +17,10 @@ const TABS = [
       "The interviewer's voice and how it asks — its personality, not which topics it picks. Edit it here directly.",
   },
   {
-    label: "User",
-    href: "/settings/user",
+    label: "Questions",
+    href: "/settings/questions",
     description:
-      "Your life context: who you are, who's around you, what you're working on.",
+      "The kinds of questions you get each morning, how often each shows up, and how many you're offered.",
   },
   {
     label: "Family",

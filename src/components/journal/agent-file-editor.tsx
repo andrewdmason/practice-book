@@ -7,8 +7,15 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { Markdown } from "tiptap-markdown";
 import { Bold, Heading1, Heading2, Heading3, Italic, List, ListOrdered, Quote } from "lucide-react";
 import { saveAgentFile } from "@/app/(journal)/journal/actions";
+import { saveFamilyDoc } from "@/app/(journal)/settings/family/actions";
 import { cn } from "@/lib/utils";
 import type { JournalAgentFileName } from "@/lib/types";
+
+/** What this editor persists: a named agent file (Interviewer/User) or the
+ * shared family doc. Each maps to its own server action. */
+export type EditorTarget =
+  | { kind: "agent"; name: JournalAgentFileName }
+  | { kind: "family" };
 
 function getMarkdown(editor: Editor): string {
   const md = (editor.storage as { markdown?: { getMarkdown?: () => string } }).markdown;
@@ -16,10 +23,10 @@ function getMarkdown(editor: Editor): string {
 }
 
 export function SingleFileEditor({
-  name,
+  target,
   initialMarkdown,
 }: {
-  name: JournalAgentFileName;
+  target: EditorTarget;
   initialMarkdown: string;
 }) {
   const [dirty, setDirty] = useState(false);
@@ -69,7 +76,11 @@ export function SingleFileEditor({
     const md = getMarkdown(editor) ?? "";
     startTransition(async () => {
       try {
-        await saveAgentFile(name, md);
+        if (target.kind === "family") {
+          await saveFamilyDoc(md);
+        } else {
+          await saveAgentFile(target.name, md);
+        }
         setDirty(false);
         setJustSaved(true);
       } catch (err) {

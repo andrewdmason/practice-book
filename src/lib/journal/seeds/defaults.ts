@@ -67,7 +67,12 @@ export type BuiltinQuestionType = {
   sort_order: number;
 };
 
-/** The 13 built-in question types. Mirrors the seed in migration 00047. */
+/**
+ * The built-in question types. The first 13 mirror migration 00047; the last 4
+ * (added in 00055) are playful/concrete types that shine for kids. Their weight
+ * here is the *adult* default — the four kid types default to 0 (off), and the
+ * age templates turn them on with an age-appropriate mix.
+ */
 export const BUILTIN_QUESTION_TYPES: BuiltinQuestionType[] = [
   { name: "recent-calendar", weight: 12, sort_order: 1, base_description: "Pulls a specific event from your connected calendar in the last few days and asks about it — best once it has already happened." },
   { name: "upcoming-calendar", weight: 3, sort_order: 2, base_description: "Looks ahead on your calendar and asks about something coming up. Used sparingly." },
@@ -82,4 +87,8 @@ export const BUILTIN_QUESTION_TYPES: BuiltinQuestionType[] = [
   { name: "relationship", weight: 3, sort_order: 11, base_description: "Surfaces a specific person from your User file or recent entries and asks about a recent moment with them." },
   { name: "curveball", weight: 1, sort_order: 12, base_description: "A deliberately unexpected, playful prompt from an angle you wouldn't predict. Not based on your data." },
   { name: "sensory-moment", weight: 3, sort_order: 13, base_description: "Asks you to capture a sensory detail — something you saw, heard, tasted, or felt recently. Not tied to a specific source." },
+  { name: "favorites", weight: 0, sort_order: 14, base_description: "Asks you to name a favorite from today — a food, a song, a moment, something you played or watched. Light and concrete." },
+  { name: "imagination", weight: 0, sort_order: 15, base_description: "A playful what-if or would-you-rather — pure imagination, not tied to your real day." },
+  { name: "proud-moment", weight: 0, sort_order: 16, base_description: "Asks about something you figured out, pulled off, or feel proud of." },
+  { name: "funny-moment", weight: 0, sort_order: 17, base_description: "Asks about something that made you laugh recently." },
 ];

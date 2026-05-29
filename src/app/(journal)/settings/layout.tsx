@@ -1,7 +1,7 @@
 import { SettingsNav } from "@/components/journal/settings-nav";
 import { LogoutButton } from "@/components/journal/logout-button";
 import { createClient } from "@/lib/supabase/server";
-import { getIsOwner } from "@/lib/journal/auth";
+import { requireUserId } from "@/lib/journal/auth";
 import type { JournalAgentFile } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +12,15 @@ export default async function SettingsLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
-  const isOwner = await getIsOwner(supabase);
+  const userId = await requireUserId(supabase);
+  // One row gives us both the owner flag (gates the Family tab) and the
+  // name/email to show above Log out.
+  const { data: me } = await supabase
+    .from("journal_members")
+    .select("name, email, is_owner")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const isOwner = me?.is_owner === true;
   const { data } = await supabase
     .from("journal_agent_files")
     .select("id, name, updated_at")
@@ -50,7 +58,15 @@ export default async function SettingsLayout({
           </p>
 
           <div className="mt-8 border-t border-border pt-6">
-            <LogoutButton />
+            <p className="font-serif text-sm text-foreground">
+              {me?.name || me?.email || "Signed in"}
+            </p>
+            {me?.name && me?.email && (
+              <p className="text-xs text-muted-foreground">{me.email}</p>
+            )}
+            <div className="mt-3">
+              <LogoutButton />
+            </div>
           </div>
         </aside>
       </div>

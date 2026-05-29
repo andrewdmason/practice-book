@@ -12,6 +12,9 @@ export default async function InterviewerSettingsPage() {
     .maybeSingle();
 
   return (
-    <SingleFileEditor name="Interviewer" initialMarkdown={data?.content ?? ""} />
+    <SingleFileEditor
+      target={{ kind: "agent", name: "Interviewer" }}
+      initialMarkdown={data?.content ?? ""}
+    />
   );
 }

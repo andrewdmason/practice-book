@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { FamilyManager } from "@/components/journal/family-manager";
-import { FamilyDocEditor } from "@/components/journal/family-doc-editor";
+import { SingleFileEditor } from "@/components/journal/agent-file-editor";
 import { getIsOwner } from "@/lib/journal/auth";
 import { loadFamilyDoc } from "@/lib/journal/context";
 import { listFamilyMembers } from "./actions";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function FamilySettingsPage() {
   // Owner-only. Non-owners are bounced to the first settings tab.
   if (!(await getIsOwner())) {
-    redirect("/settings/questions");
+    redirect("/settings/user");
   }
 
   const [members, familyDoc] = await Promise.all([
@@ -20,7 +20,17 @@ export default async function FamilySettingsPage() {
   return (
     <>
       <FamilyManager members={members} />
-      <FamilyDocEditor initialContent={familyDoc} />
+      <div className="mt-10 border-t border-border pt-6">
+        <h3 className="font-serif text-xs uppercase tracking-wide text-muted-foreground">
+          Family context
+        </h3>
+        <p className="mt-1 font-serif text-xs italic text-muted-foreground">
+          Shared notes about your family — who everyone is, ages, anything worth
+          knowing. Every member&apos;s interviewer reads this, and it seeds the
+          &ldquo;build your profile&rdquo; prompt. Only you can edit it.
+        </p>
+        <SingleFileEditor target={{ kind: "family" }} initialMarkdown={familyDoc} />
+      </div>
     </>
   );
 }
