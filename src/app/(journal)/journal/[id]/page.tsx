@@ -4,6 +4,7 @@ import { ChatSurface } from "@/components/journal/chat-surface";
 import { EntryTitle } from "@/components/journal/entry-title";
 import { QuoteEntryView } from "@/components/journal/quote-entry-view";
 import { RecapEntryView } from "@/components/journal/recap-entry-view";
+import { GeneratedPhotoPanel } from "@/components/journal/generated-photo-panel";
 import { JournalPhotoGallery } from "@/components/journal/journal-photo-gallery";
 import { VisibilityToggle } from "@/components/journal/visibility-toggle";
 import { createClient } from "@/lib/supabase/server";
@@ -115,6 +116,7 @@ export default async function EntryPage({
         initialPhotos={photos}
         editable={isAuthor}
       />
+      {isAuthor && <GeneratedPhotoPanel entryId={entry.id} />}
       {/* Only standard entries have a conversation — no transcript or reply
           box for quote and recap entries. */}
       {entry.entry_type === "standard" && (

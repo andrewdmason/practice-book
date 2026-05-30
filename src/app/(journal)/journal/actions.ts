@@ -9,6 +9,7 @@ import { runWrap } from "@/lib/journal/wrap";
 import { summarizeRecap } from "@/lib/journal/recap-summary";
 import { candidateByText, candidateTexts, normalizeCandidates } from "@/lib/journal/candidates";
 import { applyProfileDocChange } from "@/lib/journal/profile-suggestions";
+import { runEntryPhotoGeneration } from "@/lib/journal/generated-photo";
 import type {
   JournalAgentFileName,
   JournalMediaType,
@@ -660,6 +661,111 @@ export async function reopenEntry(entryId: string) {
   revalidatePath("/journal", "layout");
 }
 
+export type GeneratedEntryPhotoPreviewResult =
+  | { ok: true; generationId: string; displayUrl: string }
+  | { ok: false; error: string };
+
+export async function generateEntryPhotoPreview(
+  entryId: string
+): Promise<GeneratedEntryPhotoPreviewResult> {
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
+  const { data: entry, error } = await supabase
+    .from("journal_entries")
+    .select("id, user_id")
+    .eq("id", entryId)
+    .maybeSingle();
+  if (error || !entry) return { ok: false, error: "Entry not found." };
+  if (entry.user_id !== userId) {
+    return { ok: false, error: "You can only generate photos for your own posts." };
+  }
+
+  const result = await runEntryPhotoGeneration(entryId, {
+    mode: "manual",
+    attachOnSuccess: false,
+  });
+  if (!result.ok) return { ok: false, error: result.error };
+  if (!result.displayPath) {
+    return { ok: false, error: "Generated photo is missing." };
+  }
+
+  const displayUrl = await createSignedPhotoUrl(result.displayPath);
+  return { ok: true, generationId: result.generationId, displayUrl };
+}
+
+export type AttachGeneratedPhotoResult =
+  | { ok: true; photoId: string }
+  | { ok: false; error: string };
+
+export async function attachGeneratedEntryPhoto(
+  generationId: string
+): Promise<AttachGeneratedPhotoResult> {
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
+  const { data: generation, error } = await supabase
+    .from("journal_image_generations")
+    .select("id, entry_id, user_id, status, generated_path, display_path, attached_photo_id")
+    .eq("id", generationId)
+    .maybeSingle();
+  if (error || !generation) return { ok: false, error: "Generated photo not found." };
+  if (generation.user_id !== userId) {
+    return { ok: false, error: "You can only attach photos to your own posts." };
+  }
+  if (generation.status === "attached" && generation.attached_photo_id) {
+    return { ok: true, photoId: generation.attached_photo_id as string };
+  }
+  if (generation.status !== "succeeded") {
+    return { ok: false, error: "That generated photo is not ready to attach." };
+  }
+
+  const originalPath = generation.generated_path as string | null;
+  const displayPath = generation.display_path as string | null;
+  if (!originalPath || !displayPath) {
+    return { ok: false, error: "Generated photo is missing." };
+  }
+
+  const photoId = await attachEntryPhoto(
+    generation.entry_id as string,
+    originalPath,
+    displayPath,
+    "photo"
+  );
+  const { error: updateErr } = await supabase
+    .from("journal_image_generations")
+    .update({
+      status: "attached",
+      attached_photo_id: photoId,
+      completed_at: new Date().toISOString(),
+    })
+    .eq("id", generationId);
+  if (updateErr) return { ok: false, error: updateErr.message };
+
+  revalidatePath("/journal");
+  revalidatePath(`/journal/${generation.entry_id}`);
+  return { ok: true, photoId };
+}
+
+export async function getEntriesImageGenerationStates(
+  entryIds: string[]
+): Promise<Record<string, "pending" | "generating">> {
+  if (entryIds.length === 0) return {};
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("journal_image_generations")
+    .select("entry_id, status, created_at")
+    .in("entry_id", entryIds)
+    .in("status", ["pending", "generating"])
+    .order("created_at", { ascending: false });
+
+  const result: Record<string, "pending" | "generating"> = {};
+  for (const row of data ?? []) {
+    const entryId = row.entry_id as string;
+    if (result[entryId]) continue;
+    result[entryId] = row.status as "pending" | "generating";
+  }
+  return result;
+}
+
 export async function deleteEntry(entryId: string) {
   const supabase = await createClient();
   const { error } = await supabase
@@ -964,7 +1070,7 @@ export async function deleteEntryPhoto(photoId: string): Promise<void> {
     .single();
 
   if (photo) {
-    const paths = [photo.original_path, photo.display_path].filter(
+    const paths = [...new Set([photo.original_path, photo.display_path])].filter(
       (p): p is string => Boolean(p)
     );
     if (paths.length > 0) {

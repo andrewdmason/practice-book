@@ -2,7 +2,10 @@ import { HistoryList } from "@/components/journal/history-list";
 import { JournalListDropZone } from "@/components/journal/journal-list-drop-zone";
 import { createClient } from "@/lib/supabase/server";
 import { requireUserId } from "@/lib/journal/auth";
-import { getEntriesPhotos } from "@/app/(journal)/journal/actions";
+import {
+  getEntriesImageGenerationStates,
+  getEntriesPhotos,
+} from "@/app/(journal)/journal/actions";
 import type { JournalEntry } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -82,11 +85,16 @@ export default async function JournalPage({
     }
   }
 
-  const photosByEntry = await getEntriesPhotos(entries.map((e) => e.id));
+  const entryIds = entries.map((e) => e.id);
+  const [photosByEntry, imageGenerationByEntry] = await Promise.all([
+    getEntriesPhotos(entryIds),
+    getEntriesImageGenerationStates(entryIds),
+  ]);
   const entriesWithPhotos = entries
     .map((e) => ({
       ...e,
       photos: photosByEntry[e.id] ?? [],
+      photoGenerationStatus: imageGenerationByEntry[e.id] ?? null,
       authorName: isFamily
         ? authorByUser.get(e.user_id) ?? "Family member"
         : null,

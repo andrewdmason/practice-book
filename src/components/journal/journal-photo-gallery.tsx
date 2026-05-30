@@ -38,6 +38,10 @@ export function JournalPhotoGallery({
   const [lightbox, setLightbox] = useState<Media | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    setMedia(initialPhotos);
+  }, [initialPhotos]);
+
   const uploadMedia = useCallback(
     async (file: File) => {
       const mediaType = detectMediaType(file);
