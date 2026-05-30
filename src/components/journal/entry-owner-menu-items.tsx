@@ -105,6 +105,11 @@ export function EntryOwnerMenuItems({
           return;
         }
         router.refresh();
+        window.dispatchEvent(
+          new CustomEvent("journal:photo-generation-finished", {
+            detail: { entryId },
+          })
+        );
       } catch (err) {
         window.dispatchEvent(
           new CustomEvent("journal:photo-generation-finished", {
