@@ -7,6 +7,58 @@ const PHOTOS_BUCKET = "journal-photos";
 const MEMBER_PHOTOS_BUCKET = "member-photos";
 const IMAGE_SIZE = "1024x1024";
 const PROMPT_TEXT_LIMIT = 5000;
+const ART_STYLES = [
+  {
+    name: "Natural-light documentary photo",
+    prompt:
+      "A believable candid photograph, natural window light, 35mm documentary feel, imperfect lived-in details, shallow depth of field.",
+  },
+  {
+    name: "Cinematic film still",
+    prompt:
+      "A cinematic film still with expressive lighting, careful composition, rich color grading, and the feeling of a memorable scene from a movie.",
+  },
+  {
+    name: "Vintage family snapshot",
+    prompt:
+      "A warm vintage family snapshot, slightly faded color, casual framing, film grain, the charm of an old photo album.",
+  },
+  {
+    name: "Editorial studio scene",
+    prompt:
+      "A polished editorial studio image with intentional props, clean lighting, crisp detail, and a gently surreal magazine-photo sensibility.",
+  },
+  {
+    name: "Watercolor and ink",
+    prompt:
+      "A loose watercolor-and-ink painting, expressive line work, soft washes, visible paper texture, lively but not cartoonish.",
+  },
+  {
+    name: "Gouache storybook",
+    prompt:
+      "A gouache painting with bold shapes, matte color, hand-painted texture, charming storybook composition, and tactile brushwork.",
+  },
+  {
+    name: "Claymation miniature",
+    prompt:
+      "A handmade claymation-style miniature scene, sculpted figures and props, soft studio lighting, visible fingerprints and craft texture.",
+  },
+  {
+    name: "Felt-and-paper diorama",
+    prompt:
+      "A stop-motion craft diorama made from felt, paper, cardboard, string, and tiny handmade props, photographed like a real tabletop set.",
+  },
+  {
+    name: "Graphic screenprint",
+    prompt:
+      "A bold graphic screenprint with limited colors, chunky shapes, overprinted texture, strong silhouettes, and playful poster-like composition.",
+  },
+  {
+    name: "Surreal collage",
+    prompt:
+      "A dreamy mixed-media collage combining photographic fragments, painted elements, unexpected scale shifts, and a whimsical surreal mood.",
+  },
+] as const;
 
 export const JOURNAL_IMAGE_MODEL =
   process.env.JOURNAL_IMAGE_MODEL ?? "gpt-image-2";
@@ -375,16 +427,25 @@ function escapeRegex(value: string): string {
 }
 
 function buildImagePrompt(postText: string, reference: ReferencePhoto | null): string {
+  const style = ART_STYLES[Math.floor(Math.random() * ART_STYLES.length)];
   const referenceLine = reference?.memberName
-    ? `A reference profile photo for ${reference.memberName} is provided. Use it only as loose inspiration for a playful illustrated character; do not make a photorealistic portrait.`
+    ? `A reference profile photo for ${reference.memberName} is provided. If that person naturally belongs in the scene, use the photo as visual inspiration for broad likeness, hair, and expression. The image does not need to be a portrait.`
     : reference
-      ? "A family profile photo is provided. Use it only as loose inspiration for a playful illustrated character; do not make a photorealistic portrait."
+      ? "A family profile photo is provided. If a person naturally belongs in the scene, use the photo as visual inspiration for broad likeness, hair, and expression. The image does not need to be a portrait."
       : "No reference photo is provided.";
 
   return [
-    "Create one fun, silly, family-safe illustration for a child's journal post.",
-    "Make it feel like a cheerful storybook sticker or playful cartoon scene.",
-    "Base the scene on the post's actual content, but keep it light and imaginative.",
+    "Create one image inspired by this journal post.",
+    "",
+    "Image concept:",
+    "Imagine a vivid, specific scene from the post rather than a literal summary.",
+    "Make the scene feel alive, surprising, and emotionally true to the moment.",
+    "It can include symbolic details or a lightly exaggerated premise when that makes the memory more evocative.",
+    "",
+    "Art style:",
+    `${style.name}: ${style.prompt}`,
+    "",
+    "Constraints:",
     "Do not include readable text, captions, speech bubbles, logos, or watermarks.",
     "Do not make anything scary, mean, embarrassing, romantic, violent, or adult.",
     referenceLine,
