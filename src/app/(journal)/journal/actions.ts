@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { requireUserId } from "@/lib/journal/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getIsOwner, requireUserId } from "@/lib/journal/auth";
 import { todayLocal } from "@/lib/journal/today";
 import { runWrap } from "@/lib/journal/wrap";
 import { summarizeRecap } from "@/lib/journal/recap-summary";
@@ -670,17 +671,12 @@ export async function generateAndAttachEntryPhoto(
   entryId: string
 ): Promise<GenerateAndAttachEntryPhotoResult> {
   const supabase = await createClient();
-  const userId = await requireUserId(supabase);
-  const { data: entry, error } = await supabase
-    .from("journal_entries")
-    .select("id, user_id")
-    .eq("id", entryId)
-    .maybeSingle();
-  if (error || !entry) return { ok: false, error: "Entry not found." };
-  if (entry.user_id !== userId) {
-    return { ok: false, error: "You can only generate photos for your own posts." };
-  }
+  const access = await authorizeEntryPhotoAccess(supabase, entryId);
+  if (!access.ok) return { ok: false, error: access.error };
 
+  // The generation pipeline runs as admin and attributes the photo to the
+  // entry's author, so owner-on-behalf generation needs no special handling
+  // beyond the access check above.
   const result = await runEntryPhotoGeneration(entryId, {
     mode: "manual",
     attachOnSuccess: true,
@@ -943,6 +939,43 @@ export async function dismissProfileSuggestion(id: string): Promise<void> {
 
 const PHOTOS_BUCKET = "journal-photos";
 
+type EntryPhotoAccess =
+  | { ok: true; authorId: string; onBehalf: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Resolve who an entry-photo operation should be attributed to, and whether the
+ * caller is acting on someone else's behalf. The author manages their own
+ * posts; the account owner may also manage any post they can see (their own +
+ * family-shared). Owner-on-behalf writes are attributed to the *entry's author*
+ * so the photo lives on the post for the author and family — which means they
+ * must run through the admin client, since per-user RLS and the storage
+ * {auth.uid()}/... folder convention would otherwise reject them.
+ *
+ * The entry is read through the RLS-bound user client, so this only ever grants
+ * access to posts the caller can already see — other members' private posts
+ * resolve to "Entry not found", exactly as they 404 in the UI.
+ */
+async function authorizeEntryPhotoAccess(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  entryId: string
+): Promise<EntryPhotoAccess> {
+  const userId = await requireUserId(supabase);
+  const { data: entry } = await supabase
+    .from("journal_entries")
+    .select("id, user_id")
+    .eq("id", entryId)
+    .maybeSingle();
+  if (!entry) return { ok: false, error: "Entry not found." };
+  if (entry.user_id === userId) {
+    return { ok: true, authorId: userId, onBehalf: false };
+  }
+  if (await getIsOwner(supabase)) {
+    return { ok: true, authorId: entry.user_id as string, onBehalf: true };
+  }
+  return { ok: false, error: "You can only manage photos on your own posts." };
+}
+
 export async function createPhotoUploadUrls(
   entryId: string,
   photoId: string,
@@ -954,16 +987,18 @@ export async function createPhotoUploadUrls(
   displayToken: string;
 }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  const access = await authorizeEntryPhotoAccess(supabase, entryId);
+  if (!access.ok) throw new Error(access.error);
 
   const safeExt = ext.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-  const originalPath = `${user.id}/${entryId}/${photoId}-original.${safeExt}`;
-  const displayPath = `${user.id}/${entryId}/${photoId}-display.jpg`;
+  const originalPath = `${access.authorId}/${entryId}/${photoId}-original.${safeExt}`;
+  const displayPath = `${access.authorId}/${entryId}/${photoId}-display.jpg`;
 
-  const original = await supabase.storage
+  // Owner-on-behalf uploads land in the author's folder, which the user client's
+  // storage policy ({auth.uid()}/...) would reject — sign them with admin.
+  const storage = (access.onBehalf ? createAdminClient() : supabase).storage;
+
+  const original = await storage
     .from(PHOTOS_BUCKET)
     .createSignedUploadUrl(originalPath);
   if (original.error || !original.data) {
@@ -971,7 +1006,7 @@ export async function createPhotoUploadUrls(
       original.error?.message ?? "Failed to create upload URL"
     );
   }
-  const display = await supabase.storage
+  const display = await storage
     .from(PHOTOS_BUCKET)
     .createSignedUploadUrl(displayPath);
   if (display.error || !display.data) {
@@ -994,8 +1029,11 @@ export async function attachEntryPhoto(
   source: JournalPhotoSource = "uploaded"
 ): Promise<string> {
   const supabase = await createClient();
-  const userId = await requireUserId(supabase);
-  const { data, error } = await supabase
+  const access = await authorizeEntryPhotoAccess(supabase, entryId);
+  if (!access.ok) throw new Error(access.error);
+
+  const db = access.onBehalf ? createAdminClient() : supabase;
+  const { data, error } = await db
     .from("journal_entry_photos")
     .insert({
       entry_id: entryId,
@@ -1003,7 +1041,7 @@ export async function attachEntryPhoto(
       display_path: displayPath,
       media_type: mediaType,
       source,
-      user_id: userId,
+      user_id: access.authorId,
     })
     .select("id")
     .single();
@@ -1015,35 +1053,56 @@ export async function attachEntryPhoto(
 
 export async function deleteEntryPhoto(photoId: string): Promise<void> {
   const supabase = await createClient();
-  const { data: photo } = await supabase
+  // Read the row with admin first: the owner can't see another member's photo
+  // under RLS, so we need its entry before we can authorize the delete.
+  const admin = createAdminClient();
+  const { data: photo } = await admin
     .from("journal_entry_photos")
     .select("entry_id, original_path, display_path")
     .eq("id", photoId)
-    .single();
+    .maybeSingle();
+  if (!photo) return;
 
-  if (photo) {
-    const paths = [...new Set([photo.original_path, photo.display_path])].filter(
-      (p): p is string => Boolean(p)
-    );
-    if (paths.length > 0) {
-      await supabase.storage.from(PHOTOS_BUCKET).remove(paths);
-    }
+  const access = await authorizeEntryPhotoAccess(
+    supabase,
+    photo.entry_id as string
+  );
+  if (!access.ok) throw new Error(access.error);
+
+  const db = access.onBehalf ? admin : supabase;
+  const storage = (access.onBehalf ? admin : supabase).storage;
+
+  const paths = [...new Set([photo.original_path, photo.display_path])].filter(
+    (p): p is string => Boolean(p)
+  );
+  if (paths.length > 0) {
+    await storage.from(PHOTOS_BUCKET).remove(paths);
   }
 
-  const { error } = await supabase
+  const { error } = await db
     .from("journal_entry_photos")
     .delete()
     .eq("id", photoId);
   if (error) throw new Error(error.message);
   revalidatePath("/journal");
-  if (photo?.entry_id) revalidatePath(`/journal/${photo.entry_id}`);
+  if (photo.entry_id) revalidatePath(`/journal/${photo.entry_id}`);
 }
 
 export async function createSignedPhotoUrl(
   displayPath: string
 ): Promise<string> {
   const supabase = await createClient();
-  const { data, error } = await supabase.storage
+  // Photos live under {authorId}/... — the user client can only sign its own
+  // folder. The account owner may sign another author's path (e.g. the optimistic
+  // preview right after attaching a photo to someone else's post), via admin.
+  const userId = await requireUserId(supabase);
+  const authorSegment = displayPath.split("/")[0];
+  const onBehalf = authorSegment !== userId;
+  if (onBehalf && !(await getIsOwner(supabase))) {
+    throw new Error("Not authorized to view this photo.");
+  }
+  const client = onBehalf ? createAdminClient() : supabase;
+  const { data, error } = await client.storage
     .from(PHOTOS_BUCKET)
     .createSignedUrl(displayPath, 60 * 60);
   if (error || !data) {
@@ -1067,7 +1126,12 @@ export async function getEntriesPhotos(
 > {
   if (entryIds.length === 0) return {};
   const supabase = await createClient();
-  const { data: rows } = await supabase
+  // In the family feed the owner sees every member's shared post; let them see
+  // those posts' photos too. entryIds are already scoped to posts the caller
+  // can see, so reading them with admin only widens visibility to other
+  // members' photos on those same posts — never to posts they can't see.
+  const client = (await getIsOwner(supabase)) ? createAdminClient() : supabase;
+  const { data: rows } = await client
     .from("journal_entry_photos")
     .select("id, entry_id, display_path, media_type, source")
     .in("entry_id", entryIds)
@@ -1075,7 +1139,7 @@ export async function getEntriesPhotos(
 
   if (!rows || rows.length === 0) return {};
 
-  const { data: signed } = await supabase.storage
+  const { data: signed } = await client.storage
     .from(PHOTOS_BUCKET)
     .createSignedUrls(
       rows.map((r) => r.display_path as string),
@@ -1113,7 +1177,12 @@ export async function getEntryPhotos(entryId: string): Promise<
   }[]
 > {
   const supabase = await createClient();
-  const { data: rows } = await supabase
+  // The owner can manage photos on posts they can see, so they must also read
+  // them — those rows belong to the author and are invisible under the user
+  // client's per-user RLS, so read them (and sign their URLs) with admin.
+  const access = await authorizeEntryPhotoAccess(supabase, entryId);
+  const client = access.ok && access.onBehalf ? createAdminClient() : supabase;
+  const { data: rows } = await client
     .from("journal_entry_photos")
     .select("id, media_type, source, original_path, display_path")
     .eq("entry_id", entryId)
@@ -1121,7 +1190,7 @@ export async function getEntryPhotos(entryId: string): Promise<
 
   if (!rows || rows.length === 0) return [];
 
-  const { data: signedDisplay } = await supabase.storage
+  const { data: signedDisplay } = await client.storage
     .from(PHOTOS_BUCKET)
     .createSignedUrls(
       rows.map((r) => r.display_path as string),
@@ -1132,7 +1201,7 @@ export async function getEntryPhotos(entryId: string): Promise<
   // play it; photos never use the original at display time.
   const videoRows = rows.filter((r) => r.media_type === "video");
   const { data: signedVideo } = videoRows.length
-    ? await supabase.storage
+    ? await client.storage
         .from(PHOTOS_BUCKET)
         .createSignedUrls(
           videoRows.map((r) => r.original_path as string),

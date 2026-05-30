@@ -7,7 +7,7 @@ import { QuoteEntryView } from "@/components/journal/quote-entry-view";
 import { RecapEntryView } from "@/components/journal/recap-entry-view";
 import { JournalPhotoGallery } from "@/components/journal/journal-photo-gallery";
 import { createClient } from "@/lib/supabase/server";
-import { requireUserId } from "@/lib/journal/auth";
+import { getIsOwner, requireUserId } from "@/lib/journal/auth";
 import {
   getEntriesImageGenerationStates,
   getEntryPhotos,
@@ -36,9 +36,14 @@ export default async function EntryPage({
   if (!entryRow) notFound();
   const entry = entryRow as JournalEntry;
 
-  // You only ever control your own posts. A family member viewing someone
-  // else's shared entry sees it read-only, with author attribution.
+  // You control your own posts; the account owner can additionally manage
+  // photos on anyone's post (acting on the author's behalf). A non-owner family
+  // member viewing someone else's shared entry sees it read-only, with author
+  // attribution. Post text and the conversation stay author-only either way —
+  // only the photo controls open up for the owner.
   const isAuthor = entry.user_id === userId;
+  const isOwner = !isAuthor && (await getIsOwner(supabase));
+  const canManagePhotos = isAuthor || isOwner;
   let authorName: string | null = null;
   if (!isAuthor) {
     const { data: member } = await supabase
@@ -68,17 +73,18 @@ export default async function EntryPage({
   const photoGenerationStatus = imageGenerationByEntry[entry.id] ?? null;
   const isQuote = entry.entry_type === "quote";
   const isRecap = entry.entry_type === "recap";
-  const menuActions = isAuthor ? (
+  const menuActions = canManagePhotos ? (
     <EntryOwnerMenuItems
       entryId={entry.id}
       initialVisibility={entry.visibility}
+      canChangeVisibility={isAuthor}
     />
   ) : null;
   const mediaViewer = (
     <JournalPhotoGallery
       entryId={entry.id}
       initialPhotos={photos}
-      editable={isAuthor}
+      editable={canManagePhotos}
       showAttachAction={false}
       photoGenerationStatus={photoGenerationStatus}
       containerClassName="pt-6"

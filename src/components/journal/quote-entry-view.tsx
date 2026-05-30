@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ReadOnlyEntryMenu } from "@/components/journal/read-only-entry-menu";
 
 export function QuoteEntryView({
   entryId,
@@ -73,11 +74,14 @@ export function QuoteEntryView({
   if (readOnly) {
     return (
       <div className="mt-6">
-        <blockquote className="font-serif text-3xl leading-snug text-foreground">
-          <span className="mr-1 text-muted-foreground/50">“</span>
-          {quote}
-          <span className="ml-0.5 text-muted-foreground/50">”</span>
-        </blockquote>
+        <div className="group/title flex items-start gap-2">
+          <blockquote className="font-serif text-3xl leading-snug text-foreground">
+            <span className="mr-1 text-muted-foreground/50">“</span>
+            {quote}
+            <span className="ml-0.5 text-muted-foreground/50">”</span>
+          </blockquote>
+          <ReadOnlyEntryMenu actions={menuActions} />
+        </div>
         {afterTitle}
         {attribution && (
           <p className="mt-4 font-serif text-base italic leading-relaxed text-muted-foreground">
