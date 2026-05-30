@@ -4,10 +4,20 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, Play } from "lucide-react";
-import type { JournalEntry, JournalMediaType } from "@/lib/types";
+import type {
+  JournalEntry,
+  JournalMediaType,
+  JournalPhotoSource,
+} from "@/lib/types";
+import { AiPhotoFrame } from "@/components/journal/ai-photo-frame";
 
 type HistoryEntry = JournalEntry & {
-  photos: { id: string; displayUrl: string; mediaType: JournalMediaType }[];
+  photos: {
+    id: string;
+    displayUrl: string;
+    mediaType: JournalMediaType;
+    source?: JournalPhotoSource;
+  }[];
   photoGenerationStatus?: "pending" | "generating" | null;
   authorName?: string | null;
   authorPhotoUrl?: string | null;
@@ -147,26 +157,37 @@ export function HistoryList({
                       <span>making a photo…</span>
                     </div>
                   )}
-                  {e.photos.slice(0, 3).map((photo) => (
-                    <div
-                      key={photo.id}
-                      className="relative h-52 min-w-0 flex-1 overflow-hidden rounded-lg bg-muted"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={photo.displayUrl}
-                        alt=""
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                      />
-                      {photo.mediaType === "video" && (
-                        <span className="absolute inset-0 flex items-center justify-center">
-                          <span className="rounded-full bg-black/55 p-3">
-                            <Play className="size-5 fill-white text-white" />
+                  {e.photos.slice(0, 3).map((photo) => {
+                    const media = (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={photo.displayUrl}
+                          alt=""
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                        />
+                        {photo.mediaType === "video" && (
+                          <span className="absolute inset-0 flex items-center justify-center">
+                            <span className="rounded-full bg-black/55 p-3">
+                              <Play className="size-5 fill-white text-white" />
+                            </span>
                           </span>
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                        )}
+                      </>
+                    );
+                    return photo.source === "ai_generated" ? (
+                      <AiPhotoFrame key={photo.id} className="h-52 min-w-0 flex-1">
+                        {media}
+                      </AiPhotoFrame>
+                    ) : (
+                      <div
+                        key={photo.id}
+                        className="relative h-52 min-w-0 flex-1 overflow-hidden rounded-lg bg-muted"
+                      >
+                        {media}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </Link>

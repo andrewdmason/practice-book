@@ -15,6 +15,7 @@ import {
   formatBytes,
   uploadJournalMedia,
 } from "@/lib/journal/photo-upload";
+import { AiPhotoFrame } from "@/components/journal/ai-photo-frame";
 
 type Media = {
   id: string;
@@ -350,6 +351,15 @@ export function JournalPhotoGallery({
                 autoPlay
                 className="max-h-[85vh] max-w-full rounded-lg"
               />
+            ) : lightbox.source === "ai_generated" ? (
+              <AiPhotoFrame fill={false} className="inline-flex bg-transparent">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={lightbox.displayUrl}
+                  alt=""
+                  className="block max-h-[85vh] max-w-full object-contain"
+                />
+              </AiPhotoFrame>
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -376,42 +386,52 @@ function FeaturedMedia({
   onDelete: () => void;
   onOpen: () => void;
 }) {
+  const generated = media.source === "ai_generated";
+  const viewer = (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={media.mediaType === "video" ? "Play video" : "View photo"}
+      className="block h-full w-full"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={media.displayUrl}
+        alt=""
+        className="h-full w-full object-cover"
+      />
+      {media.mediaType === "video" && (
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className="rounded-full bg-black/55 p-2">
+            <Play className="size-4 fill-white text-white" />
+          </span>
+        </span>
+      )}
+    </button>
+  );
+
   return (
-    <figure className="group/photo w-full">
-      <div className="relative aspect-[3/2] w-full overflow-hidden rounded-lg border border-border bg-muted">
+    <figure className="group/photo relative w-full">
+      {generated ? (
+        <AiPhotoFrame className="aspect-[3/2] w-full">{viewer}</AiPhotoFrame>
+      ) : (
+        <div className="relative aspect-[3/2] w-full overflow-hidden rounded-lg border border-border bg-muted">
+          {viewer}
+        </div>
+      )}
+      {/* Kept outside the torn frame so the filter doesn't warp the control. */}
+      {editable && (
         <button
           type="button"
-          onClick={onOpen}
-          aria-label={media.mediaType === "video" ? "Play video" : "View photo"}
-          className="block h-full w-full"
+          aria-label={
+            media.mediaType === "video" ? "Delete video" : "Delete photo"
+          }
+          onClick={onDelete}
+          className="absolute right-1 top-1 z-10 rounded-full bg-background/80 p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover/photo:opacity-100"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={media.displayUrl}
-            alt=""
-            className="h-full w-full object-cover"
-          />
-          {media.mediaType === "video" && (
-            <span className="absolute inset-0 flex items-center justify-center">
-              <span className="rounded-full bg-black/55 p-2">
-                <Play className="size-4 fill-white text-white" />
-              </span>
-            </span>
-          )}
+          <X className="size-4" />
         </button>
-        {editable && (
-          <button
-            type="button"
-            aria-label={
-              media.mediaType === "video" ? "Delete video" : "Delete photo"
-            }
-            onClick={onDelete}
-            className="absolute right-1 top-1 rounded-full bg-background/80 p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover/photo:opacity-100"
-          >
-            <X className="size-4" />
-          </button>
-        )}
-      </div>
+      )}
     </figure>
   );
 }
@@ -439,21 +459,8 @@ function MediaThumb({
   onSelect: () => void;
 }) {
   const generated = media.source === "ai_generated";
-
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-current={selected}
-      aria-label={media.mediaType === "video" ? "Select video" : "Select photo"}
-      className={cn(
-        "relative shrink-0 overflow-hidden rounded-md border bg-muted transition",
-        generated ? "h-16 w-24" : "h-16 w-16",
-        selected
-          ? "border-foreground/70 ring-2 ring-foreground/15"
-          : "border-border opacity-70 hover:opacity-100"
-      )}
-    >
+  const thumbMedia = (
+    <>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={media.displayUrl}
@@ -465,6 +472,32 @@ function MediaThumb({
           <span className="rounded-full bg-black/55 p-1.5">
             <Play className="size-3 fill-white text-white" />
           </span>
+        </span>
+      )}
+    </>
+  );
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-current={selected}
+      aria-label={media.mediaType === "video" ? "Select video" : "Select photo"}
+      className={cn(
+        "relative shrink-0 rounded-md transition",
+        generated ? "h-16 w-24" : "h-16 w-16",
+        selected
+          ? "opacity-100 ring-2 ring-foreground/40 ring-offset-2 ring-offset-background"
+          : "opacity-70 hover:opacity-100"
+      )}
+    >
+      {generated ? (
+        <AiPhotoFrame variant="thumb" className="h-full w-full">
+          {thumbMedia}
+        </AiPhotoFrame>
+      ) : (
+        <span className="relative block h-full w-full overflow-hidden rounded-md border border-border bg-muted">
+          {thumbMedia}
         </span>
       )}
     </button>
