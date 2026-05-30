@@ -21,17 +21,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ReadOnlyEntryMenu } from "@/components/journal/read-only-entry-menu";
 
 export function EntryTitle({
   entryId,
   title,
   readOnly = false,
+  afterTitle = null,
+  menuActions = null,
 }: {
   entryId: string;
   title: string;
   /** A family member viewing someone else's shared entry: title only, no edit
    * or delete affordances. */
   readOnly?: boolean;
+  afterTitle?: React.ReactNode;
+  menuActions?: React.ReactNode;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -40,9 +45,15 @@ export function EntryTitle({
 
   if (readOnly) {
     return (
-      <h1 className="mt-2 font-serif text-3xl leading-tight text-foreground">
-        {title}
-      </h1>
+      <>
+        <div className="group/title mt-2 flex items-start gap-2">
+          <h1 className="font-serif text-3xl leading-tight text-foreground">
+            {title}
+          </h1>
+          <ReadOnlyEntryMenu actions={menuActions} />
+        </div>
+        {afterTitle}
+      </>
     );
   }
 
@@ -59,7 +70,8 @@ export function EntryTitle({
           >
             <MoreHorizontal className="size-4" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-auto min-w-36">
+          <DropdownMenuContent align="end" className="w-auto min-w-44">
+            {menuActions}
             <DropdownMenuItem
               disabled={isRegenerating}
               onClick={() => {
@@ -94,6 +106,7 @@ export function EntryTitle({
           Couldn&apos;t regenerate: {regenerateError}
         </p>
       )}
+      {afterTitle}
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>

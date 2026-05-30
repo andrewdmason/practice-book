@@ -46,7 +46,7 @@ export function TransportBar() {
   const [piecePickerOpen, setPiecePickerOpen] = useState(false);
   const playButtonRef = useRef<HTMLButtonElement>(null);
 
-  if (pathname !== "/") return null;
+  if (pathname !== "/practice") return null;
 
   const isActive = activeTaskId !== null;
   const isLoaded = !isActive && loadedTaskId !== null;

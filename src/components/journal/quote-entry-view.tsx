@@ -22,18 +22,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ReadOnlyEntryMenu } from "@/components/journal/read-only-entry-menu";
 
 export function QuoteEntryView({
   entryId,
   quote,
   attribution,
   readOnly = false,
+  afterTitle = null,
+  menuActions = null,
 }: {
   entryId: string;
   quote: string;
   attribution: string | null;
   /** A family member viewing someone else's shared quote: no edit/delete. */
   readOnly?: boolean;
+  afterTitle?: React.ReactNode;
+  menuActions?: React.ReactNode;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -69,11 +74,15 @@ export function QuoteEntryView({
   if (readOnly) {
     return (
       <div className="mt-6">
-        <blockquote className="font-serif text-3xl leading-snug text-foreground">
-          <span className="mr-1 text-muted-foreground/50">“</span>
-          {quote}
-          <span className="ml-0.5 text-muted-foreground/50">”</span>
-        </blockquote>
+        <div className="group/title flex items-start gap-2">
+          <blockquote className="font-serif text-3xl leading-snug text-foreground">
+            <span className="mr-1 text-muted-foreground/50">“</span>
+            {quote}
+            <span className="ml-0.5 text-muted-foreground/50">”</span>
+          </blockquote>
+          <ReadOnlyEntryMenu actions={menuActions} />
+        </div>
+        {afterTitle}
         {attribution && (
           <p className="mt-4 font-serif text-base italic leading-relaxed text-muted-foreground">
             {attribution}
@@ -140,7 +149,8 @@ export function QuoteEntryView({
           >
             <MoreHorizontal className="size-4" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-auto min-w-36">
+          <DropdownMenuContent align="end" className="w-auto min-w-44">
+            {menuActions}
             <DropdownMenuItem onClick={() => setEditing(true)}>
               <Pencil />
               Edit quote
@@ -155,6 +165,8 @@ export function QuoteEntryView({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {afterTitle}
 
       {attribution && (
         <p className="mt-4 font-serif text-base italic leading-relaxed text-muted-foreground">

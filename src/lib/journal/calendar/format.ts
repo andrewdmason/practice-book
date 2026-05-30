@@ -76,6 +76,12 @@ export function formatCalendarBlock(
   today: string,
   tz: string,
   now: Date = new Date(),
+  // When false, future events are stripped entirely: upcoming days, plus today's
+  // timed events that haven't happened yet. Only the "upcoming events" question
+  // type asks the model to look ahead, so every other prompt gets a past-only
+  // calendar and can't drift onto something that hasn't occurred. Today's all-day
+  // events are kept either way — they're ongoing, not scheduled-for-later.
+  includeFuture: boolean = false,
 ): string {
   if (results.length === 0) return "";
 
@@ -121,8 +127,16 @@ export function formatCalendarBlock(
 
   const lines: string[] = [];
   for (let d = -3; d <= 7; d++) {
+    // Past-only mode: skip future days, and drop today's not-yet-happened timed
+    // events (all-day events today are ongoing, so they stay).
+    if (!includeFuture && d >= 1) continue;
     const key = addDaysISO(today, d);
-    const dayEvents = buckets.get(key) ?? [];
+    let dayEvents = buckets.get(key) ?? [];
+    if (!includeFuture && d === 0) {
+      dayEvents = dayEvents.filter(
+        (ev) => ev.allDay || ev.start.getTime() <= now.getTime(),
+      );
+    }
     if (dayEvents.length === 0) continue;
     dayEvents.sort((a, b) => {
       if (a.allDay && !b.allDay) return -1;
@@ -154,5 +168,8 @@ export function formatCalendarBlock(
 
   if (lines.length === 0) return "";
 
-  return ["=== Calendar — last 3 days + next 7 ===", ...lines].join("\n");
+  const header = includeFuture
+    ? "=== Calendar — last 3 days + next 7 ==="
+    : "=== Calendar — last 3 days ===";
+  return [header, ...lines].join("\n");
 }

@@ -180,6 +180,13 @@ export async function loadRecentlyShown(today: string): Promise<string[]> {
 /** The family-followup question type's kebab name. */
 const FAMILY_FOLLOWUP = "family-followup";
 
+/**
+ * The only question type allowed to look ahead. When it's among the categories
+ * being generated, the calendar block includes future events; otherwise the
+ * block is past-only so no other type can drift onto something upcoming.
+ */
+const UPCOMING_CALENDAR = "upcoming-calendar";
+
 type FamilyFollowupSource = {
   authorName: string;
   entry_date: string;
@@ -257,17 +264,15 @@ export async function generateCandidates(
 ): Promise<JournalOpeningCandidate[]> {
   const tz = await getUserTimezone();
   const today = localDate(new Date(), tz);
-  const [files, history, calendarBlock, recentlyShown, questionTypes, settings, familyDoc, familySource] =
-    await Promise.all([
-      loadAgentFiles(),
-      loadHistory(today, entryId),
-      loadCalendarBlock(today, tz),
-      loadRecentlyShown(today),
-      loadQuestionTypes(),
-      loadSettings(),
-      loadFamilyDoc(),
-      loadFamilyFollowupSource(),
-    ]);
+
+  // Sampling needs the question types, settings, and family source, so load
+  // those first. Which categories we land on decides whether the calendar block
+  // may include future events — so the calendar load waits until we know.
+  const [questionTypes, settings, familySource] = await Promise.all([
+    loadQuestionTypes(),
+    loadSettings(),
+    loadFamilyFollowupSource(),
+  ]);
 
   const n = settings.questions_per_day;
 
@@ -292,6 +297,19 @@ export async function generateCandidates(
       c.name === FAMILY_FOLLOWUP && familySource ? withFamilySource(c, familySource) : c
     );
   }
+
+  // Only pull future calendar events into the prompt when an upcoming-events
+  // question is actually being generated this round.
+  const categoriesInPlay = forced ? [forced] : sampled;
+  const includeFuture = categoriesInPlay.some((c) => c.name === UPCOMING_CALENDAR);
+
+  const [files, history, calendarBlock, recentlyShown, familyDoc] = await Promise.all([
+    loadAgentFiles(),
+    loadHistory(today, entryId),
+    loadCalendarBlock(today, tz, includeFuture),
+    loadRecentlyShown(today),
+    loadFamilyDoc(),
+  ]);
 
   const system =
     buildSystemPrompt(files, history, today, calendarBlock, formatNow(new Date(), tz), familyDoc) +

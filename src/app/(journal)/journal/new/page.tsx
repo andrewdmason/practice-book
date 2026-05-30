@@ -58,7 +58,12 @@ export default async function NewEntryPage({
 
   return (
     <>
-      <JournalPhotoGallery entryId={entry.id} initialPhotos={photos} editable />
+      <JournalPhotoGallery
+        entryId={entry.id}
+        initialPhotos={photos}
+        editable
+        showAttachAction={!showPicker}
+      />
       {showPicker ? (
         <OpeningPicker
           entryId={entry.id}

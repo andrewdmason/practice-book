@@ -2,7 +2,10 @@ import { HistoryList } from "@/components/journal/history-list";
 import { JournalListDropZone } from "@/components/journal/journal-list-drop-zone";
 import { createClient } from "@/lib/supabase/server";
 import { requireUserId } from "@/lib/journal/auth";
-import { getEntriesPhotos } from "@/app/(journal)/journal/actions";
+import {
+  getEntriesImageGenerationStates,
+  getEntriesPhotos,
+} from "@/app/(journal)/journal/actions";
 import { getUserTimezone, localDate } from "@/lib/date-utils";
 import type { JournalEntry } from "@/lib/types";
 
@@ -40,31 +43,65 @@ export default async function JournalPage({
     return a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0;
   });
 
-  // Author names for the Family feed (own rows can read every member's name via
-  // RLS now). Keyed by user_id; falls back to email, then a generic label.
+  // Author names and avatars for the Family feed (own rows can read every
+  // member's name and photos via RLS now). Keyed by user_id; name falls back to
+  // email, then a generic label.
   const authorByUser = new Map<string, string>();
+  const authorPhotoByUser = new Map<string, string>();
   if (isFamily && entries.length > 0) {
     const { data: members } = await supabase
       .from("journal_members")
       .select("user_id, name, email");
+    const emailByUser = new Map<string, string>();
     for (const m of members ?? []) {
       if (!m.user_id) continue;
       authorByUser.set(
         m.user_id as string,
         (m.name as string | null)?.trim() || (m.email as string) || "Family member"
       );
+      emailByUser.set(m.user_id as string, m.email as string);
+    }
+
+    // Each author's primary profile photo, signed for display.
+    const { data: primaryPhotos } = await supabase
+      .from("journal_member_photos")
+      .select("member_email, storage_path")
+      .eq("is_primary", true);
+    if (primaryPhotos && primaryPhotos.length > 0) {
+      const pathByEmail = new Map<string, string>();
+      for (const p of primaryPhotos) {
+        pathByEmail.set(p.member_email as string, p.storage_path as string);
+      }
+      const userEmailPairs = [...emailByUser.entries()].filter(([, email]) =>
+        pathByEmail.has(email)
+      );
+      const paths = userEmailPairs.map(([, email]) => pathByEmail.get(email)!);
+      const { data: signed } = await supabase.storage
+        .from("member-photos")
+        .createSignedUrls(paths, 60 * 60);
+      userEmailPairs.forEach(([userId], i) => {
+        const url = signed?.[i]?.signedUrl;
+        if (url) authorPhotoByUser.set(userId, url);
+      });
     }
   }
 
-  const photosByEntry = await getEntriesPhotos(entries.map((e) => e.id));
-  const today = localDate(new Date(), await getUserTimezone());
+  const entryIds = entries.map((e) => e.id);
+  const [photosByEntry, imageGenerationByEntry, tz] = await Promise.all([
+    getEntriesPhotos(entryIds),
+    getEntriesImageGenerationStates(entryIds),
+    getUserTimezone(),
+  ]);
+  const today = localDate(new Date(), tz);
   const entriesWithPhotos = entries
     .map((e) => ({
       ...e,
       photos: photosByEntry[e.id] ?? [],
+      photoGenerationStatus: imageGenerationByEntry[e.id] ?? null,
       authorName: isFamily
         ? authorByUser.get(e.user_id) ?? "Family member"
         : null,
+      authorPhotoUrl: isFamily ? authorPhotoByUser.get(e.user_id) ?? null : null,
     }))
     // Hide abandoned entries: an open entry never started (no opening question
     // picked, no freeform writing) with nothing attached is a row left behind

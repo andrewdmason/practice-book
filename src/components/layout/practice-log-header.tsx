@@ -37,7 +37,7 @@ export function PracticeLogHeader() {
   } = useTaskTimer();
 
   useEffect(() => {
-    if (pathname !== "/") return;
+    if (pathname !== "/practice") return;
     if (!focusParam) {
       if (focusedPieceId) setFocusedPieceId(null);
       return;
@@ -57,7 +57,7 @@ export function PracticeLogHeader() {
       if (focusKey) params.set("focus", focusKey);
       if (view) params.set("view", view);
       const qs = params.toString();
-      return qs ? `/?${qs}` : "/";
+      return qs ? `/practice?${qs}` : "/practice";
     },
     []
   );
@@ -65,7 +65,7 @@ export function PracticeLogHeader() {
   const setUrlState = useCallback(
     (pieceId: string | null, view: string | null) => {
       const url = buildUrl(pieceId, view);
-      if (pathname !== "/") {
+      if (pathname !== "/practice") {
         router.push(url);
         return;
       }

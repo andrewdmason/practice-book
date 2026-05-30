@@ -392,6 +392,13 @@ export type JournalMember = {
   seeded_at: string | null;
 };
 
+/** A profile photo for a family member, with a short-lived signed display URL. */
+export type MemberPhoto = {
+  id: string;
+  url: string;
+  is_primary: boolean;
+};
+
 /** Whether an entry is private to its author or shared to the whole family. */
 export type JournalVisibility = "private" | "family";
 
@@ -444,11 +451,13 @@ export type JournalEntry = {
 };
 
 export type JournalMediaType = "photo" | "video";
+export type JournalPhotoSource = "uploaded" | "ai_generated";
 
 export type JournalEntryPhoto = {
   id: string;
   entry_id: string;
   media_type: JournalMediaType;
+  source: JournalPhotoSource;
   original_path: string;
   display_path: string;
   created_at: string;

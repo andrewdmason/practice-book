@@ -25,18 +25,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ReadOnlyEntryMenu } from "@/components/journal/read-only-entry-menu";
 
 export function RecapEntryView({
   entryId,
   title,
   body,
   readOnly = false,
+  afterTitle = null,
+  menuActions = null,
 }: {
   entryId: string;
   title: string;
   body: string;
   /** A family member viewing someone else's shared recap: no edit/delete. */
   readOnly?: boolean;
+  afterTitle?: React.ReactNode;
+  menuActions?: React.ReactNode;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -72,9 +77,13 @@ export function RecapEntryView({
   if (readOnly) {
     return (
       <div className="mt-6">
-        <h1 className="font-serif text-3xl leading-snug text-foreground">
-          {title}
-        </h1>
+        <div className="group/title flex items-start gap-2">
+          <h1 className="font-serif text-3xl leading-snug text-foreground">
+            {title}
+          </h1>
+          <ReadOnlyEntryMenu actions={menuActions} />
+        </div>
+        {afterTitle}
         <RecapMarkdown body={body} />
       </div>
     );
@@ -135,7 +144,8 @@ export function RecapEntryView({
           >
             <MoreHorizontal className="size-4" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-auto min-w-36">
+          <DropdownMenuContent align="end" className="w-auto min-w-44">
+            {menuActions}
             <DropdownMenuItem onClick={() => setEditing(true)}>
               <Pencil />
               Edit recap
@@ -150,6 +160,8 @@ export function RecapEntryView({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {afterTitle}
 
       <RecapMarkdown body={body} />
 

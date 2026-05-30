@@ -64,6 +64,38 @@ async function makeImageDisplayBlob(file: File): Promise<Blob> {
   }
 }
 
+// Edge length for member profile photos — a small square avatar.
+const AVATAR_EDGE = 512;
+
+/**
+ * Build a square, center-cropped JPEG avatar from an image file. Falls back to
+ * the original bytes when the browser can't decode the format to a canvas (e.g.
+ * HEIC). Used for family-member profile photos.
+ */
+export async function makeSquareAvatarBlob(file: File): Promise<Blob> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const side = Math.min(bitmap.width, bitmap.height);
+    const sx = Math.round((bitmap.width - side) / 2);
+    const sy = Math.round((bitmap.height - side) / 2);
+    const edge = Math.min(AVATAR_EDGE, side);
+    const canvas = document.createElement("canvas");
+    canvas.width = edge;
+    canvas.height = edge;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("no canvas context");
+    ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, edge, edge);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.85)
+    );
+    if (!blob) throw new Error("toBlob failed");
+    return blob;
+  } catch {
+    return file;
+  }
+}
+
 /**
  * Extract a poster frame from a video as a downscaled JPEG. Used as the
  * display copy so galleries and history covers can render a thumbnail.

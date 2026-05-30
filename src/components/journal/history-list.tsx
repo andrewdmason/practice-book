@@ -3,12 +3,14 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Play } from "lucide-react";
+import { ImagePlus, Loader2, Play } from "lucide-react";
 import type { JournalEntry, JournalMediaType } from "@/lib/types";
 
 type HistoryEntry = JournalEntry & {
   photos: { id: string; displayUrl: string; mediaType: JournalMediaType }[];
+  photoGenerationStatus?: "pending" | "generating" | null;
   authorName?: string | null;
+  authorPhotoUrl?: string | null;
 };
 
 // A just-closed entry whose wrap pass (title/summary/pull_quote) hasn't landed
@@ -39,7 +41,7 @@ export function HistoryList({
 
   // While any entry is mid-wrap, poll the server until its AI fields land.
   useEffect(() => {
-    if (!entries.some(isGenerating)) return;
+    if (!entries.some((e) => isGenerating(e) || e.photoGenerationStatus)) return;
     const id = setInterval(() => router.refresh(), 1500);
     return () => clearInterval(id);
   }, [entries, router]);
@@ -56,7 +58,7 @@ export function HistoryList({
         const generating = isGenerating(e);
         return (
           <li key={e.id}>
-            <Link href={`/journal/${e.id}`} className="block group">
+            <Link href={`/journal/${e.id}`} className="group block">
               <div className="flex items-baseline gap-3">
                 <span className="font-serif text-xs text-muted-foreground tabular-nums">
                   {formatDate(e.entry_date)}
@@ -67,8 +69,11 @@ export function HistoryList({
                   </span>
                 )}
                 {e.status === "open" && (
-                  <span className="font-serif text-[10px] uppercase tracking-wider text-muted-foreground">
-                    open
+                  <span
+                    title="This post has not been finished or shared."
+                    className="rounded-full border border-yellow-300 bg-yellow-100 px-2 py-0.5 font-serif text-[10px] uppercase tracking-wider text-yellow-900"
+                  >
+                    draft
                   </span>
                 )}
                 {mode === "mine" &&
@@ -131,8 +136,17 @@ export function HistoryList({
                   )}
                 </>
               )}
-              {e.photos.length > 0 && (
+              {(e.photos.length > 0 || e.photoGenerationStatus) && (
                 <div className="mt-4 flex gap-2">
+                  {e.photoGenerationStatus && (
+                    <div className="flex h-52 min-w-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border border-dashed border-border bg-muted/40 font-serif text-sm italic text-muted-foreground">
+                      <span className="relative flex size-10 items-center justify-center">
+                        <ImagePlus className="size-7 opacity-35" />
+                        <Loader2 className="absolute size-10 animate-spin opacity-45" />
+                      </span>
+                      <span>making a photo…</span>
+                    </div>
+                  )}
                   {e.photos.slice(0, 3).map((photo) => (
                     <div
                       key={photo.id}
@@ -169,7 +183,7 @@ function displayTitle(e: JournalEntry): string {
   if (e.title && e.title.trim().length > 0) return e.title;
   if (e.summary && e.summary.trim().length > 0) return e.summary;
   if (e.opening_question && e.opening_question.trim().length > 0) return e.opening_question;
-  if (e.status === "open") return "in progress";
+  if (e.status === "open") return "draft";
   return "untitled";
 }
 

@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Play, Plus, X } from "lucide-react";
-import type { JournalMediaType } from "@/lib/types";
+import { useRouter } from "next/navigation";
+import { Loader2, Play, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { JournalMediaType, JournalPhotoSource } from "@/lib/types";
 import {
   createSignedPhotoUrl,
   deleteEntryPhoto,
@@ -17,26 +19,100 @@ import {
 type Media = {
   id: string;
   mediaType: JournalMediaType;
+  source?: JournalPhotoSource;
   displayUrl: string;
   videoUrl: string | null;
 };
 type Pending = { tempId: string; previewUrl: string; mediaType: JournalMediaType };
+type PhotoGenerationStatus = "pending" | "generating";
 
 export function JournalPhotoGallery({
   entryId,
   initialPhotos,
   editable,
+  showAttachAction = true,
+  actionSlot = null,
+  photoGenerationStatus = null,
+  containerClassName = "mx-auto w-full max-w-2xl px-6 pt-6",
 }: {
   entryId: string;
   initialPhotos: Media[];
   editable: boolean;
+  showAttachAction?: boolean;
+  actionSlot?: React.ReactNode;
+  photoGenerationStatus?: PhotoGenerationStatus | null;
+  containerClassName?: string;
 }) {
+  const router = useRouter();
   const [media, setMedia] = useState<Media[]>(initialPhotos);
   const [pending, setPending] = useState<Pending[]>([]);
+  const [activeGenerationStatus, setActiveGenerationStatus] =
+    useState<PhotoGenerationStatus | null>(photoGenerationStatus);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<Media | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    initialPhotos[0]?.id ?? null
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setMedia(initialPhotos);
+  }, [initialPhotos]);
+
+  useEffect(() => {
+    setActiveGenerationStatus(photoGenerationStatus);
+  }, [photoGenerationStatus]);
+
+  useEffect(() => {
+    const onGenerationStarted = (event: Event) => {
+      const detail = (event as CustomEvent<{ entryId?: string }>).detail;
+      if (detail?.entryId === entryId) {
+        setActiveGenerationStatus("generating");
+      }
+    };
+    const onGenerationFinished = (event: Event) => {
+      const detail = (event as CustomEvent<{ entryId?: string }>).detail;
+      if (detail?.entryId === entryId) {
+        setActiveGenerationStatus(null);
+      }
+    };
+
+    window.addEventListener(
+      "journal:photo-generation-started",
+      onGenerationStarted
+    );
+    window.addEventListener(
+      "journal:photo-generation-finished",
+      onGenerationFinished
+    );
+    return () => {
+      window.removeEventListener(
+        "journal:photo-generation-started",
+        onGenerationStarted
+      );
+      window.removeEventListener(
+        "journal:photo-generation-finished",
+        onGenerationFinished
+      );
+    };
+  }, [entryId]);
+
+  useEffect(() => {
+    if (!activeGenerationStatus) return;
+    const id = window.setInterval(() => router.refresh(), 1500);
+    return () => window.clearInterval(id);
+  }, [activeGenerationStatus, router]);
+
+  useEffect(() => {
+    if (media.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !media.some((m) => m.id === selectedId)) {
+      setSelectedId(media[0].id);
+    }
+  }, [media, selectedId]);
 
   const uploadMedia = useCallback(
     async (file: File) => {
@@ -69,7 +145,14 @@ export function JournalPhotoGallery({
         const videoUrl = isVideo
           ? await createSignedPhotoUrl(originalPath)
           : null;
-        setMedia((ms) => [...ms, { id, mediaType, displayUrl, videoUrl }]);
+        setMedia((ms) => {
+          const next = [
+            ...ms,
+            { id, mediaType, source: "uploaded" as const, displayUrl, videoUrl },
+          ];
+          if (ms.length === 0) setSelectedId(id);
+          return next;
+        });
       } catch (e) {
         setError(
           e instanceof Error
@@ -142,13 +225,19 @@ export function JournalPhotoGallery({
   }, [lightbox]);
 
   const handleDelete = (id: string) => {
-    setMedia((ms) => ms.filter((m) => m.id !== id));
+    setMedia((ms) => {
+      const next = ms.filter((m) => m.id !== id);
+      if (selectedId === id) setSelectedId(next[0]?.id ?? null);
+      return next;
+    });
     void deleteEntryPhoto(id).catch((e) => {
       setError(e instanceof Error ? e.message : "Failed to delete item");
     });
   };
 
-  const hasContent = media.length > 0 || pending.length > 0;
+  const isGeneratingPhoto = activeGenerationStatus !== null;
+  const hasContent = media.length > 0 || pending.length > 0 || isGeneratingPhoto;
+  const selected = media.find((m) => m.id === selectedId) ?? media[0] ?? null;
 
   return (
     <>
@@ -160,71 +249,76 @@ export function JournalPhotoGallery({
         </div>
       )}
 
-      {(editable || hasContent || error) && (
-        <div className="mx-auto w-full max-w-2xl px-6 pt-6">
+      {((editable && showAttachAction) || actionSlot || hasContent || error) && (
+        <div className={containerClassName}>
           {error && (
             <p className="mb-3 font-serif text-xs text-destructive">{error}</p>
           )}
-          {(editable || hasContent) && (
-            <div className="flex flex-wrap gap-4">
-              {media.map((item) => (
-                <MediaCard
-                  key={item.id}
-                  media={item}
-                  editable={editable}
-                  onDelete={() => handleDelete(item.id)}
-                  onOpen={() => setLightbox(item)}
-                />
-              ))}
-              {pending.map((p) => (
-                <div
-                  key={p.tempId}
-                  className="relative h-28 w-28 overflow-hidden rounded-md border border-border bg-muted"
-                >
-                  {p.mediaType === "video" ? (
-                    <video
-                      src={p.previewUrl}
-                      muted
-                      className="h-full w-full object-cover opacity-50"
+          {(editable || actionSlot || hasContent) && (
+            <div className="flex flex-col items-start gap-3">
+              {hasContent && (
+                <div className="w-full space-y-3">
+                  {selected ? (
+                    <FeaturedMedia
+                      media={selected}
+                      editable={editable}
+                      onDelete={() => handleDelete(selected.id)}
+                      onOpen={() => setLightbox(selected)}
                     />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={p.previewUrl}
-                      alt=""
-                      className="h-full w-full object-cover opacity-50"
-                    />
+                  ) : isGeneratingPhoto ? (
+                    <GeneratingFeaturedPlaceholder />
+                  ) : null}
+                  {(media.length > 1 ||
+                    pending.length > 0 ||
+                    (isGeneratingPhoto && media.length > 0)) && (
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {media.map((item) => (
+                        <MediaThumb
+                          key={item.id}
+                          media={item}
+                          selected={item.id === selected?.id}
+                          onSelect={() => setSelectedId(item.id)}
+                        />
+                      ))}
+                      {pending.map((p) => (
+                        <PendingThumb key={p.tempId} pending={p} />
+                      ))}
+                      {isGeneratingPhoto && media.length > 0 && (
+                        <GeneratingThumb />
+                      )}
+                    </div>
                   )}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Loader2 className="size-5 animate-spin text-foreground" />
-                  </div>
                 </div>
-              ))}
-              {editable && (
-                <>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*,video/*"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => {
-                      Array.from(e.target.files ?? []).forEach(
-                        (f) => void uploadMedia(f)
-                      );
-                      e.target.value = "";
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    aria-label="Add photo or video"
-                    className="flex h-28 w-28 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
-                  >
-                    <Plus className="size-5" />
-                    <span className="font-serif text-[11px]">Add</span>
-                  </button>
-                </>
+              )}
+              {((editable && showAttachAction) || actionSlot) && (
+                <div className="flex flex-wrap items-start gap-x-6 gap-y-2">
+                  {editable && showAttachAction && (
+                    <>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*,video/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          Array.from(e.target.files ?? []).forEach(
+                            (f) => void uploadMedia(f)
+                          );
+                          e.target.value = "";
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        aria-label="Attach a photo or video"
+                        className="font-serif text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                      >
+                        Attach a photo
+                      </button>
+                    </>
+                  )}
+                  {actionSlot}
+                </div>
               )}
             </div>
           )}
@@ -271,7 +365,7 @@ export function JournalPhotoGallery({
   );
 }
 
-function MediaCard({
+function FeaturedMedia({
   media,
   editable,
   onDelete,
@@ -283,8 +377,8 @@ function MediaCard({
   onOpen: () => void;
 }) {
   return (
-    <figure className="group/photo flex w-28 flex-col gap-1">
-      <div className="relative h-28 w-28 overflow-hidden rounded-md border border-border">
+    <figure className="group/photo w-full">
+      <div className="relative aspect-[3/2] w-full overflow-hidden rounded-lg border border-border bg-muted">
         <button
           type="button"
           onClick={onOpen}
@@ -314,10 +408,97 @@ function MediaCard({
             onClick={onDelete}
             className="absolute right-1 top-1 rounded-full bg-background/80 p-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover/photo:opacity-100"
           >
-            <X className="size-3.5" />
+            <X className="size-4" />
           </button>
         )}
       </div>
     </figure>
+  );
+}
+
+function GeneratingFeaturedPlaceholder() {
+  return (
+    <figure className="w-full">
+      <div className="relative flex aspect-[3/2] w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-lg border border-dashed border-border bg-muted/40 font-serif text-sm italic text-muted-foreground">
+        <span className="relative flex size-12 items-center justify-center">
+          <Loader2 className="size-10 animate-spin opacity-50" />
+        </span>
+        <span>making a photo...</span>
+      </div>
+    </figure>
+  );
+}
+
+function MediaThumb({
+  media,
+  selected,
+  onSelect,
+}: {
+  media: Media;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const generated = media.source === "ai_generated";
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-current={selected}
+      aria-label={media.mediaType === "video" ? "Select video" : "Select photo"}
+      className={cn(
+        "relative shrink-0 overflow-hidden rounded-md border bg-muted transition",
+        generated ? "h-16 w-24" : "h-16 w-16",
+        selected
+          ? "border-foreground/70 ring-2 ring-foreground/15"
+          : "border-border opacity-70 hover:opacity-100"
+      )}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={media.displayUrl}
+        alt=""
+        className="h-full w-full object-cover"
+      />
+      {media.mediaType === "video" && (
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className="rounded-full bg-black/55 p-1.5">
+            <Play className="size-3 fill-white text-white" />
+          </span>
+        </span>
+      )}
+    </button>
+  );
+}
+
+function GeneratingThumb() {
+  return (
+    <div className="relative flex h-16 w-24 shrink-0 items-center justify-center overflow-hidden rounded-md border border-dashed border-border bg-muted/40">
+      <Loader2 className="size-6 animate-spin text-foreground/45" />
+    </div>
+  );
+}
+
+function PendingThumb({ pending }: { pending: Pending }) {
+  return (
+    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md border border-border bg-muted">
+      {pending.mediaType === "video" ? (
+        <video
+          src={pending.previewUrl}
+          muted
+          className="h-full w-full object-cover opacity-50"
+        />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={pending.previewUrl}
+          alt=""
+          className="h-full w-full object-cover opacity-50"
+        />
+      )}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <Loader2 className="size-4 animate-spin text-foreground" />
+      </div>
+    </div>
   );
 }
