@@ -3,6 +3,7 @@ import { JournalListDropZone } from "@/components/journal/journal-list-drop-zone
 import { createClient } from "@/lib/supabase/server";
 import { requireUserId } from "@/lib/journal/auth";
 import { getEntriesPhotos } from "@/app/(journal)/journal/actions";
+import { getUserTimezone, localDate } from "@/lib/date-utils";
 import type { JournalEntry } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +57,7 @@ export default async function JournalPage({
   }
 
   const photosByEntry = await getEntriesPhotos(entries.map((e) => e.id));
+  const today = localDate(new Date(), await getUserTimezone());
   const entriesWithPhotos = entries
     .map((e) => ({
       ...e,
@@ -81,6 +83,9 @@ export default async function JournalPage({
   return (
     <div className="mx-auto w-full max-w-2xl px-6 pb-24 pt-12">
       <JournalListDropZone />
+      {!isFamily && (
+        <JournalProgressStats entries={entriesWithPhotos} today={today} />
+      )}
       <HistoryList
         entries={entriesWithPhotos}
         mode={isFamily ? "family" : "mine"}
@@ -90,4 +95,135 @@ export default async function JournalPage({
       />
     </div>
   );
+}
+
+function JournalProgressStats({
+  entries,
+  today,
+}: {
+  entries: JournalEntry[];
+  today: string;
+}) {
+  const stats = getJournalProgressStats(entries, today);
+
+  return (
+    <section
+      aria-label="Journal progress"
+      className="mb-12 border-y border-border/70 py-4"
+    >
+      <div className="grid grid-cols-3 gap-4">
+        <ProgressStat
+          value={
+            stats.currentStreak > 0 ? String(stats.currentStreak) : "Start"
+          }
+          label={
+            stats.currentStreak === 1
+              ? "day streak"
+              : stats.currentStreak > 1
+                ? "day streak"
+                : "a streak"
+          }
+          accent={stats.currentStreak > 0}
+        />
+        <div className="min-w-0 text-center">
+          <p className="font-serif text-2xl leading-none tracking-normal text-foreground">
+            {stats.daysThisWeek}/7
+          </p>
+          <p className="mt-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+            this week
+          </p>
+          <div
+            aria-label={`${stats.daysThisWeek} journal days this week`}
+            className="mt-3 flex justify-center gap-1.5"
+          >
+            {stats.thisWeekDays.map((posted, i) => (
+              <span
+                key={i}
+                className={
+                  posted
+                    ? "h-1.5 w-1.5 rounded-full bg-primary"
+                    : "h-1.5 w-1.5 rounded-full bg-muted-foreground/25"
+                }
+              />
+            ))}
+          </div>
+        </div>
+        <ProgressStat
+          value={String(stats.totalEntries)}
+          label={stats.totalEntries === 1 ? "memory saved" : "memories saved"}
+        />
+      </div>
+    </section>
+  );
+}
+
+function ProgressStat({
+  value,
+  label,
+  accent = false,
+}: {
+  value: string;
+  label: string;
+  accent?: boolean;
+}) {
+  return (
+    <div className="min-w-0 text-center">
+      <p
+        className={
+          accent
+            ? "font-serif text-2xl leading-none tracking-normal text-primary"
+            : "font-serif text-2xl leading-none tracking-normal text-foreground"
+        }
+      >
+        {value}
+      </p>
+      <p className="mt-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function getJournalProgressStats(entries: JournalEntry[], today: string) {
+  const entryDates = new Set(entries.map((entry) => entry.entry_date));
+  const totalEntries = entries.length;
+  const currentStreak = getCurrentStreak(entryDates, today);
+  const weekStart = getWeekStart(today);
+  const thisWeekDays = Array.from({ length: 7 }, (_, i) =>
+    entryDates.has(addDays(weekStart, i))
+  );
+  const daysThisWeek = thisWeekDays.filter(Boolean).length;
+
+  return {
+    currentStreak,
+    daysThisWeek,
+    thisWeekDays,
+    totalEntries,
+  };
+}
+
+function getCurrentStreak(entryDates: Set<string>, today: string): number {
+  let date = entryDates.has(today) ? today : addDays(today, -1);
+  let streak = 0;
+
+  while (entryDates.has(date)) {
+    streak++;
+    date = addDays(date, -1);
+  }
+
+  return streak;
+}
+
+function getWeekStart(date: string): string {
+  const d = new Date(`${date}T12:00:00`);
+  const day = d.getDay();
+  const diff = (day - 1 + 7) % 7;
+  d.setDate(d.getDate() - diff);
+  return localDate(d);
+}
+
+function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return localDate(d);
 }
