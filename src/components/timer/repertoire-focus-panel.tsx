@@ -93,7 +93,7 @@ export function RepertoireFocusPanel() {
     (focusKey: string) => {
       setFocusedPieceId(focusKey);
       setActivePieceInstance(null);
-      window.history.replaceState(null, "", `/?focus=${focusKey}`);
+      window.history.replaceState(null, "", `/practice?focus=${focusKey}`);
     },
     [setFocusedPieceId, setActivePieceInstance]
   );
