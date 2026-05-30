@@ -385,12 +385,13 @@ async function pickReferencePhoto(
     }
   }
 
-  const candidateEmails =
-    matchedEmails.size > 0
-      ? [...matchedEmails]
-      : authorEmail
-        ? [authorEmail]
-        : [];
+  // The post author is the subject, so prefer their photo. Family members
+  // mentioned in the thread are only fallbacks for when the author has no
+  // photo — a mention should never bump the author out of contention.
+  const candidateEmails = [
+    ...(authorEmail ? [authorEmail] : []),
+    ...[...matchedEmails].filter((email) => email !== authorEmail),
+  ];
   if (candidateEmails.length === 0) return null;
 
   const { data: photos } = await admin
@@ -399,7 +400,16 @@ async function pickReferencePhoto(
     .in("member_email", candidateEmails);
   if (!photos || photos.length === 0) return null;
 
-  const chosen = photos[Math.floor(Math.random() * photos.length)];
+  // Walk candidates in priority order (author first) and use the first member
+  // who actually has a photo. Randomness only breaks ties among that one
+  // member's photos.
+  const pool =
+    candidateEmails
+      .map((email) => photos.filter((p) => p.member_email === email))
+      .find((forMember) => forMember.length > 0) ?? [];
+  if (pool.length === 0) return null;
+
+  const chosen = pool[Math.floor(Math.random() * pool.length)];
   const storagePath = chosen.storage_path as string;
   const { data: blob, error } = await admin.storage
     .from(MEMBER_PHOTOS_BUCKET)
