@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, CheckCircle2, Lock, Send, Users } from "lucide-react";
 import { TypingIndicator } from "@/components/journal/typing-indicator";
@@ -8,7 +8,6 @@ import {
   appendUserMessage,
   closeEntry,
   deleteLatestQuestion,
-  reopenEntry,
   setEntryVisibility,
 } from "@/app/(journal)/journal/actions";
 import {
@@ -43,19 +42,20 @@ export function ChatSurface({
   initialMessages: Msg[];
   /**
    * "today" — the in-progress entry flow at /journal/new.
-   * "history" — a past entry; closed state shows the full transcript with a
-   * reopen link. Open state behaves the same in both.
+   * "history" — a past entry; closed state shows the full transcript only
+   * (editing happens through the post's "Edit" menu). Open state behaves the
+   * same in both.
    */
   viewMode?: "today" | "history";
   /**
    * ISO timestamp the zen timer is anchored to (the opening question's
    * created_at). Wall-clock based, so the timer's progress and completion
-   * survive refreshes and reopens.
+   * survive refreshes.
    */
   timerStartedAt?: string | null;
   /**
    * A family member reading another member's shared entry: show the transcript
-   * only — no reply box, no reopen, no edit controls (writes are theirs alone).
+   * only — no reply box, no edit controls (writes are theirs alone).
    */
   readOnly?: boolean;
 }) {
@@ -63,7 +63,7 @@ export function ChatSurface({
   const [streaming, setStreaming] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [status, setStatus] = useState<"open" | "closed">(initialStatus);
+  const [status] = useState<"open" | "closed">(initialStatus);
   const [error, setError] = useState<string | null>(null);
   const [hasUnsentReply, setHasUnsentReply] = useState(false);
   const [finishDialogOpen, setFinishDialogOpen] = useState(false);
@@ -72,7 +72,6 @@ export function ChatSurface({
 
   const router = useRouter();
   const { begin: beginTimer, stop: stopTimer, done: timerDone } = useJournalTimer();
-  const [, startTransition] = useTransition();
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // Scroll to bottom on new content
@@ -268,18 +267,6 @@ export function ChatSurface({
     router.refresh();
   }
 
-  function handleReopen() {
-    startTransition(async () => {
-      try {
-        await reopenEntry(entryId);
-        setStatus("open");
-        router.refresh();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    });
-  }
-
   const isHistoryClosed = status === "closed" && viewMode === "history";
   const showWritingControls = !readOnly && !isHistoryClosed;
 
@@ -389,17 +376,9 @@ export function ChatSurface({
         </div>
       )}
 
-      {readOnly ? null : isHistoryClosed ? (
-        <div className="mt-12">
-          <button
-            type="button"
-            onClick={handleReopen}
-            className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            reopen this thread
-          </button>
-        </div>
-      ) : (
+      {/* A closed history entry shows just the transcript — editing the title
+          or any message happens through the post's overflow menu ("Edit"). */}
+      {readOnly || isHistoryClosed ? null : (
         <ReplyBox
           active={status === "open" && !streaming && !closing}
           disabled={streaming || closing}
@@ -451,8 +430,7 @@ function ReplyBox({
     el.style.height = `${el.scrollHeight}px`;
   }, [draft]);
 
-  // Keep the reply box focused on mount, after streaming ends, and when
-  // status flips back to open (e.g. after reopening a closed entry).
+  // Keep the reply box focused on mount and after streaming ends.
   useEffect(() => {
     if (active) textareaRef.current?.focus();
   }, [active]);
