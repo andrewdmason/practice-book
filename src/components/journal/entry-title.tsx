@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ReadOnlyEntryMenu } from "@/components/journal/read-only-entry-menu";
 
 export function EntryTitle({
   entryId,
@@ -45,9 +46,12 @@ export function EntryTitle({
   if (readOnly) {
     return (
       <>
-        <h1 className="mt-2 font-serif text-3xl leading-tight text-foreground">
-          {title}
-        </h1>
+        <div className="group/title mt-2 flex items-start gap-2">
+          <h1 className="font-serif text-3xl leading-tight text-foreground">
+            {title}
+          </h1>
+          <ReadOnlyEntryMenu actions={menuActions} />
+        </div>
         {afterTitle}
       </>
     );

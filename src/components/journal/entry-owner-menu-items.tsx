@@ -29,9 +29,13 @@ import type { JournalVisibility } from "@/lib/types";
 export function EntryOwnerMenuItems({
   entryId,
   initialVisibility,
+  canChangeVisibility = true,
 }: {
   entryId: string;
   initialVisibility: JournalVisibility;
+  // Visibility is the author's call; the account owner managing someone else's
+  // post gets only the photo actions.
+  canChangeVisibility?: boolean;
 }) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -123,30 +127,34 @@ export function EntryOwnerMenuItems({
 
   return (
     <>
-      <DropdownMenuItem
-        disabled={disabled || visibility === "private"}
-        onClick={(event) => {
-          event.preventDefault();
-          chooseVisibility("private");
-        }}
-      >
-        <Lock />
-        Personal
-        {visibility === "private" && <Check className="ml-auto" />}
-      </DropdownMenuItem>
-      <DropdownMenuItem
-        disabled={disabled || visibility === "family"}
-        onClick={(event) => {
-          event.preventDefault();
-          chooseVisibility("family");
-        }}
-      >
-        <Users />
-        Family
-        {visibility === "family" && <Check className="ml-auto" />}
-      </DropdownMenuItem>
+      {canChangeVisibility && (
+        <>
+          <DropdownMenuItem
+            disabled={disabled || visibility === "private"}
+            onClick={(event) => {
+              event.preventDefault();
+              chooseVisibility("private");
+            }}
+          >
+            <Lock />
+            Personal
+            {visibility === "private" && <Check className="ml-auto" />}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={disabled || visibility === "family"}
+            onClick={(event) => {
+              event.preventDefault();
+              chooseVisibility("family");
+            }}
+          >
+            <Users />
+            Family
+            {visibility === "family" && <Check className="ml-auto" />}
+          </DropdownMenuItem>
 
-      <DropdownMenuSeparator />
+          <DropdownMenuSeparator />
+        </>
+      )}
 
       <input
         ref={fileInputRef}
@@ -181,7 +189,11 @@ export function EntryOwnerMenuItems({
         {isGenerating ? "Generating..." : "Generate a photo"}
       </DropdownMenuItem>
 
-      <DropdownMenuSeparator />
+      {/* Divides these photo actions from the author-only edit/regenerate/delete
+          items that follow in the editable view. The owner managing someone
+          else's post (canChangeVisibility=false) has no following items, so the
+          standalone menu skips the trailing rule. */}
+      {canChangeVisibility && <DropdownMenuSeparator />}
     </>
   );
 }
