@@ -4,8 +4,6 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, Play } from "lucide-react";
-import { MemberAvatar } from "@/components/journal/member-avatar";
-import { cn } from "@/lib/utils";
 import type { JournalEntry, JournalMediaType } from "@/lib/types";
 
 type HistoryEntry = JournalEntry & {
@@ -61,20 +59,15 @@ export function HistoryList({
         return (
           <li key={e.id}>
             <Link href={`/journal/${e.id}`} className="group block">
-              <div className="flex items-center gap-4">
-              {mode === "family" && (
-                <MemberAvatar
-                  name={e.authorName}
-                  url={e.authorPhotoUrl}
-                  size="lg"
-                  className="shrink-0 shadow-sm ring-1 ring-foreground/10 transition group-hover:ring-foreground/25"
-                />
-              )}
-              <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-3">
                 <span className="font-serif text-xs text-muted-foreground tabular-nums">
                   {formatDate(e.entry_date)}
                 </span>
+                {mode === "family" && e.authorName && (
+                  <span className="font-serif text-xs text-muted-foreground">
+                    {e.authorName}
+                  </span>
+                )}
                 {e.status === "open" && (
                   <span
                     title="This post has not been finished or shared."
@@ -143,15 +136,8 @@ export function HistoryList({
                   )}
                 </>
               )}
-              </div>
-              </div>
               {(e.photos.length > 0 || e.photoGenerationStatus) && (
-                <div
-                  className={cn(
-                    "mt-4 flex gap-2",
-                    mode === "family" && "pl-[60px]"
-                  )}
-                >
+                <div className="mt-4 flex gap-2">
                   {e.photoGenerationStatus && (
                     <div className="flex h-52 min-w-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border border-dashed border-border bg-muted/40 font-serif text-sm italic text-muted-foreground">
                       <span className="relative flex size-10 items-center justify-center">
