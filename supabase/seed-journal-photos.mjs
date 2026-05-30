@@ -13,26 +13,24 @@ import { createClient } from "@supabase/supabase-js";
 const BUCKET = "journal-photos";
 
 // Each journal entry (from seeds/05_journal_entries.sql) and the photos to
-// attach. `seed` makes the Picsum image deterministic; `caption` is optional.
+// attach. `seed` makes the Picsum image deterministic.
 const ENTRIES = [
   {
     id: "f0000001-0001-4001-8001-000000000001", // Morning light
     photos: [
-      { seed: "journal-morning-coffee", caption: "Coffee before the day starts" },
-      { seed: "journal-window-light", caption: "Light through the kitchen window" },
+      { seed: "journal-morning-coffee" },
+      { seed: "journal-window-light" },
     ],
   },
   {
     id: "f0000001-0001-4001-8001-000000000002", // The hard measure
-    photos: [
-      { seed: "journal-sheet-music", caption: "The measure I keep circling" },
-    ],
+    photos: [{ seed: "journal-sheet-music" }],
   },
   {
     id: "f0000001-0001-4001-8001-000000000003", // Letting it ring
     photos: [
-      { seed: "journal-piano-keys", caption: "Where the coda finally opened up" },
-      { seed: "journal-evening-practice", caption: null },
+      { seed: "journal-piano-keys" },
+      { seed: "journal-evening-practice" },
     ],
   },
 ];
@@ -116,7 +114,6 @@ async function main() {
           entry_id: entry.id,
           original_path: originalPath,
           display_path: displayPath,
-          caption: photo.caption,
         });
       if (insErr) throw insErr;
 

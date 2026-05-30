@@ -439,7 +439,6 @@ export type JournalEntryPhoto = {
   media_type: JournalMediaType;
   original_path: string;
   display_path: string;
-  caption: string | null;
   created_at: string;
 };
 

@@ -946,22 +946,6 @@ export async function deleteEntryPhoto(photoId: string): Promise<void> {
   if (photo?.entry_id) revalidatePath(`/journal/${photo.entry_id}`);
 }
 
-export async function updatePhotoCaption(
-  photoId: string,
-  caption: string
-): Promise<void> {
-  const trimmed = caption.trim();
-  const supabase = await createClient();
-  const { data: photo } = await supabase
-    .from("journal_entry_photos")
-    .update({ caption: trimmed || null })
-    .eq("id", photoId)
-    .select("entry_id")
-    .single();
-  revalidatePath("/journal");
-  if (photo?.entry_id) revalidatePath(`/journal/${photo.entry_id}`);
-}
-
 export async function createSignedPhotoUrl(
   displayPath: string
 ): Promise<string> {
@@ -1018,13 +1002,12 @@ export async function getEntryPhotos(entryId: string): Promise<
     mediaType: JournalMediaType;
     displayUrl: string;
     videoUrl: string | null;
-    caption: string | null;
   }[]
 > {
   const supabase = await createClient();
   const { data: rows } = await supabase
     .from("journal_entry_photos")
-    .select("id, media_type, original_path, display_path, caption")
+    .select("id, media_type, original_path, display_path")
     .eq("entry_id", entryId)
     .order("created_at", { ascending: true });
 
@@ -1062,6 +1045,5 @@ export async function getEntryPhotos(entryId: string): Promise<
       row.media_type === "video"
         ? videoUrlByPath.get(row.original_path as string) ?? null
         : null,
-    caption: (row.caption as string | null) ?? null,
   }));
 }
