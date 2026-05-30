@@ -7,6 +7,7 @@ const PHOTOS_BUCKET = "journal-photos";
 const MEMBER_PHOTOS_BUCKET = "member-photos";
 const IMAGE_SIZE = "1536x1024";
 const PROMPT_TEXT_LIMIT = 5000;
+const MAX_REFERENCE_PHOTOS = 3;
 const ART_STYLES = [
   {
     name: "Natural-light documentary photo",
@@ -201,13 +202,14 @@ export async function runEntryPhotoGeneration(
 
   try {
     const postText = await buildPostText(entryRow);
-    const reference = await pickReferencePhoto(entryRow.user_id, postText);
-    const prompt = buildImagePrompt(postText, reference);
+    const references = await pickReferencePhotos(entryRow.user_id, postText);
+    const prompt = buildImagePrompt(postText, references);
     const imageBytes = await generateImageBytes({
       prompt,
-      reference,
+      references,
       userId: entryRow.user_id,
     });
+    const primaryReference = references[0] ?? null;
 
     const storagePath = `${entryRow.user_id}/${entryId}/${generationId}-generated.png`;
     const { error: uploadErr } = await admin.storage
@@ -225,10 +227,15 @@ export async function runEntryPhotoGeneration(
         prompt,
         generated_path: storagePath,
         display_path: storagePath,
-        reference_member_email: reference?.memberEmail ?? null,
-        reference_member_name: reference?.memberName ?? null,
-        reference_photo_id: reference?.photoId ?? null,
-        reference_storage_path: reference?.storagePath ?? null,
+        reference_member_email: references.map((ref) => ref.memberEmail).join(", ") || null,
+        reference_member_name:
+          references
+            .map((ref) => ref.memberName)
+            .filter(Boolean)
+            .join(", ") || null,
+        reference_photo_id: primaryReference?.photoId ?? null,
+        reference_storage_path:
+          references.map((ref) => ref.storagePath).join(", ") || null,
       })
       .eq("id", generationId);
 
@@ -361,10 +368,10 @@ async function buildPostText(entry: EntryRow): Promise<string> {
     .slice(0, PROMPT_TEXT_LIMIT);
 }
 
-async function pickReferencePhoto(
+async function pickReferencePhotos(
   userId: string,
   postText: string
-): Promise<ReferencePhoto | null> {
+): Promise<ReferencePhoto[]> {
   const admin = createAdminClient();
   const { data: members } = await admin
     .from("journal_members")
@@ -387,37 +394,50 @@ async function pickReferencePhoto(
 
   const candidateEmails =
     matchedEmails.size > 0
-      ? [...matchedEmails]
+      ? [
+          ...matchedEmails,
+          ...(authorEmail && !matchedEmails.has(authorEmail) ? [authorEmail] : []),
+        ]
       : authorEmail
         ? [authorEmail]
         : [];
-  if (candidateEmails.length === 0) return null;
+  if (candidateEmails.length === 0) return [];
 
   const { data: photos } = await admin
     .from("journal_member_photos")
     .select("id, member_email, storage_path")
     .in("member_email", candidateEmails);
-  if (!photos || photos.length === 0) return null;
+  if (!photos || photos.length === 0) return [];
 
-  const chosen = photos[Math.floor(Math.random() * photos.length)];
-  const storagePath = chosen.storage_path as string;
-  const { data: blob, error } = await admin.storage
-    .from(MEMBER_PHOTOS_BUCKET)
-    .download(storagePath);
-  if (error || !blob) return null;
+  const references: ReferencePhoto[] = [];
+  for (const email of candidateEmails) {
+    const pool = photos.filter((p) => p.member_email === email);
+    if (pool.length === 0) continue;
 
-  const bytes = Buffer.from(await blob.arrayBuffer());
-  const file = await toFile(bytes, "reference.jpg", {
-    type: blob.type || "image/jpeg",
-  });
-  const email = chosen.member_email as string;
-  return {
-    photoId: chosen.id as string,
-    memberEmail: email,
-    memberName: memberByEmail.get(email)?.name ?? null,
-    storagePath,
-    file,
-  };
+    const chosen = pool[Math.floor(Math.random() * pool.length)];
+    const storagePath = chosen.storage_path as string;
+    const { data: blob, error } = await admin.storage
+      .from(MEMBER_PHOTOS_BUCKET)
+      .download(storagePath);
+    if (error || !blob) continue;
+
+    const memberName = memberByEmail.get(email)?.name ?? null;
+    const bytes = Buffer.from(await blob.arrayBuffer());
+    const file = await toFile(bytes, `${referenceFileBase(memberName)}.jpg`, {
+      type: blob.type || "image/jpeg",
+    });
+    references.push({
+      photoId: chosen.id as string,
+      memberEmail: email,
+      memberName,
+      storagePath,
+      file,
+    });
+
+    if (references.length >= MAX_REFERENCE_PHOTOS) break;
+  }
+
+  return references;
 }
 
 function memberNameMentioned(text: string, name: string): boolean {
@@ -435,13 +455,31 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function buildImagePrompt(postText: string, reference: ReferencePhoto | null): string {
+function referenceFileBase(name: string | null): string {
+  const slug = name
+    ?.toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug ? `reference-${slug}` : "reference-family-member";
+}
+
+function buildImagePrompt(postText: string, references: ReferencePhoto[]): string {
   const style = ART_STYLES[Math.floor(Math.random() * ART_STYLES.length)];
-  const referenceLine = reference?.memberName
-    ? `A reference profile photo for ${reference.memberName} is provided. If that person naturally belongs in the scene, use the photo as visual inspiration for broad likeness, hair, and expression. The image does not need to be a portrait.`
-    : reference
-      ? "A family profile photo is provided. If a person naturally belongs in the scene, use the photo as visual inspiration for broad likeness, hair, and expression. The image does not need to be a portrait."
-      : "No reference photo is provided.";
+  const referenceNames = references
+    .map((reference) => reference.memberName)
+    .filter(Boolean)
+    .join(", ");
+  const referenceLines =
+    references.length > 0
+      ? [
+          referenceNames
+            ? `Reference photos are provided for possible family members: ${referenceNames}.`
+            : "Family reference photos are provided.",
+          "Treat the reference photos as optional visual context, not a list of people who must appear.",
+          "Decide from the journal post who the image is really about; do not add the author, narrator, or every referenced person unless the moment calls for them.",
+          "When a referenced person naturally belongs in the scene, use their photo only as loose inspiration for broad likeness, hair, and expression. The image does not need to be a portrait.",
+        ]
+      : ["No reference photo is provided."];
 
   return [
     "Create one image inspired by this journal post.",
@@ -457,7 +495,7 @@ function buildImagePrompt(postText: string, reference: ReferencePhoto | null): s
     "Constraints:",
     "Do not include readable text, captions, speech bubbles, logos, or watermarks.",
     "Do not make anything scary, mean, embarrassing, romantic, violent, or adult.",
-    referenceLine,
+    ...referenceLines,
     "",
     "Journal post:",
     postText.trim() || "A small happy journal moment.",
@@ -466,18 +504,18 @@ function buildImagePrompt(postText: string, reference: ReferencePhoto | null): s
 
 async function generateImageBytes({
   prompt,
-  reference,
+  references,
   userId,
 }: {
   prompt: string;
-  reference: ReferencePhoto | null;
+  references: ReferencePhoto[];
   userId: string;
 }): Promise<Buffer> {
   const client = openai();
-  const response = reference
+  const response = references.length > 0
     ? await client.images.edit({
         model: JOURNAL_IMAGE_MODEL,
-        image: reference.file,
+        image: references.map((reference) => reference.file),
         prompt,
         n: 1,
         size: IMAGE_SIZE,
