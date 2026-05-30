@@ -11,10 +11,16 @@ const DAY_MS = 86400000;
  * Build the calendar context block for the interviewer's system prompt.
  * Returns null when there's nothing to inject (no sources, all failed and
  * empty, etc.) — caller treats that as "skip the block."
+ *
+ * `includeFuture` defaults to false: the block carries only past + already-
+ * happened events, so a prompt can't surface something upcoming. Pass true only
+ * when generating an "upcoming events" question, the one type meant to look
+ * ahead.
  */
 export async function loadCalendarBlock(
   today: string,
   tz: string,
+  includeFuture: boolean = false,
 ): Promise<string | null> {
   let sources;
   try {
@@ -53,6 +59,6 @@ export async function loadCalendarBlock(
     }
   }
 
-  const block = formatCalendarBlock(results, today, tz, new Date());
+  const block = formatCalendarBlock(results, today, tz, new Date(), includeFuture);
   return block === "" ? null : block;
 }
