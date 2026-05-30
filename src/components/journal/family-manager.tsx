@@ -11,14 +11,16 @@ import {
   removeFamilyMember,
   updateFamilyMember,
 } from "@/app/(journal)/settings/family/actions";
-import type { JournalMember, MemberPhoto } from "@/lib/types";
+import type { JournalMember, MemberJournalStats, MemberPhoto } from "@/lib/types";
 
 export function FamilyManager({
   members,
   photosByEmail,
+  journalStatsByUserId,
 }: {
   members: JournalMember[];
   photosByEmail: Record<string, MemberPhoto[]>;
+  journalStatsByUserId: Record<string, MemberJournalStats>;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -94,101 +96,106 @@ export function FamilyManager({
         {members.map((m) => {
           const photos = photosByEmail[m.email] ?? [];
           const primary = photos.find((p) => p.is_primary) ?? photos[0];
+          const stats = m.user_id ? journalStatsByUserId[m.user_id] : null;
           const isEditing = editingEmail === m.email;
           return (
-          <div key={m.email} className="flex items-center gap-3 px-4 py-3">
-            <MemberPhotoDialog
-              member={m}
-              photos={photos}
-              trigger={
-                <button
-                  type="button"
-                  aria-label={`Manage photos for ${m.name || m.email}`}
-                  className="rounded-full ring-offset-2 ring-offset-background transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
-                >
-                  <MemberAvatar name={m.name} url={primary?.url} size="md" />
-                </button>
-              }
-            />
-            {isEditing ? (
-              <form
-                onSubmit={(e) => handleEdit(e, m)}
-                className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center"
-              >
-                <Input
-                  placeholder="Name"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="sm:max-w-[160px]"
-                />
-                <Input
-                  type="email"
-                  placeholder="Email address"
-                  value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
-                  disabled={m.is_owner}
-                  className="flex-1"
-                />
-                <div className="flex gap-2">
-                  <Button type="submit" size="sm" disabled={pending}>
-                    {pending ? "Saving…" : "Save"}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={cancelEdit}
-                    disabled={pending}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-serif text-sm text-foreground">
-                      {m.name || "—"}
-                    </span>
-                    {m.is_owner && (
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        Owner
-                      </span>
-                    )}
-                    {!m.is_owner && !m.seeded_at && (
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                        Invited
-                      </span>
-                    )}
-                  </div>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {m.email}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => startEdit(m)}
-                  disabled={pending}
-                  aria-label={`Edit ${m.name || m.email}`}
-                  className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-                {!m.is_owner && (
+            <div
+              key={m.email}
+              className="flex flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap"
+            >
+              <MemberPhotoDialog
+                member={m}
+                photos={photos}
+                trigger={
                   <button
                     type="button"
-                    onClick={() => handleRemove(m)}
-                    disabled={pending}
-                    aria-label={`Remove ${m.name || m.email}`}
-                    className="text-muted-foreground transition-colors hover:text-destructive disabled:opacity-40"
+                    aria-label={`Manage photos for ${m.name || m.email}`}
+                    className="rounded-full ring-offset-2 ring-offset-background transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <MemberAvatar name={m.name} url={primary?.url} size="md" />
                   </button>
-                )}
-              </>
-            )}
-          </div>
+                }
+              />
+              {isEditing ? (
+                <form
+                  onSubmit={(e) => handleEdit(e, m)}
+                  className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center"
+                >
+                  <Input
+                    placeholder="Name"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="sm:max-w-[160px]"
+                  />
+                  <Input
+                    type="email"
+                    placeholder="Email address"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    disabled={m.is_owner}
+                    className="flex-1"
+                  />
+                  <div className="flex gap-2">
+                    <Button type="submit" size="sm" disabled={pending}>
+                      {pending ? "Saving…" : "Save"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={cancelEdit}
+                      disabled={pending}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-serif text-sm text-foreground">
+                        {m.name || "—"}
+                      </span>
+                      {m.is_owner && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Owner
+                        </span>
+                      )}
+                      {!m.is_owner && !m.seeded_at && (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          Invited
+                        </span>
+                      )}
+                    </div>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {m.email}
+                    </span>
+                  </div>
+                  <MemberPostingStats stats={stats} />
+                  <button
+                    type="button"
+                    onClick={() => startEdit(m)}
+                    disabled={pending}
+                    aria-label={`Edit ${m.name || m.email}`}
+                    className="text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  {!m.is_owner && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemove(m)}
+                      disabled={pending}
+                      aria-label={`Remove ${m.name || m.email}`}
+                      className="text-muted-foreground transition-colors hover:text-destructive disabled:opacity-40"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           );
         })}
       </div>
@@ -235,6 +242,43 @@ export function FamilyManager({
         </button>
       )}
       {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+function MemberPostingStats({
+  stats,
+}: {
+  stats: MemberJournalStats | null | undefined;
+}) {
+  const currentStreak = stats?.currentStreak ?? 0;
+  const daysLast7 = stats?.daysLast7 ?? 0;
+  const daysLast30 = stats?.daysLast30 ?? 0;
+
+  return (
+    <div className="ml-[3.25rem] grid w-full grid-cols-3 gap-3 text-right sm:ml-0 sm:w-auto sm:min-w-[13rem]">
+      <MemberPostingStat value={currentStreak} label="streak" />
+      <MemberPostingStat value={`${daysLast7}/7`} label="last 7" />
+      <MemberPostingStat value={`${daysLast30}/30`} label="last 30" />
+    </div>
+  );
+}
+
+function MemberPostingStat({
+  value,
+  label,
+}: {
+  value: number | string;
+  label: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-sm font-medium tabular-nums text-foreground">
+        {value}
+      </p>
+      <p className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
     </div>
   );
 }
