@@ -2,11 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getUserTimezone, localDate } from "@/lib/date-utils";
 import { requireOwner } from "@/lib/journal/auth";
-import type { JournalMember, MemberPhoto } from "@/lib/types";
+import type { JournalMember, MemberJournalStats, MemberPhoto } from "@/lib/types";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MEMBER_PHOTOS_BUCKET = "member-photos";
+
+type StatsEntry = {
+  id: string;
+  entry_date: string;
+  user_id: string;
+  status: string;
+  opening_question: string | null;
+  freeform_started_at: string | null;
+};
 
 /** Save the shared family-context doc. Owner-only (writes bypass RLS via the
  * service role; reads are open to all members). */
@@ -33,6 +43,55 @@ export async function listFamilyMembers(): Promise<JournalMember[]> {
     .order("created_at", { ascending: true });
   if (error) throw new Error(error.message);
   return (data ?? []) as JournalMember[];
+}
+
+/** Per-member posting stats for the owner-facing family roster. Owner-only. */
+export async function getFamilyJournalStats(): Promise<Record<string, MemberJournalStats>> {
+  await requireOwner();
+  const admin = createAdminClient();
+  const [{ data }, tz] = await Promise.all([
+    admin
+      .from("journal_entries")
+      .select("id, entry_date, user_id, status, opening_question, freeform_started_at"),
+    getUserTimezone(),
+  ]);
+
+  const entries = (data ?? []) as StatsEntry[];
+  const blankOpenEntryIds = entries
+    .filter(isBlankOpenEntry)
+    .map((entry) => entry.id);
+  const photoEntryIds = new Set<string>();
+
+  if (blankOpenEntryIds.length > 0) {
+    const { data: photos } = await admin
+      .from("journal_entry_photos")
+      .select("entry_id")
+      .in("entry_id", blankOpenEntryIds);
+
+    for (const photo of photos ?? []) {
+      if (photo.entry_id) photoEntryIds.add(photo.entry_id as string);
+    }
+  }
+
+  const datesByUser = new Map<string, Set<string>>();
+  for (const entry of entries) {
+    if (isBlankOpenEntry(entry) && !photoEntryIds.has(entry.id)) continue;
+    const dates = datesByUser.get(entry.user_id) ?? new Set<string>();
+    dates.add(entry.entry_date);
+    datesByUser.set(entry.user_id, dates);
+  }
+
+  const today = localDate(new Date(), tz);
+  const result: Record<string, MemberJournalStats> = {};
+  for (const [userId, dates] of datesByUser) {
+    result[userId] = {
+      currentStreak: getCurrentStreak(dates, today),
+      daysLast7: countDaysInWindow(dates, today, 7),
+      daysLast30: countDaysInWindow(dates, today, 30),
+    };
+  }
+
+  return result;
 }
 
 /** Add a family member to the allowlist. They're provisioned on first sign-in. */
@@ -239,4 +298,42 @@ export async function deleteMemberPhoto(photoId: string): Promise<void> {
     }
   }
   revalidatePath("/settings/family");
+}
+
+function isBlankOpenEntry(entry: StatsEntry): boolean {
+  return (
+    entry.status === "open" &&
+    !entry.opening_question &&
+    !entry.freeform_started_at
+  );
+}
+
+function getCurrentStreak(entryDates: Set<string>, today: string): number {
+  let date = entryDates.has(today) ? today : addDays(today, -1);
+  let streak = 0;
+
+  while (entryDates.has(date)) {
+    streak++;
+    date = addDays(date, -1);
+  }
+
+  return streak;
+}
+
+function countDaysInWindow(
+  entryDates: Set<string>,
+  today: string,
+  days: number
+): number {
+  let count = 0;
+  for (let i = 0; i < days; i++) {
+    if (entryDates.has(addDays(today, -i))) count++;
+  }
+  return count;
+}
+
+function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return localDate(d);
 }

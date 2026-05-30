@@ -399,6 +399,12 @@ export type MemberPhoto = {
   is_primary: boolean;
 };
 
+export type MemberJournalStats = {
+  currentStreak: number;
+  daysLast7: number;
+  daysLast30: number;
+};
+
 /** Whether an entry is private to its author or shared to the whole family. */
 export type JournalVisibility = "private" | "family";
 

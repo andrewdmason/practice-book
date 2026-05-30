@@ -10,14 +10,16 @@ import {
   addFamilyMember,
   removeFamilyMember,
 } from "@/app/(journal)/settings/family/actions";
-import type { JournalMember, MemberPhoto } from "@/lib/types";
+import type { JournalMember, MemberJournalStats, MemberPhoto } from "@/lib/types";
 
 export function FamilyManager({
   members,
   photosByEmail,
+  journalStatsByUserId,
 }: {
   members: JournalMember[];
   photosByEmail: Record<string, MemberPhoto[]>;
+  journalStatsByUserId: Record<string, MemberJournalStats>;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -63,8 +65,12 @@ export function FamilyManager({
         {members.map((m) => {
           const photos = photosByEmail[m.email] ?? [];
           const primary = photos.find((p) => p.is_primary) ?? photos[0];
+          const stats = m.user_id ? journalStatsByUserId[m.user_id] : null;
           return (
-          <div key={m.email} className="flex items-center gap-3 px-4 py-3">
+          <div
+            key={m.email}
+            className="flex flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap"
+          >
             <MemberPhotoDialog
               member={m}
               photos={photos}
@@ -98,6 +104,7 @@ export function FamilyManager({
                 {m.email}
               </span>
             </div>
+            <MemberPostingStats stats={stats} />
             {!m.is_owner && (
               <button
                 type="button"
@@ -142,6 +149,43 @@ export function FamilyManager({
         </div>
         {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
       </form>
+    </div>
+  );
+}
+
+function MemberPostingStats({
+  stats,
+}: {
+  stats: MemberJournalStats | null | undefined;
+}) {
+  const currentStreak = stats?.currentStreak ?? 0;
+  const daysLast7 = stats?.daysLast7 ?? 0;
+  const daysLast30 = stats?.daysLast30 ?? 0;
+
+  return (
+    <div className="ml-[3.25rem] grid w-full grid-cols-3 gap-3 text-right sm:ml-0 sm:w-auto sm:min-w-[13rem]">
+      <MemberPostingStat value={currentStreak} label="streak" />
+      <MemberPostingStat value={`${daysLast7}/7`} label="last 7" />
+      <MemberPostingStat value={`${daysLast30}/30`} label="last 30" />
+    </div>
+  );
+}
+
+function MemberPostingStat({
+  value,
+  label,
+}: {
+  value: number | string;
+  label: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-sm font-medium tabular-nums text-foreground">
+        {value}
+      </p>
+      <p className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
     </div>
   );
 }
