@@ -25,8 +25,7 @@ const TABS = [
   {
     label: "Family",
     href: "/settings/family",
-    description:
-      "Add or remove family members. Each one signs in with their own email and gets their own private journal.",
+    description: "",
     ownerOnly: true,
   },
 ] as const;
@@ -54,9 +53,11 @@ export function SettingsNav({ isOwner = false }: { isOwner?: boolean }) {
           </Link>
         ))}
       </div>
-      <p className="mt-3 font-serif text-xs italic text-muted-foreground">
-        {active.description}
-      </p>
+      {active.description && (
+        <p className="mt-3 font-serif text-xs italic text-muted-foreground">
+          {active.description}
+        </p>
+      )}
     </>
   );
 }
