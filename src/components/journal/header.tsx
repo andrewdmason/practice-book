@@ -1,99 +1,109 @@
-"use client";
+import { JournalHeaderClient } from "@/components/journal/header-client";
+import { getUserTimezone, localDate } from "@/lib/date-utils";
+import { requireUserId } from "@/lib/journal/auth";
+import { createClient } from "@/lib/supabase/server";
 
-import { Suspense } from "react";
-import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { Plus, Settings } from "lucide-react";
-import { ZenTimer } from "@/components/journal/zen-timer";
+export type JournalStreakStats = {
+  currentStreak: number;
+  daysThisWeek: number;
+  thisWeekDays: boolean[];
+  totalEntries: number;
+  postedToday: boolean;
+};
 
-export function JournalHeader() {
-  return (
-    <header className="sticky top-0 z-50 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="relative mx-auto flex h-14 max-w-3xl items-center justify-between px-6">
-        <div className="flex items-center gap-4">
-          <Suspense fallback={<HeaderNav fallback me />}>
-            <HeaderNav />
-          </Suspense>
-          <Link
-            href="/journal/new"
-            aria-label="New entry"
-            title="New entry"
-            className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <Plus className="h-5 w-5" />
-          </Link>
-        </div>
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-          <ZenTimer />
-        </div>
-        <Link
-          href="/settings"
-          aria-label="Settings"
-          title="Settings"
-          className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <Settings className="h-5 w-5" />
-        </Link>
-      </div>
-    </header>
-  );
+type StreakEntry = {
+  id: string;
+  entry_date: string;
+  status: string;
+  opening_question: string | null;
+  freeform_started_at: string | null;
+};
+
+export async function JournalHeader() {
+  const streak = await getJournalStreakStats();
+
+  return <JournalHeaderClient streak={streak} />;
 }
 
-// The primary journal feed nav. "Me" is the caller's own feed (and the
-// wordmark's replacement); "Family" the shared feed. The `me`/`family` props are
-// only used by the Suspense fallback (which can't read search params); the live
-// render derives them from the URL.
-function HeaderNav({
-  me,
-  family,
-  fallback = false,
-}: {
-  me?: boolean;
-  family?: boolean;
-  fallback?: boolean;
-} = {}) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+async function getJournalStreakStats(): Promise<JournalStreakStats> {
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
 
-  let isMe = me ?? false;
-  let isFamily = family ?? false;
-  if (!fallback) {
-    const onJournal = pathname === "/journal";
-    isFamily = onJournal && searchParams.get("feed") === "family";
-    isMe = onJournal && !isFamily;
+  const [{ data }, tz] = await Promise.all([
+    supabase
+      .from("journal_entries")
+      .select("id, entry_date, status, opening_question, freeform_started_at")
+      .eq("user_id", userId),
+    getUserTimezone(),
+  ]);
+
+  const entries = (data ?? []) as StreakEntry[];
+  const blankOpenEntryIds = entries
+    .filter(isBlankOpenEntry)
+    .map((entry) => entry.id);
+  const photoEntryIds = new Set<string>();
+
+  if (blankOpenEntryIds.length > 0) {
+    const { data: photos } = await supabase
+      .from("journal_entry_photos")
+      .select("entry_id")
+      .eq("user_id", userId)
+      .in("entry_id", blankOpenEntryIds);
+
+    for (const photo of photos ?? []) {
+      if (photo.entry_id) photoEntryIds.add(photo.entry_id as string);
+    }
   }
 
+  const realEntries = entries.filter(
+    (entry) => !isBlankOpenEntry(entry) || photoEntryIds.has(entry.id)
+  );
+  const today = localDate(new Date(), tz);
+  const entryDates = new Set(realEntries.map((entry) => entry.entry_date));
+  const weekStart = getWeekStart(today);
+  const thisWeekDays = Array.from({ length: 7 }, (_, i) =>
+    entryDates.has(addDays(weekStart, i))
+  );
+
+  return {
+    currentStreak: getCurrentStreak(entryDates, today),
+    daysThisWeek: thisWeekDays.filter(Boolean).length,
+    thisWeekDays,
+    totalEntries: realEntries.length,
+    postedToday: entryDates.has(today),
+  };
+}
+
+function isBlankOpenEntry(entry: StreakEntry): boolean {
   return (
-    <nav className="flex items-baseline gap-5 font-serif text-lg tracking-tight">
-      <HeaderLink href="/journal" active={isMe}>
-        Me
-      </HeaderLink>
-      <HeaderLink href="/journal?feed=family" active={isFamily}>
-        Family
-      </HeaderLink>
-    </nav>
+    entry.status === "open" &&
+    !entry.opening_question &&
+    !entry.freeform_started_at
   );
 }
 
-function HeaderLink({
-  href,
-  active,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className={
-        active
-          ? "text-foreground underline underline-offset-4 decoration-foreground/30"
-          : "text-muted-foreground transition-colors hover:text-foreground"
-      }
-    >
-      {children}
-    </Link>
-  );
+function getCurrentStreak(entryDates: Set<string>, today: string): number {
+  let date = entryDates.has(today) ? today : addDays(today, -1);
+  let streak = 0;
+
+  while (entryDates.has(date)) {
+    streak++;
+    date = addDays(date, -1);
+  }
+
+  return streak;
+}
+
+function getWeekStart(date: string): string {
+  const d = new Date(`${date}T12:00:00`);
+  const day = d.getDay();
+  const diff = (day - 1 + 7) % 7;
+  d.setDate(d.getDate() - diff);
+  return localDate(d);
+}
+
+function addDays(date: string, days: number): string {
+  const d = new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return localDate(d);
 }
