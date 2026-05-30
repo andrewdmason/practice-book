@@ -3,13 +3,14 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Play } from "lucide-react";
+import { ImagePlus, Loader2, Play } from "lucide-react";
 import { MemberAvatar } from "@/components/journal/member-avatar";
 import { cn } from "@/lib/utils";
 import type { JournalEntry, JournalMediaType } from "@/lib/types";
 
 type HistoryEntry = JournalEntry & {
   photos: { id: string; displayUrl: string; mediaType: JournalMediaType }[];
+  photoGenerationStatus?: "pending" | "generating" | null;
   authorName?: string | null;
   authorPhotoUrl?: string | null;
 };
@@ -42,7 +43,7 @@ export function HistoryList({
 
   // While any entry is mid-wrap, poll the server until its AI fields land.
   useEffect(() => {
-    if (!entries.some(isGenerating)) return;
+    if (!entries.some((e) => isGenerating(e) || e.photoGenerationStatus)) return;
     const id = setInterval(() => router.refresh(), 1500);
     return () => clearInterval(id);
   }, [entries, router]);
@@ -144,13 +145,22 @@ export function HistoryList({
               )}
               </div>
               </div>
-              {e.photos.length > 0 && (
+              {(e.photos.length > 0 || e.photoGenerationStatus) && (
                 <div
                   className={cn(
                     "mt-4 flex gap-2",
                     mode === "family" && "pl-[60px]"
                   )}
                 >
+                  {e.photoGenerationStatus && (
+                    <div className="flex h-52 min-w-0 flex-1 flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border border-dashed border-border bg-muted/40 font-serif text-sm italic text-muted-foreground">
+                      <span className="relative flex size-10 items-center justify-center">
+                        <ImagePlus className="size-7 opacity-35" />
+                        <Loader2 className="absolute size-10 animate-spin opacity-45" />
+                      </span>
+                      <span>making a photo…</span>
+                    </div>
+                  )}
                   {e.photos.slice(0, 3).map((photo) => (
                     <div
                       key={photo.id}

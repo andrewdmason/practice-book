@@ -9,9 +9,11 @@ import { runWrap } from "@/lib/journal/wrap";
 import { summarizeRecap } from "@/lib/journal/recap-summary";
 import { candidateByText, candidateTexts, normalizeCandidates } from "@/lib/journal/candidates";
 import { applyProfileDocChange } from "@/lib/journal/profile-suggestions";
+import { runEntryPhotoGeneration } from "@/lib/journal/generated-photo";
 import type {
   JournalAgentFileName,
   JournalMediaType,
+  JournalPhotoSource,
   JournalOpeningCandidate,
   JournalProfileSuggestion,
   JournalQuestionType,
@@ -660,6 +662,60 @@ export async function reopenEntry(entryId: string) {
   revalidatePath("/journal", "layout");
 }
 
+export type GenerateAndAttachEntryPhotoResult =
+  | { ok: true; photoId: string }
+  | { ok: false; error: string };
+
+export async function generateAndAttachEntryPhoto(
+  entryId: string
+): Promise<GenerateAndAttachEntryPhotoResult> {
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
+  const { data: entry, error } = await supabase
+    .from("journal_entries")
+    .select("id, user_id")
+    .eq("id", entryId)
+    .maybeSingle();
+  if (error || !entry) return { ok: false, error: "Entry not found." };
+  if (entry.user_id !== userId) {
+    return { ok: false, error: "You can only generate photos for your own posts." };
+  }
+
+  const result = await runEntryPhotoGeneration(entryId, {
+    mode: "manual",
+    attachOnSuccess: true,
+  });
+  if (!result.ok) return { ok: false, error: result.error };
+  if (!result.attachedPhotoId) {
+    return { ok: false, error: "Generated photo was not attached." };
+  }
+
+  revalidatePath("/journal");
+  revalidatePath(`/journal/${entryId}`);
+  return { ok: true, photoId: result.attachedPhotoId };
+}
+
+export async function getEntriesImageGenerationStates(
+  entryIds: string[]
+): Promise<Record<string, "pending" | "generating">> {
+  if (entryIds.length === 0) return {};
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("journal_image_generations")
+    .select("entry_id, status, created_at")
+    .in("entry_id", entryIds)
+    .in("status", ["pending", "generating"])
+    .order("created_at", { ascending: false });
+
+  const result: Record<string, "pending" | "generating"> = {};
+  for (const row of data ?? []) {
+    const entryId = row.entry_id as string;
+    if (result[entryId]) continue;
+    result[entryId] = row.status as "pending" | "generating";
+  }
+  return result;
+}
+
 export async function deleteEntry(entryId: string) {
   const supabase = await createClient();
   const { error } = await supabase
@@ -934,7 +990,8 @@ export async function attachEntryPhoto(
   entryId: string,
   originalPath: string,
   displayPath: string,
-  mediaType: "photo" | "video" = "photo"
+  mediaType: "photo" | "video" = "photo",
+  source: JournalPhotoSource = "uploaded"
 ): Promise<string> {
   const supabase = await createClient();
   const userId = await requireUserId(supabase);
@@ -945,6 +1002,7 @@ export async function attachEntryPhoto(
       original_path: originalPath,
       display_path: displayPath,
       media_type: mediaType,
+      source,
       user_id: userId,
     })
     .select("id")
@@ -964,7 +1022,7 @@ export async function deleteEntryPhoto(photoId: string): Promise<void> {
     .single();
 
   if (photo) {
-    const paths = [photo.original_path, photo.display_path].filter(
+    const paths = [...new Set([photo.original_path, photo.display_path])].filter(
       (p): p is string => Boolean(p)
     );
     if (paths.length > 0) {
@@ -997,13 +1055,21 @@ export async function createSignedPhotoUrl(
 export async function getEntriesPhotos(
   entryIds: string[]
 ): Promise<
-  Record<string, { id: string; displayUrl: string; mediaType: JournalMediaType }[]>
+  Record<
+    string,
+    {
+      id: string;
+      displayUrl: string;
+      mediaType: JournalMediaType;
+      source: JournalPhotoSource;
+    }[]
+  >
 > {
   if (entryIds.length === 0) return {};
   const supabase = await createClient();
   const { data: rows } = await supabase
     .from("journal_entry_photos")
-    .select("id, entry_id, display_path, media_type")
+    .select("id, entry_id, display_path, media_type, source")
     .in("entry_id", entryIds)
     .order("created_at", { ascending: true });
 
@@ -1018,7 +1084,12 @@ export async function getEntriesPhotos(
 
   const result: Record<
     string,
-    { id: string; displayUrl: string; mediaType: JournalMediaType }[]
+    {
+      id: string;
+      displayUrl: string;
+      mediaType: JournalMediaType;
+      source: JournalPhotoSource;
+    }[]
   > = {};
   rows.forEach((row, i) => {
     const entryId = row.entry_id as string;
@@ -1026,6 +1097,7 @@ export async function getEntriesPhotos(
       id: row.id as string,
       displayUrl: signed?.[i]?.signedUrl ?? "",
       mediaType: (row.media_type as JournalMediaType) ?? "photo",
+      source: (row.source as JournalPhotoSource) ?? "uploaded",
     });
   });
   return result;
@@ -1035,6 +1107,7 @@ export async function getEntryPhotos(entryId: string): Promise<
   {
     id: string;
     mediaType: JournalMediaType;
+    source: JournalPhotoSource;
     displayUrl: string;
     videoUrl: string | null;
   }[]
@@ -1042,7 +1115,7 @@ export async function getEntryPhotos(entryId: string): Promise<
   const supabase = await createClient();
   const { data: rows } = await supabase
     .from("journal_entry_photos")
-    .select("id, media_type, original_path, display_path")
+    .select("id, media_type, source, original_path, display_path")
     .eq("entry_id", entryId)
     .order("created_at", { ascending: true });
 
@@ -1075,6 +1148,7 @@ export async function getEntryPhotos(entryId: string): Promise<
   return rows.map((row, i) => ({
     id: row.id as string,
     mediaType: (row.media_type as JournalMediaType) ?? "photo",
+    source: (row.source as JournalPhotoSource) ?? "uploaded",
     displayUrl: signedDisplay?.[i]?.signedUrl ?? "",
     videoUrl:
       row.media_type === "video"

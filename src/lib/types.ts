@@ -451,11 +451,13 @@ export type JournalEntry = {
 };
 
 export type JournalMediaType = "photo" | "video";
+export type JournalPhotoSource = "uploaded" | "ai_generated";
 
 export type JournalEntryPhoto = {
   id: string;
   entry_id: string;
   media_type: JournalMediaType;
+  source: JournalPhotoSource;
   original_path: string;
   display_path: string;
   created_at: string;
