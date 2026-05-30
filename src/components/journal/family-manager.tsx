@@ -4,13 +4,21 @@ import { useState, useTransition } from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MemberAvatar } from "@/components/journal/member-avatar";
+import { MemberPhotoDialog } from "@/components/journal/member-photo-dialog";
 import {
   addFamilyMember,
   removeFamilyMember,
 } from "@/app/(journal)/settings/family/actions";
-import type { JournalMember } from "@/lib/types";
+import type { JournalMember, MemberPhoto } from "@/lib/types";
 
-export function FamilyManager({ members }: { members: JournalMember[] }) {
+export function FamilyManager({
+  members,
+  photosByEmail,
+}: {
+  members: JournalMember[];
+  photosByEmail: Record<string, MemberPhoto[]>;
+}) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -52,8 +60,24 @@ export function FamilyManager({ members }: { members: JournalMember[] }) {
   return (
     <div className="mt-6">
       <div className="divide-y divide-border rounded-lg border border-border">
-        {members.map((m) => (
+        {members.map((m) => {
+          const photos = photosByEmail[m.email] ?? [];
+          const primary = photos.find((p) => p.is_primary) ?? photos[0];
+          return (
           <div key={m.email} className="flex items-center gap-3 px-4 py-3">
+            <MemberPhotoDialog
+              member={m}
+              photos={photos}
+              trigger={
+                <button
+                  type="button"
+                  aria-label={`Manage photos for ${m.name || m.email}`}
+                  className="rounded-full ring-offset-2 ring-offset-background transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground"
+                >
+                  <MemberAvatar name={m.name} url={primary?.url} size="md" />
+                </button>
+              }
+            />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="font-serif text-sm text-foreground">
@@ -86,7 +110,8 @@ export function FamilyManager({ members }: { members: JournalMember[] }) {
               </button>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <form onSubmit={handleAdd} className="mt-6">

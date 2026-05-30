@@ -1,0 +1,53 @@
+-- Profile photos for family members.
+--
+-- The account owner can attach photos to each member from the Family settings
+-- tab. A member can have several photos with exactly one marked primary; the
+-- primary is shown as an avatar thumbnail next to the member's posts in the
+-- shared family feed.
+--
+-- Keyed by member_email (not user_id): invited members have a null user_id until
+-- their first sign-in, but the owner can set their photo immediately. Writes go
+-- through the service role in owner-gated server actions, so only a read policy
+-- is needed (mirroring "Read all members" in 00058 — photos, like names, are
+-- non-secret within a family).
+
+CREATE TABLE journal_member_photos (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  member_email text NOT NULL REFERENCES journal_members(email) ON DELETE CASCADE,
+  storage_path text NOT NULL,
+  is_primary   boolean NOT NULL DEFAULT false,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_journal_member_photos_member ON journal_member_photos (member_email);
+
+-- At most one primary per member.
+CREATE UNIQUE INDEX idx_journal_member_photos_primary
+  ON journal_member_photos (member_email)
+  WHERE is_primary;
+
+ALTER TABLE journal_member_photos ENABLE ROW LEVEL SECURITY;
+
+-- Any authenticated member can read the metadata (for author avatars in the
+-- shared feed). Writes are service-role only.
+CREATE POLICY "Read all member photos" ON journal_member_photos FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
+-- Private bucket for member profile photos. Path: {member_email}/{photo_id}.jpg
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'member-photos',
+  'member-photos',
+  false,
+  25 * 1024 * 1024,
+  ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif']
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Any authenticated member can read the photo *files* (shown as feed avatars).
+-- Writes/deletes go through the service role in owner-gated server actions, so
+-- no insert/update/delete storage policy is needed.
+DROP POLICY IF EXISTS "member-photos authenticated select" ON storage.objects;
+CREATE POLICY "member-photos authenticated select"
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'member-photos' AND auth.uid() IS NOT NULL);
