@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { MoreHorizontal, Pencil, RefreshCw, Trash2 } from "lucide-react";
 import {
   deleteEntry,
   regenerateEntryWrap,
@@ -38,6 +39,7 @@ export function EntryTitle({
   afterTitle?: React.ReactNode;
   menuActions?: React.ReactNode;
 }) {
+  const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isRegenerating, startRegenerate] = useTransition();
@@ -72,6 +74,10 @@ export function EntryTitle({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-auto min-w-44">
             {menuActions}
+            <DropdownMenuItem onClick={() => router.push(`/journal/${entryId}/edit`)}>
+              <Pencil />
+              Edit
+            </DropdownMenuItem>
             <DropdownMenuItem
               disabled={isRegenerating}
               onClick={() => {

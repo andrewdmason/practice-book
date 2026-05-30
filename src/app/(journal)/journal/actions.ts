@@ -542,6 +542,44 @@ export async function updateRecapEntry(
 }
 
 /**
+ * Edit a standard entry's title and the user's own messages. The title goes on
+ * the entry; each edit updates one message's content. The `role = 'user'` guard
+ * (alongside RLS, which already restricts updates to the caller's own rows)
+ * keeps interviewer questions immutable even if a message id is tampered with.
+ * Empty titles fall back to null (the UI shows "Untitled"); blank message edits
+ * are skipped rather than wiping a turn.
+ */
+export async function updateEntryContent(
+  entryId: string,
+  title: string,
+  messageEdits: { id: string; content: string }[]
+) {
+  const supabase = await createClient();
+
+  const trimmedTitle = title.trim();
+  const { error: titleErr } = await supabase
+    .from("journal_entries")
+    .update({ title: trimmedTitle || null })
+    .eq("id", entryId);
+  if (titleErr) throw new Error(titleErr.message);
+
+  for (const edit of messageEdits) {
+    const content = edit.content.trim();
+    if (!content) continue;
+    const { error } = await supabase
+      .from("journal_messages")
+      .update({ content })
+      .eq("id", edit.id)
+      .eq("entry_id", entryId)
+      .eq("role", "user");
+    if (error) throw new Error(error.message);
+  }
+
+  revalidatePath("/journal");
+  revalidatePath(`/journal/${entryId}`);
+}
+
+/**
  * Append a user message to an entry without generating an interviewer reply.
  * Used once the five-minute timer is done: the user can keep writing, but the
  * conversation is over — the agent is no longer asked to respond.
@@ -651,16 +689,6 @@ export async function setEntryVisibility(
   if (error) throw new Error(error.message);
   revalidatePath("/journal");
   revalidatePath(`/journal/${entryId}`);
-}
-
-export async function reopenEntry(entryId: string) {
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("journal_entries")
-    .update({ status: "open", summary_stale: true, closed_at: null })
-    .eq("id", entryId);
-  if (error) throw new Error(error.message);
-  revalidatePath("/journal", "layout");
 }
 
 export type GenerateAndAttachEntryPhotoResult =
