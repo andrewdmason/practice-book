@@ -113,6 +113,66 @@ export async function addFamilyMember(emailRaw: string, nameRaw: string): Promis
   revalidatePath("/settings/family");
 }
 
+/** Edit a member's name and/or email. Owner-only. Changing the email keeps
+ * their auth login in sync (when they've already signed in) so the magic-link
+ * allowlist still matches, and cascades to their photo rows via the FK's
+ * ON UPDATE CASCADE. The owner's own email is fixed and can't be changed here. */
+export async function updateFamilyMember(
+  originalEmailRaw: string,
+  nameRaw: string,
+  newEmailRaw: string
+): Promise<void> {
+  const ownerId = await requireOwner();
+  const originalEmail = originalEmailRaw.trim().toLowerCase();
+  const newEmail = newEmailRaw.trim().toLowerCase();
+  const name = nameRaw.trim();
+  if (!name) throw new Error("Give this person a name.");
+  if (!EMAIL_RE.test(newEmail)) throw new Error("Enter a valid email address.");
+
+  const admin = createAdminClient();
+  const { data: member } = await admin
+    .from("journal_members")
+    .select("email, user_id, is_owner")
+    .eq("email", originalEmail)
+    .maybeSingle();
+  if (!member) throw new Error("Member not found.");
+
+  const emailChanged = newEmail !== originalEmail;
+  const isOwnerRow = member.is_owner || member.user_id === ownerId;
+  if (emailChanged && isOwnerRow) {
+    throw new Error("You can't change the owner's email.");
+  }
+
+  if (emailChanged) {
+    const { data: existing } = await admin
+      .from("journal_members")
+      .select("email")
+      .eq("email", newEmail)
+      .maybeSingle();
+    if (existing) throw new Error(`${newEmail} is already a member.`);
+
+    // Keep the auth login matching the allowlist key for members who've signed
+    // in. Invited members have no user_id yet, so there's nothing to sync.
+    if (member.user_id) {
+      const { error: authErr } = await admin.auth.admin.updateUserById(
+        member.user_id,
+        { email: newEmail }
+      );
+      if (authErr) throw new Error(authErr.message);
+    }
+  }
+
+  const { error } = await admin
+    .from("journal_members")
+    .update({ email: newEmail, name })
+    .eq("email", originalEmail);
+  if (error) {
+    if (error.code === "23505") throw new Error(`${newEmail} is already a member.`);
+    throw new Error(error.message);
+  }
+  revalidatePath("/settings/family");
+}
+
 /** Remove a family member: revokes allowlist access and deletes their account
  * and all of their journal data (auth.users delete cascades). The owner cannot
  * remove themselves. */
