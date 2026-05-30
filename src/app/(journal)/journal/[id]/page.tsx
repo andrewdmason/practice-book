@@ -121,6 +121,7 @@ export default async function EntryPage({
         <ChatSurface
           entryId={entry.id}
           initialStatus={entry.status}
+          initialVisibility={entry.visibility}
           initialMessages={messages}
           viewMode="history"
           readOnly={!isAuthor}
