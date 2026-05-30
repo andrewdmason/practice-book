@@ -10,54 +10,64 @@ const PROMPT_TEXT_LIMIT = 5000;
 const MAX_REFERENCE_PHOTOS = 3;
 const ART_STYLES = [
   {
-    name: "Natural-light documentary photo",
-    prompt:
-      "A believable candid photograph, natural window light, 35mm documentary feel, imperfect lived-in details, shallow depth of field.",
-  },
-  {
     name: "Cinematic film still",
     prompt:
       "A cinematic film still with expressive lighting, careful composition, rich color grading, and the feeling of a memorable scene from a movie.",
   },
   {
-    name: "Vintage family snapshot",
-    prompt:
-      "A warm vintage family snapshot, slightly faded color, casual framing, film grain, the charm of an old photo album.",
-  },
-  {
-    name: "Editorial studio scene",
-    prompt:
-      "A polished editorial studio image with intentional props, clean lighting, crisp detail, and a gently surreal magazine-photo sensibility.",
-  },
-  {
-    name: "Watercolor and ink",
-    prompt:
-      "A loose watercolor-and-ink painting, expressive line work, soft washes, visible paper texture, lively but not cartoonish.",
-  },
-  {
-    name: "Gouache storybook",
-    prompt:
-      "A gouache painting with bold shapes, matte color, hand-painted texture, charming storybook composition, and tactile brushwork.",
-  },
-  {
-    name: "Claymation miniature",
-    prompt:
-      "A handmade claymation-style miniature scene, sculpted figures and props, soft studio lighting, visible fingerprints and craft texture.",
-  },
-  {
-    name: "Felt-and-paper diorama",
-    prompt:
-      "A stop-motion craft diorama made from felt, paper, cardboard, string, and tiny handmade props, photographed like a real tabletop set.",
-  },
-  {
-    name: "Graphic screenprint",
-    prompt:
-      "A bold graphic screenprint with limited colors, chunky shapes, overprinted texture, strong silhouettes, and playful poster-like composition.",
-  },
-  {
     name: "Surreal collage",
     prompt:
       "A dreamy mixed-media collage combining photographic fragments, painted elements, unexpected scale shifts, and a whimsical surreal mood.",
+  },
+  {
+    name: "Spider-Verse comic",
+    prompt:
+      "A vibrant comic-book illustration in the style of modern animated superhero films, bold ink outlines, halftone Ben-Day dots, chromatic-aberration color offsets, dynamic angles, and a kinetic energetic feel.",
+  },
+  {
+    name: "Graphic novel ink",
+    prompt:
+      "A hand-inked graphic-novel panel, confident brush lines, dramatic spot blacks, cross-hatching for shadow, a limited moody palette, cinematic and grown-up.",
+  },
+  {
+    name: "Cel-shaded animation",
+    prompt:
+      "A frame from a stylish 2D animated film, clean cel-shaded color, soft painterly backgrounds, expressive character acting, atmospheric and full of life.",
+  },
+  {
+    name: "Risograph print",
+    prompt:
+      "A retro risograph print, two or three overprinted spot colors, grainy misregistered texture, bold simple shapes, indie-zine warmth.",
+  },
+  {
+    name: "Linocut print",
+    prompt:
+      "A hand-carved linocut print, bold black shapes, energetic carved texture, one or two accent colors, strong graphic silhouettes.",
+  },
+  {
+    name: "Pixel art",
+    prompt:
+      "A detailed pixel-art scene, crisp limited palette, expressive sprites, atmospheric lighting, the lovingly crafted feel of a modern indie video game.",
+  },
+  {
+    name: "Surreal dreamscape painting",
+    prompt:
+      "A surreal dreamscape painting in the spirit of Magritte and Dalí, impossible juxtapositions, luminous skies, crisp detail on a fantastical scene, quietly uncanny and poetic.",
+  },
+  {
+    name: "Double-exposure silhouette",
+    prompt:
+      "A double-exposure image where a person's silhouette is filled with a layered landscape or scene, soft blended edges, evocative and abstract, more about mood than literal likeness.",
+  },
+  {
+    name: "Ukiyo-e woodblock",
+    prompt:
+      "A Japanese ukiyo-e woodblock print, flat layered color, elegant outlines, stylized waves and clouds, refined composition with a sense of timeless calm.",
+  },
+  {
+    name: "Art deco poster",
+    prompt:
+      "A 1920s art-deco poster, bold geometric forms, elegant symmetry, metallic gold and jewel tones, streamlined stylized figures, glamorous and graphic.",
   },
 ] as const;
 
