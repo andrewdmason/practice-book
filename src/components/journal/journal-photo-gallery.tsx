@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Play, Plus, X } from "lucide-react";
+import { Loader2, Play, X } from "lucide-react";
 import type { JournalMediaType } from "@/lib/types";
 import {
   createSignedPhotoUrl,
@@ -26,10 +26,12 @@ export function JournalPhotoGallery({
   entryId,
   initialPhotos,
   editable,
+  showAttachAction = true,
 }: {
   entryId: string;
   initialPhotos: Media[];
   editable: boolean;
+  showAttachAction?: boolean;
 }) {
   const [media, setMedia] = useState<Media[]>(initialPhotos);
   const [pending, setPending] = useState<Pending[]>([]);
@@ -160,47 +162,51 @@ export function JournalPhotoGallery({
         </div>
       )}
 
-      {(editable || hasContent || error) && (
+      {((editable && showAttachAction) || hasContent || error) && (
         <div className="mx-auto w-full max-w-2xl px-6 pt-6">
           {error && (
             <p className="mb-3 font-serif text-xs text-destructive">{error}</p>
           )}
           {(editable || hasContent) && (
-            <div className="flex flex-wrap gap-4">
-              {media.map((item) => (
-                <MediaCard
-                  key={item.id}
-                  media={item}
-                  editable={editable}
-                  onDelete={() => handleDelete(item.id)}
-                  onOpen={() => setLightbox(item)}
-                />
-              ))}
-              {pending.map((p) => (
-                <div
-                  key={p.tempId}
-                  className="relative h-28 w-28 overflow-hidden rounded-md border border-border bg-muted"
-                >
-                  {p.mediaType === "video" ? (
-                    <video
-                      src={p.previewUrl}
-                      muted
-                      className="h-full w-full object-cover opacity-50"
+            <div className="flex flex-col items-start gap-3">
+              {hasContent && (
+                <div className="flex flex-wrap gap-4">
+                  {media.map((item) => (
+                    <MediaCard
+                      key={item.id}
+                      media={item}
+                      editable={editable}
+                      onDelete={() => handleDelete(item.id)}
+                      onOpen={() => setLightbox(item)}
                     />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={p.previewUrl}
-                      alt=""
-                      className="h-full w-full object-cover opacity-50"
-                    />
-                  )}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Loader2 className="size-5 animate-spin text-foreground" />
-                  </div>
+                  ))}
+                  {pending.map((p) => (
+                    <div
+                      key={p.tempId}
+                      className="relative h-28 w-28 overflow-hidden rounded-md border border-border bg-muted"
+                    >
+                      {p.mediaType === "video" ? (
+                        <video
+                          src={p.previewUrl}
+                          muted
+                          className="h-full w-full object-cover opacity-50"
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={p.previewUrl}
+                          alt=""
+                          className="h-full w-full object-cover opacity-50"
+                        />
+                      )}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Loader2 className="size-5 animate-spin text-foreground" />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-              {editable && (
+              )}
+              {editable && showAttachAction && (
                 <>
                   <input
                     ref={fileInputRef}
@@ -218,11 +224,10 @@ export function JournalPhotoGallery({
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    aria-label="Add photo or video"
-                    className="flex h-28 w-28 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+                    aria-label="Attach a photo or video"
+                    className="font-serif text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
                   >
-                    <Plus className="size-5" />
-                    <span className="font-serif text-[11px]">Add</span>
+                    Attach a photo
                   </button>
                 </>
               )}

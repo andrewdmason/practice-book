@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import {
+  Camera,
+  FileText,
+  Loader2,
+  MessageSquareQuote,
+  PencilLine,
+} from "lucide-react";
 import { TypingIndicator } from "@/components/journal/typing-indicator";
 import {
   pickOpeningQuestion,
@@ -16,6 +23,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { normalizeCandidates, typeLabel } from "@/lib/journal/candidates";
+import {
+  MAX_UPLOAD_BYTES,
+  detectMediaType,
+  formatBytes,
+  uploadJournalMedia,
+} from "@/lib/journal/photo-upload";
 import type { JournalOpeningCandidate } from "@/lib/types";
 
 // Default recap title seeds the current month, e.g. "May Chatbot Recap". The
@@ -51,9 +64,11 @@ export function OpeningPicker({
   const [recapTitle, setRecapTitle] = useState(defaultRecapTitle);
   const [recapBody, setRecapBody] = useState("");
   const [savingRecap, setSavingRecap] = useState(false);
+  const [startingWithPhoto, setStartingWithPhoto] = useState(false);
   const [, startTransition] = useTransition();
   const router = useRouter();
   const initialLoadRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // On mount, fetch the candidates if the entry doesn't have them yet.
   useEffect(() => {
@@ -136,6 +151,35 @@ export function OpeningPicker({
         setError(err instanceof Error ? err.message : String(err));
       }
     });
+  }
+
+  async function handlePhotoFiles(files: FileList | null) {
+    const file = files?.[0];
+    if (!file || picked || startingWithPhoto) return;
+    const mediaType = detectMediaType(file);
+    if (!mediaType) {
+      setError("Choose a photo or video file.");
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError(
+        `“${file.name}” is ${formatBytes(file.size)} — files must be under ${formatBytes(
+          MAX_UPLOAD_BYTES
+        )}.`
+      );
+      return;
+    }
+
+    setStartingWithPhoto(true);
+    setError(null);
+    try {
+      await uploadJournalMedia(entryId, file);
+      await startFreeformEntry(entryId);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStartingWithPhoto(false);
+    }
   }
 
   function handleSaveQuote() {
@@ -342,38 +386,125 @@ export function OpeningPicker({
             })}
           </ul>
         )}
-        <button
-          type="button"
-          onClick={handleWriteFreely}
-          disabled={!!picked}
-          className="mt-4 w-full rounded-lg border border-dashed border-muted px-5 py-4 text-left font-serif text-lg leading-relaxed text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
-        >
-          I already know what I want to write
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (picked) return;
-            setError(null);
-            setMode("quote");
-          }}
-          disabled={!!picked}
-          className="mt-4 w-full rounded-lg border border-dashed border-muted px-5 py-4 text-left font-serif text-lg leading-relaxed text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
-        >
-          save a quote
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (picked) return;
-            setError(null);
-            setMode("recap");
-          }}
-          disabled={!!picked}
-          className="mt-4 w-full rounded-lg border border-dashed border-muted px-5 py-4 text-left font-serif text-lg leading-relaxed text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
-        >
-          paste a chatbot recap
-        </button>
+        <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2">
+          {candidates.length === 0 && !loading && error ? (
+            <button
+              type="button"
+              onClick={() => void fetchCandidates("/journal/api/opening-candidates")}
+              className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              try again
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleReroll}
+                disabled={loading}
+                className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-40 disabled:hover:no-underline"
+              >
+                {loading
+                  ? "thinking…"
+                  : candidates.length === 1
+                    ? "show me a different question"
+                    : "show me a different set"}
+              </button>
+              {questionTypeNames.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <button
+                        type="button"
+                        disabled={loading}
+                        className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-40 disabled:hover:no-underline"
+                      />
+                    }
+                  >
+                    ask me about something else
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    side="bottom"
+                    align="start"
+                    className="max-h-72 w-56 overflow-y-auto"
+                  >
+                    {questionTypeNames.map((name) => (
+                      <DropdownMenuItem
+                        key={name}
+                        onClick={() => handleAskSpecific(name)}
+                        className="font-serif"
+                      >
+                        {typeLabel(name)}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </>
+          )}
+        </div>
+        <p className="mt-10 font-serif text-sm uppercase tracking-[0.2em] text-muted-foreground">
+          start another way
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={handleWriteFreely}
+            disabled={!!picked}
+            className="flex min-h-16 items-center gap-3 rounded-lg border border-dashed border-muted px-4 py-3 text-left font-serif text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
+          >
+            <PencilLine className="size-4 shrink-0" aria-hidden />
+            <span className="text-lg leading-snug">Start with your own words</span>
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            className="hidden"
+            onChange={(e) => {
+              void handlePhotoFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!!picked || startingWithPhoto}
+            className="flex min-h-16 items-center gap-3 rounded-lg border border-dashed border-muted px-4 py-3 text-left font-serif text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
+          >
+            {startingWithPhoto ? (
+              <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+            ) : (
+              <Camera className="size-4 shrink-0" aria-hidden />
+            )}
+            <span className="text-lg leading-snug">Start with a photo</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (picked) return;
+              setError(null);
+              setMode("quote");
+            }}
+            disabled={!!picked}
+            className="flex min-h-16 items-center gap-3 rounded-lg border border-dashed border-muted px-4 py-3 text-left font-serif text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
+          >
+            <MessageSquareQuote className="size-4 shrink-0" aria-hidden />
+            <span className="text-lg leading-snug">Save a quote</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (picked) return;
+              setError(null);
+              setMode("recap");
+            }}
+            disabled={!!picked}
+            className="flex min-h-16 items-center gap-3 rounded-lg border border-dashed border-muted px-4 py-3 text-left font-serif text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
+          >
+            <FileText className="size-4 shrink-0" aria-hidden />
+            <span className="text-lg leading-snug">Paste a chatbot recap</span>
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -381,63 +512,6 @@ export function OpeningPicker({
           {error}
         </div>
       )}
-
-      <div className="mt-10">
-        {candidates.length === 0 && !loading && error ? (
-          <button
-            type="button"
-            onClick={() => void fetchCandidates("/journal/api/opening-candidates")}
-            className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-          >
-            try again
-          </button>
-        ) : (
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-            <button
-              type="button"
-              onClick={handleReroll}
-              disabled={loading}
-              className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-40 disabled:hover:no-underline"
-            >
-              {loading
-                ? "thinking…"
-                : candidates.length === 1
-                  ? "show me a different one"
-                  : "show me a different set"}
-            </button>
-            {questionTypeNames.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <button
-                      type="button"
-                      disabled={loading}
-                      className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-40 disabled:hover:no-underline"
-                    />
-                  }
-                >
-                  ask about something specific…
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  side="top"
-                  align="start"
-                  className="max-h-72 w-56 overflow-y-auto"
-                >
-                  {questionTypeNames.map((name) => (
-                    <DropdownMenuItem
-                      key={name}
-                      onClick={() => handleAskSpecific(name)}
-                      className="font-serif"
-                    >
-                      {typeLabel(name)}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
