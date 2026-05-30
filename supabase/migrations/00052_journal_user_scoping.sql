@@ -19,7 +19,6 @@ ALTER TABLE journal_calendar_sources ADD COLUMN user_id uuid REFERENCES auth.use
 ALTER TABLE journal_entries          ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE journal_question_types   ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
 ALTER TABLE journal_settings         ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
-ALTER TABLE journal_pending_photos   ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
 -- Child tables (denormalized copy of the parent entry's owner, mirroring the
 -- storage-bucket {auth.uid()}/... convention so RLS is a simple column check):
 ALTER TABLE journal_messages           ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
@@ -49,7 +48,6 @@ BEGIN
     DELETE FROM journal_memory_proposals    WHERE user_id IS NULL;
     DELETE FROM journal_skipped_questions   WHERE user_id IS NULL;
     DELETE FROM journal_profile_suggestions WHERE user_id IS NULL;
-    DELETE FROM journal_pending_photos      WHERE user_id IS NULL;
     DELETE FROM journal_entries             WHERE user_id IS NULL;
     DELETE FROM journal_agent_files         WHERE user_id IS NULL;
     DELETE FROM journal_question_types      WHERE user_id IS NULL;
@@ -61,7 +59,6 @@ BEGIN
     UPDATE journal_entries           SET user_id = owner_id WHERE user_id IS NULL;
     UPDATE journal_question_types    SET user_id = owner_id WHERE user_id IS NULL;
     UPDATE journal_settings          SET user_id = owner_id WHERE user_id IS NULL;
-    UPDATE journal_pending_photos    SET user_id = owner_id WHERE user_id IS NULL;
     UPDATE journal_messages           SET user_id = owner_id WHERE user_id IS NULL;
     UPDATE journal_entry_photos       SET user_id = owner_id WHERE user_id IS NULL;
     UPDATE journal_memory_proposals   SET user_id = owner_id WHERE user_id IS NULL;
@@ -78,7 +75,6 @@ ALTER TABLE journal_calendar_sources  ALTER COLUMN user_id SET NOT NULL;
 ALTER TABLE journal_entries           ALTER COLUMN user_id SET NOT NULL;
 ALTER TABLE journal_question_types    ALTER COLUMN user_id SET NOT NULL;
 ALTER TABLE journal_settings          ALTER COLUMN user_id SET NOT NULL;
-ALTER TABLE journal_pending_photos    ALTER COLUMN user_id SET NOT NULL;
 ALTER TABLE journal_messages           ALTER COLUMN user_id SET NOT NULL;
 ALTER TABLE journal_entry_photos       ALTER COLUMN user_id SET NOT NULL;
 ALTER TABLE journal_memory_proposals   ALTER COLUMN user_id SET NOT NULL;
@@ -130,10 +126,6 @@ CREATE POLICY "Own rows" ON journal_question_types FOR ALL
 
 DROP POLICY "Authenticated access" ON journal_settings;
 CREATE POLICY "Own rows" ON journal_settings FOR ALL
-  USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
-
-DROP POLICY "Authenticated access" ON journal_pending_photos;
-CREATE POLICY "Own rows" ON journal_pending_photos FOR ALL
   USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 
 DROP POLICY "Authenticated access" ON journal_messages;
