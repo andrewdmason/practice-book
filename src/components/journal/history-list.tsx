@@ -76,8 +76,11 @@ export function HistoryList({
                   {formatDate(e.entry_date)}
                 </span>
                 {e.status === "open" && (
-                  <span className="font-serif text-[10px] uppercase tracking-wider text-muted-foreground">
-                    open
+                  <span
+                    title="This post has not been finished or shared."
+                    className="rounded-full border border-yellow-300 bg-yellow-100 px-2 py-0.5 font-serif text-[10px] uppercase tracking-wider text-yellow-900"
+                  >
+                    draft
                   </span>
                 )}
                 {mode === "mine" &&
@@ -194,7 +197,7 @@ function displayTitle(e: JournalEntry): string {
   if (e.title && e.title.trim().length > 0) return e.title;
   if (e.summary && e.summary.trim().length > 0) return e.summary;
   if (e.opening_question && e.opening_question.trim().length > 0) return e.opening_question;
-  if (e.status === "open") return "in progress";
+  if (e.status === "open") return "draft";
   return "untitled";
 }
 

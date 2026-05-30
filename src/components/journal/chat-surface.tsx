@@ -2,18 +2,27 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Check, CheckCircle2, Lock, Send, Users } from "lucide-react";
 import { TypingIndicator } from "@/components/journal/typing-indicator";
 import {
   appendUserMessage,
   closeEntry,
   deleteLatestQuestion,
   reopenEntry,
+  setEntryVisibility,
 } from "@/app/(journal)/journal/actions";
 import {
   TIMER_DONE_COLOR,
   useJournalTimer,
 } from "@/components/journal/timer-context";
-import { VisibilityToggle } from "@/components/journal/visibility-toggle";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { JournalMessageRole, JournalVisibility } from "@/lib/types";
 
 type Msg = { role: JournalMessageRole; content: string };
@@ -29,8 +38,7 @@ export function ChatSurface({
 }: {
   entryId: string;
   initialStatus: "open" | "closed";
-  /** The entry's current visibility — surfaces the Private/Family toggle while
-   * writing (today mode), so it's never a hidden setting. */
+  /** The entry's current visibility, used to seed the finish-post choice. */
   initialVisibility?: JournalVisibility;
   initialMessages: Msg[];
   /**
@@ -57,6 +65,10 @@ export function ChatSurface({
   const [closing, setClosing] = useState(false);
   const [status, setStatus] = useState<"open" | "closed">(initialStatus);
   const [error, setError] = useState<string | null>(null);
+  const [hasUnsentReply, setHasUnsentReply] = useState(false);
+  const [finishDialogOpen, setFinishDialogOpen] = useState(false);
+  const [selectedVisibility, setSelectedVisibility] =
+    useState<JournalVisibility>(initialVisibility);
 
   const router = useRouter();
   const { begin: beginTimer, stop: stopTimer, done: timerDone } = useJournalTimer();
@@ -232,17 +244,19 @@ export function ChatSurface({
   // Closing flips the entry to "closed" right away, then kicks off the wrap
   // pass (summary/title/pull_quote) in the background and hands off to the
   // journal list, where the entry appears with its AI fields generating.
-  async function handleClose() {
+  async function handleClose(visibility: JournalVisibility) {
     if (closing || streaming || messages.length === 0) return;
     setClosing(true);
     setError(null);
     try {
+      await setEntryVisibility(entryId, visibility);
       await closeEntry(entryId);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setClosing(false);
       return;
     }
+    setFinishDialogOpen(false);
     // Fire-and-forget: the wrap writes summary/title to the DB on its own. We
     // navigate away without waiting; the list polls until the fields land.
     void fetch("/journal/api/close", {
@@ -267,15 +281,31 @@ export function ChatSurface({
   }
 
   const isHistoryClosed = status === "closed" && viewMode === "history";
+  const showWritingControls = !readOnly && !isHistoryClosed;
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6 pb-24 pt-12">
-      {viewMode === "today" && !readOnly && (
-        <div className="mb-8">
-          <VisibilityToggle
-            entryId={entryId}
-            initialVisibility={initialVisibility}
-            status={status}
+      {showWritingControls && (
+        <div className="mb-8 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setFinishDialogOpen(true)}
+            disabled={closing || streaming || messages.length === 0}
+            className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-border bg-background px-3 font-serif text-sm text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground disabled:opacity-40"
+          >
+            <CheckCircle2 className="h-4 w-4" aria-hidden />
+            {closing ? "Wrapping..." : "Finish post"}
+          </button>
+          <FinishPostDialog
+            open={finishDialogOpen}
+            onOpenChange={(open) => {
+              if (!closing) setFinishDialogOpen(open);
+            }}
+            selectedVisibility={selectedVisibility}
+            onSelectedVisibilityChange={setSelectedVisibility}
+            hasUnsentReply={hasUnsentReply}
+            closing={closing}
+            onFinish={() => void handleClose(selectedVisibility)}
           />
         </div>
       )}
@@ -382,16 +412,8 @@ export function ChatSurface({
                 : "type a reply…"
           }
           onSubmit={handleSubmit}
-        >
-          <button
-            type="button"
-            onClick={handleClose}
-            disabled={closing || streaming || messages.length === 0}
-            className="font-serif text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-40 disabled:hover:no-underline"
-          >
-            {closing ? "wrapping…" : "done for today"}
-          </button>
-        </ReplyBox>
+          onDraftPresenceChange={setHasUnsentReply}
+        />
       )}
     </div>
   );
@@ -408,17 +430,18 @@ function ReplyBox({
   streaming,
   placeholder,
   onSubmit,
-  children,
+  onDraftPresenceChange,
 }: {
   active: boolean;
   disabled: boolean;
   streaming: boolean;
   placeholder: string;
   onSubmit: (text: string) => void;
-  children: React.ReactNode;
+  onDraftPresenceChange: (hasDraft: boolean) => void;
 }) {
   const [draft, setDraft] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const hasDraft = draft.trim().length > 0;
 
   // Auto-grow textarea
   useEffect(() => {
@@ -438,7 +461,13 @@ function ReplyBox({
     const text = draft.trim();
     if (!text || disabled) return;
     setDraft("");
+    onDraftPresenceChange(false);
     onSubmit(text);
+  }
+
+  function updateDraft(next: string) {
+    setDraft(next);
+    onDraftPresenceChange(next.trim().length > 0);
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -453,18 +482,153 @@ function ReplyBox({
       <textarea
         ref={textareaRef}
         value={draft}
-        onChange={(e) => setDraft(e.target.value)}
+        onChange={(e) => updateDraft(e.target.value)}
         onKeyDown={onKeyDown}
         disabled={disabled}
         rows={1}
         placeholder={placeholder}
-        className="w-full resize-none overflow-hidden border-0 bg-transparent font-serif text-lg leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none"
+        className="min-h-10 w-full resize-none overflow-hidden border-0 bg-transparent py-1 font-serif text-lg leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-60"
       />
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{streaming ? "" : draft.trim() ? "⌘+enter to send · enter for newline" : ""}</span>
-        {children}
+      <div className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2">
+        <button
+          type="button"
+          onClick={submit}
+          disabled={disabled || !hasDraft}
+          className="inline-flex h-10 shrink-0 items-center gap-2 rounded-md bg-foreground px-4 font-serif text-sm text-background transition-opacity hover:opacity-90 disabled:cursor-default disabled:opacity-30"
+        >
+          <Send className="h-4 w-4" aria-hidden />
+          Send
+        </button>
+        <span className="text-xs text-muted-foreground">
+          {streaming ? "" : hasDraft ? "⌘+enter to send · enter for newline" : ""}
+        </span>
       </div>
     </div>
+  );
+}
+
+function FinishPostDialog({
+  open,
+  onOpenChange,
+  selectedVisibility,
+  onSelectedVisibilityChange,
+  hasUnsentReply,
+  closing,
+  onFinish,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  selectedVisibility: JournalVisibility;
+  onSelectedVisibilityChange: (visibility: JournalVisibility) => void;
+  hasUnsentReply: boolean;
+  closing: boolean;
+  onFinish: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="font-serif text-xl font-normal">
+            Finish post
+          </DialogTitle>
+          <DialogDescription className="font-serif">
+            Choose who can read this post before it goes into your journal.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-2">
+          <VisibilityChoice
+            active={selectedVisibility === "private"}
+            icon={<Lock className="size-4" />}
+            title="Keep personal"
+            description="Only you can read it."
+            onClick={() => onSelectedVisibilityChange("private")}
+          />
+          <VisibilityChoice
+            active={selectedVisibility === "family"}
+            icon={<Users className="size-4" />}
+            title="Share with family"
+            description="Family members can read it after you finish."
+            onClick={() => onSelectedVisibilityChange("family")}
+          />
+        </div>
+
+        {hasUnsentReply && (
+          <p className="font-serif text-xs text-muted-foreground">
+            The text currently in the reply box has not been sent and will not be
+            included.
+          </p>
+        )}
+
+        <DialogFooter>
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            disabled={closing}
+            className="inline-flex h-9 items-center justify-center rounded-md px-3 font-serif text-sm text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onFinish}
+            disabled={closing}
+            className="inline-flex h-9 items-center justify-center rounded-md bg-foreground px-4 font-serif text-sm text-background transition-opacity hover:opacity-90 disabled:opacity-40"
+          >
+            {closing ? "Finishing..." : "Finish post"}
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function VisibilityChoice({
+  active,
+  icon,
+  title,
+  description,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={
+        "flex w-full items-center gap-3 rounded-md border p-3 text-left transition-colors " +
+        (active
+          ? "border-foreground/30 bg-foreground text-background"
+          : "border-border hover:border-foreground/25 hover:bg-muted/40")
+      }
+    >
+      <span
+        className={
+          "flex size-8 shrink-0 items-center justify-center rounded-full " +
+          (active ? "bg-background/15" : "bg-muted text-muted-foreground")
+        }
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-serif text-sm">{title}</span>
+        <span
+          className={
+            "block text-xs " +
+            (active ? "text-background/70" : "text-muted-foreground")
+          }
+        >
+          {description}
+        </span>
+      </span>
+      {active && <Check className="size-4 shrink-0" aria-hidden />}
+    </button>
   );
 }
 
