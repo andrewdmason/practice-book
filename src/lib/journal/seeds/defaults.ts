@@ -77,7 +77,7 @@ export type BuiltinQuestionType = {
 /**
  * The built-in question types. The first 13 mirror migration 00047; the next 4
  * (added in 00055) are playful/concrete types that shine for kids; the next
- * (added in 00056) invites reminiscing about the past; the last (added in 00057)
+ * (added in 00056) invites reminiscing about the past; the last (added in 00058)
  * weaves in what another family member has shared. Their weight here is the
  * *adult* default — the four kid types default to 0 (off), and the age templates
  * turn them on with an age-appropriate mix.

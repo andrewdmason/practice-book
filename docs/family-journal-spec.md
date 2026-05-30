@@ -109,7 +109,7 @@ CREATE INDEX idx_journal_entries_family ON journal_entries (entry_date DESC, cre
 - The owner gets no special read beyond what any member sees (raw DB access remains acceptable/out of scope, per phase 1).
 - Kids use the same model. Whether young kids should have a guardian review step before sharing is an explicit **open question**, not a default.
 
-## Decisions (resolved, built in 00057 + the phase-2 PR)
+## Decisions (resolved, built in 00058 + the phase-2 PR)
 
 1. **Feed depth = full transcript.** Opening another member's shared entry shows the whole back-and-forth, not just the summary. This required the `journal_messages` **and** `journal_entry_photos` read seams, plus a `storage.objects` SELECT seam for the photo *files* — all gated on `visibility = 'family' AND status = 'closed'`.
 2. **Interviewer depth = summary-level.** The `family-followup` type pulls only the other member's title + summary + pull_quote into the prompt (the feed itself shows the full transcript).
