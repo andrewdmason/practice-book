@@ -414,7 +414,6 @@ async function generateImageBytes({
         quality: "medium",
         output_format: "png",
         background: "opaque",
-        input_fidelity: "low",
         user: userId,
       })
     : await client.images.generate({
