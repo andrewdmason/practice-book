@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Play, Plus, X } from "lucide-react";
 import type { JournalMediaType } from "@/lib/types";
 import {
   createSignedPhotoUrl,
   deleteEntryPhoto,
-  updatePhotoCaption,
 } from "@/app/(journal)/journal/actions";
 import {
   MAX_UPLOAD_BYTES,
@@ -20,7 +19,6 @@ type Media = {
   mediaType: JournalMediaType;
   displayUrl: string;
   videoUrl: string | null;
-  caption: string | null;
 };
 type Pending = { tempId: string; previewUrl: string; mediaType: JournalMediaType };
 
@@ -71,10 +69,7 @@ export function JournalPhotoGallery({
         const videoUrl = isVideo
           ? await createSignedPhotoUrl(originalPath)
           : null;
-        setMedia((ms) => [
-          ...ms,
-          { id, mediaType, displayUrl, videoUrl, caption: null },
-        ]);
+        setMedia((ms) => [...ms, { id, mediaType, displayUrl, videoUrl }]);
       } catch (e) {
         setError(
           e instanceof Error
@@ -265,14 +260,9 @@ export function JournalPhotoGallery({
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={lightbox.displayUrl}
-                alt={lightbox.caption ?? ""}
+                alt=""
                 className="max-h-[85vh] max-w-full rounded-lg object-contain"
               />
-            )}
-            {lightbox.caption && (
-              <figcaption className="font-serif text-sm text-white/70">
-                {lightbox.caption}
-              </figcaption>
             )}
           </figure>
         </div>
@@ -292,18 +282,6 @@ function MediaCard({
   onDelete: () => void;
   onOpen: () => void;
 }) {
-  const [caption, setCaption] = useState(media.caption ?? "");
-  const [savedCaption, setSavedCaption] = useState(media.caption ?? "");
-  const [, startTransition] = useTransition();
-
-  const saveCaption = () => {
-    if (caption === savedCaption) return;
-    setSavedCaption(caption);
-    startTransition(async () => {
-      await updatePhotoCaption(media.id, caption);
-    });
-  };
-
   return (
     <figure className="group/photo flex w-28 flex-col gap-1">
       <div className="relative h-28 w-28 overflow-hidden rounded-md border border-border">
@@ -316,7 +294,7 @@ function MediaCard({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={media.displayUrl}
-            alt={media.caption ?? ""}
+            alt=""
             className="h-full w-full object-cover"
           />
           {media.mediaType === "video" && (
@@ -340,21 +318,6 @@ function MediaCard({
           </button>
         )}
       </div>
-      {editable ? (
-        <input
-          value={caption}
-          onChange={(e) => setCaption(e.target.value)}
-          onBlur={saveCaption}
-          placeholder="Add a caption…"
-          className="w-full bg-transparent font-serif text-xs text-muted-foreground placeholder:text-muted-foreground/50 focus:text-foreground focus:outline-none"
-        />
-      ) : (
-        media.caption && (
-          <figcaption className="font-serif text-xs text-muted-foreground">
-            {media.caption}
-          </figcaption>
-        )
-      )}
     </figure>
   );
 }
