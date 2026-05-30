@@ -5,7 +5,7 @@ import type { JournalEntryType } from "@/lib/types";
 
 const PHOTOS_BUCKET = "journal-photos";
 const MEMBER_PHOTOS_BUCKET = "member-photos";
-const IMAGE_SIZE = "1024x1024";
+const IMAGE_SIZE = "1536x1024";
 const PROMPT_TEXT_LIMIT = 5000;
 const ART_STYLES = [
   {
@@ -149,6 +149,7 @@ export async function maybeAutoGenerateEntryPhoto(
   return runEntryPhotoGeneration(entryId, {
     mode: "auto",
     attachOnSuccess: true,
+    skipAttachIfEntryHasMedia: true,
   });
 }
 
@@ -157,7 +158,12 @@ export async function runEntryPhotoGeneration(
   {
     mode,
     attachOnSuccess,
-  }: { mode: GenerationMode; attachOnSuccess: boolean }
+    skipAttachIfEntryHasMedia = false,
+  }: {
+    mode: GenerationMode;
+    attachOnSuccess: boolean;
+    skipAttachIfEntryHasMedia?: boolean;
+  }
 ): Promise<GeneratedPhotoResult> {
   const admin = createAdminClient();
   const { data: entry, error: entryErr } = await admin
@@ -236,27 +242,29 @@ export async function runEntryPhotoGeneration(
       };
     }
 
-    const { count: latestPhotoCount } = await admin
-      .from("journal_entry_photos")
-      .select("id", { count: "exact", head: true })
-      .eq("entry_id", entryId);
-    if ((latestPhotoCount ?? 0) > 0) {
-      await admin.storage.from(PHOTOS_BUCKET).remove([storagePath]);
-      await admin
-        .from("journal_image_generations")
-        .update({
+    if (skipAttachIfEntryHasMedia) {
+      const { count: latestPhotoCount } = await admin
+        .from("journal_entry_photos")
+        .select("id", { count: "exact", head: true })
+        .eq("entry_id", entryId);
+      if ((latestPhotoCount ?? 0) > 0) {
+        await admin.storage.from(PHOTOS_BUCKET).remove([storagePath]);
+        await admin
+          .from("journal_image_generations")
+          .update({
+            status: "skipped",
+            error: "Entry already has media attached.",
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", generationId);
+        return {
+          ok: true,
+          generationId,
           status: "skipped",
-          error: "Entry already has media attached.",
-          completed_at: new Date().toISOString(),
-        })
-        .eq("id", generationId);
-      return {
-        ok: true,
-        generationId,
-        status: "skipped",
-        displayPath: null,
-        attachedPhotoId: null,
-      };
+          displayPath: null,
+          attachedPhotoId: null,
+        };
+      }
     }
 
     const { data: photo, error: attachErr } = await admin
@@ -265,6 +273,7 @@ export async function runEntryPhotoGeneration(
         entry_id: entryId,
         user_id: entryRow.user_id,
         media_type: "photo",
+        source: "ai_generated",
         original_path: storagePath,
         display_path: storagePath,
       })

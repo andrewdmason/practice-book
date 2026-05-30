@@ -1,15 +1,17 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChatSurface } from "@/components/journal/chat-surface";
+import { EntryOwnerMenuItems } from "@/components/journal/entry-owner-menu-items";
 import { EntryTitle } from "@/components/journal/entry-title";
 import { QuoteEntryView } from "@/components/journal/quote-entry-view";
 import { RecapEntryView } from "@/components/journal/recap-entry-view";
-import { GeneratedPhotoPanel } from "@/components/journal/generated-photo-panel";
 import { JournalPhotoGallery } from "@/components/journal/journal-photo-gallery";
-import { VisibilityToggle } from "@/components/journal/visibility-toggle";
 import { createClient } from "@/lib/supabase/server";
 import { requireUserId } from "@/lib/journal/auth";
-import { getEntryPhotos } from "@/app/(journal)/journal/actions";
+import {
+  getEntriesImageGenerationStates,
+  getEntryPhotos,
+} from "@/app/(journal)/journal/actions";
 import type { JournalEntry, JournalMessage } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -59,9 +61,29 @@ export default async function EntryPage({
     content: m.content,
   }));
 
-  const photos = await getEntryPhotos(entry.id);
+  const [photos, imageGenerationByEntry] = await Promise.all([
+    getEntryPhotos(entry.id),
+    getEntriesImageGenerationStates([entry.id]),
+  ]);
+  const photoGenerationStatus = imageGenerationByEntry[entry.id] ?? null;
   const isQuote = entry.entry_type === "quote";
   const isRecap = entry.entry_type === "recap";
+  const menuActions = isAuthor ? (
+    <EntryOwnerMenuItems
+      entryId={entry.id}
+      initialVisibility={entry.visibility}
+    />
+  ) : null;
+  const mediaViewer = (
+    <JournalPhotoGallery
+      entryId={entry.id}
+      initialPhotos={photos}
+      editable={isAuthor}
+      showAttachAction={false}
+      photoGenerationStatus={photoGenerationStatus}
+      containerClassName="pt-6"
+    />
+  );
 
   return (
     <div className="flex flex-1 flex-col">
@@ -88,6 +110,8 @@ export default async function EntryPage({
             quote={entry.pull_quote ?? ""}
             attribution={entry.quote_attribution}
             readOnly={!isAuthor}
+            afterTitle={mediaViewer}
+            menuActions={menuActions}
           />
         ) : isRecap ? (
           <RecapEntryView
@@ -95,28 +119,19 @@ export default async function EntryPage({
             title={entry.title?.trim() || "Untitled"}
             body={entry.recap_body ?? ""}
             readOnly={!isAuthor}
+            afterTitle={mediaViewer}
+            menuActions={menuActions}
           />
         ) : (
           <EntryTitle
             entryId={entry.id}
             title={entry.title?.trim() || "Untitled"}
             readOnly={!isAuthor}
-          />
-        )}
-        {isAuthor && (
-          <VisibilityToggle
-            entryId={entry.id}
-            initialVisibility={entry.visibility}
-            status={entry.status}
+            afterTitle={mediaViewer}
+            menuActions={menuActions}
           />
         )}
       </div>
-      <JournalPhotoGallery
-        entryId={entry.id}
-        initialPhotos={photos}
-        editable={isAuthor}
-      />
-      {isAuthor && <GeneratedPhotoPanel entryId={entry.id} />}
       {/* Only standard entries have a conversation — no transcript or reply
           box for quote and recap entries. */}
       {entry.entry_type === "standard" && (
