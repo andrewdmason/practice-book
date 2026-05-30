@@ -8,6 +8,7 @@ import type { JournalEntry, JournalMediaType } from "@/lib/types";
 
 type HistoryEntry = JournalEntry & {
   photos: { id: string; displayUrl: string; mediaType: JournalMediaType }[];
+  authorName?: string | null;
 };
 
 // A just-closed entry whose wrap pass (title/summary/pull_quote) hasn't landed
@@ -23,7 +24,17 @@ function isGenerating(e: JournalEntry): boolean {
   return Date.now() - Date.parse(e.closed_at) < 60_000;
 }
 
-export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
+export function HistoryList({
+  entries,
+  mode = "mine",
+  emptyMessage = "No entries yet.",
+}: {
+  entries: HistoryEntry[];
+  /** "mine" shows a "shared" badge on own family posts; "family" shows the
+   * author's name on every card. */
+  mode?: "mine" | "family";
+  emptyMessage?: string;
+}) {
   const router = useRouter();
 
   // While any entry is mid-wrap, poll the server until its AI fields land.
@@ -35,9 +46,7 @@ export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
 
   if (entries.length === 0) {
     return (
-      <p className="font-serif text-muted-foreground italic">
-        No entries yet.
-      </p>
+      <p className="font-serif text-muted-foreground italic">{emptyMessage}</p>
     );
   }
 
@@ -52,11 +61,23 @@ export function HistoryList({ entries }: { entries: HistoryEntry[] }) {
                 <span className="font-serif text-xs text-muted-foreground tabular-nums">
                   {formatDate(e.entry_date)}
                 </span>
+                {mode === "family" && e.authorName && (
+                  <span className="font-serif text-xs text-muted-foreground">
+                    {e.authorName}
+                  </span>
+                )}
                 {e.status === "open" && (
                   <span className="font-serif text-[10px] uppercase tracking-wider text-muted-foreground">
                     open
                   </span>
                 )}
+                {mode === "mine" &&
+                  e.visibility === "family" &&
+                  e.status === "closed" && (
+                    <span className="font-serif text-[10px] uppercase tracking-wider text-muted-foreground/80">
+                      shared to family
+                    </span>
+                  )}
               </div>
               {generating ? (
                 <p className="mt-2 font-serif text-2xl italic leading-tight text-muted-foreground/50 animate-pulse">

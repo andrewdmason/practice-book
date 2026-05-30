@@ -74,20 +74,21 @@ CREATE POLICY "Delete own" ON journal_messages FOR DELETE USING (user_id = auth.
 -- same shape for journal_entry_photos
 ```
 
-**Decision to make first:** does the family feed show the *full transcript* of another member's entry, or just the **summary / title / pull_quote / photos**? The intimate, recommended default is **summary-level** (title, pull_quote, photos, maybe the opening question) — richer than a headline, but it doesn't expose every word of someone's morning reflection to the whole family. If we go summary-level, the `journal_messages` seam above is **not needed yet** (only the photos seam is), which keeps the surface smaller. Pick this before writing the migration.
+**Decision (resolved): full transcript.** The family feed shows the whole back-and-forth of another member's shared entry, so both the `journal_messages` and `journal_entry_photos` seams above are needed, plus a `storage.objects` SELECT seam for the photo files. Every seam is gated on `visibility = 'family' AND status = 'closed'` so an in-progress entry with the toggle flipped to family doesn't expose its transcript before the author has finished. (Note: the family-aware *interviewer* still only consumes summary-level content — see below — so "full transcript in the feed" and "summary in the prompt" are intentionally different.)
 
 **Sharing timestamp (optional).** Family-feed ordering by `entry_date`/`created_at` is probably fine. If we want "most recently *shared*" ordering distinct from when the entry was written, add `shared_at timestamptz` set when visibility flips to `'family'`. Defer unless ordering feels wrong.
 
-**Index.** Partial index for the family feed query:
+**Index.** Partial index for the family feed query (ordered by `entry_date`, the
+feed's sort key, matching the Mine feed):
 ```sql
-CREATE INDEX idx_journal_entries_family ON journal_entries (created_at DESC)
-  WHERE visibility = 'family';
+CREATE INDEX idx_journal_entries_family ON journal_entries (entry_date DESC, created_at DESC)
+  WHERE visibility = 'family' AND status = 'closed';
 ```
 
 ### Feeds
 
 - **Mine** = today's `/journal` behavior (RLS already returns the caller's own rows; family ones included).
-- **Family** = `select … from journal_entries where visibility = 'family' order by created_at desc`, then join author names from `journal_members` (by `user_id`). RLS already permits the read.
+- **Family** = `select … from journal_entries where visibility = 'family' and status = 'closed' order by entry_date desc, created_at desc`, then join author names from `journal_members` (by `user_id`, now readable after widening its SELECT policy). **Mine** must add `.eq('user_id', me)` — the entries SELECT policy is "own OR family", so an unfiltered read would also return other members' shared entries.
 - Switcher state via a query param (`/journal?feed=family`) or a sub-route. Keep the existing list/card components; add an author line in family mode.
 - Files: `src/app/(journal)/journal/page.tsx` (list query), the journal list/card components, and a new visibility action alongside `src/app/(journal)/journal/actions.ts`.
 
@@ -108,15 +109,23 @@ CREATE INDEX idx_journal_entries_family ON journal_entries (created_at DESC)
 - The owner gets no special read beyond what any member sees (raw DB access remains acceptable/out of scope, per phase 1).
 - Kids use the same model. Whether young kids should have a guardian review step before sharing is an explicit **open question**, not a default.
 
-## Open questions
+## Decisions (resolved, built in 00057 + the phase-2 PR)
 
-1. **Feed depth:** summary-level (recommended) vs. full transcript for other members' family entries. Drives whether the `journal_messages` seam is needed now.
-2. **Interviewer depth:** should a family-followup question draw on another member's full entry or just its summary/quote? (Recommend summary/quote.)
-3. **Share timing:** only closed entries, or any entry? (Recommend closed.)
-4. **Quote entries** (`entry_type = 'quote'`): shareable to family too? (Probably yes — they're low-stakes and nice to share.)
-5. **Kids + sharing:** any guardian review before a young kid's post hits the family feed, or trust + un-share? (Default: trust; revisit.)
-6. **Un-share semantics:** if A shares then unshares, and B's interviewer already referenced it — fine (it just won't resurface). Confirm no audit needed.
-7. **Empty states:** family feed before anyone has shared; family-followup question type when there are no other-member family posts yet (it should no-op / fall back to another type in the sampler).
+1. **Feed depth = full transcript.** Opening another member's shared entry shows the whole back-and-forth, not just the summary. This required the `journal_messages` **and** `journal_entry_photos` read seams, plus a `storage.objects` SELECT seam for the photo *files* — all gated on `visibility = 'family' AND status = 'closed'`.
+2. **Interviewer depth = summary-level.** The `family-followup` type pulls only the other member's title + summary + pull_quote into the prompt (the feed itself shows the full transcript).
+3. **Share timing = closed only.** The family feed query is `visibility = 'family' AND status = 'closed'`. The toggle can be set on an open entry (it records intent and pre-fills from the question), but nothing surfaces until the entry is finished.
+4. **Shareable types = all** (standard, quote, recap). Quote/recap close on save, so they satisfy closed-only immediately.
+5. **Kids + sharing = same trust-based model**, no guardian-review gate (un-share if needed). Out of scope for this PR.
+6. **Un-share = no audit log.** Flipping `family → private` drops the post from the feed and re-restricts its children immediately via RLS.
+7. **Empty states:** the Family feed shows "Nothing shared with the family yet."; `family-followup` is dropped from the sampler pool entirely when no other member has shared anything (so it can't be picked with nothing to reference).
+
+### Decisions added during the build (not in the original spec)
+
+- **Visibility is a per-post toggle**, set at creation and editable anytime (`VisibilityToggle` on `/journal/[id]`; `setEntryVisibility` action). A "shared to family" badge marks own shared posts in the Mine feed.
+- **Question-suggested default = per generated question.** The `propose_questions` tool now returns a `visibility` per candidate; picking that question pre-sets the entry's toggle (`pickOpeningQuestion`). `family-followup` questions are always `family`. Freeform/quote/recap default `private`.
+- **Author attribution required widening `journal_members` SELECT** to all authenticated members (it was own-row only) so the feed can read other members' names.
+- **The Mine query must filter `.eq('user_id', me)`** — the entries SELECT policy is "own OR family", so an unfiltered read would pull in other members' shared entries.
+- **Another member's shared entry renders read-only** (title/quote/recap/photos/transcript) — you only ever control your own posts. Implemented via `readOnly` props on `EntryTitle`, `QuoteEntryView`, `RecapEntryView`, `ChatSurface`, and `editable={false}` on the photo gallery.
 
 ## Verification plan
 

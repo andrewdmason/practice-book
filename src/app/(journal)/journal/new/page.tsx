@@ -70,6 +70,7 @@ export default async function NewEntryPage({
         <ChatSurface
           entryId={entry.id}
           initialStatus={entry.status}
+          initialVisibility={entry.visibility}
           initialMessages={messages}
           timerStartedAt={timerStartedAt}
         />

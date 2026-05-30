@@ -5,7 +5,9 @@ import { EntryTitle } from "@/components/journal/entry-title";
 import { QuoteEntryView } from "@/components/journal/quote-entry-view";
 import { RecapEntryView } from "@/components/journal/recap-entry-view";
 import { JournalPhotoGallery } from "@/components/journal/journal-photo-gallery";
+import { VisibilityToggle } from "@/components/journal/visibility-toggle";
 import { createClient } from "@/lib/supabase/server";
+import { requireUserId } from "@/lib/journal/auth";
 import { getEntryPhotos } from "@/app/(journal)/journal/actions";
 import type { JournalEntry, JournalMessage } from "@/lib/types";
 
@@ -18,17 +20,32 @@ export default async function EntryPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
+  const userId = await requireUserId(supabase);
 
   const { data: entryRow } = await supabase
     .from("journal_entries")
     .select(
-      "id, entry_date, status, entry_type, opening_question, summary, title, pull_quote, quote_attribution, recap_body, summary_stale, closed_at, created_at, updated_at"
+      "id, entry_date, user_id, status, entry_type, visibility, opening_question, summary, title, pull_quote, quote_attribution, recap_body, summary_stale, closed_at, created_at, updated_at"
     )
     .eq("id", id)
     .maybeSingle();
 
   if (!entryRow) notFound();
   const entry = entryRow as JournalEntry;
+
+  // You only ever control your own posts. A family member viewing someone
+  // else's shared entry sees it read-only, with author attribution.
+  const isAuthor = entry.user_id === userId;
+  let authorName: string | null = null;
+  if (!isAuthor) {
+    const { data: member } = await supabase
+      .from("journal_members")
+      .select("name, email")
+      .eq("user_id", entry.user_id)
+      .maybeSingle();
+    authorName =
+      member?.name?.trim() || (member?.email as string | undefined) || "A family member";
+  }
 
   const { data: msgs } = await supabase
     .from("journal_messages")
@@ -49,37 +66,54 @@ export default async function EntryPage({
     <div className="flex flex-1 flex-col">
       <div className="mx-auto w-full max-w-2xl px-6 pt-8">
         <Link
-          href="/journal"
+          href={isAuthor ? "/journal" : "/journal?feed=family"}
           className="font-serif text-xs text-muted-foreground hover:text-foreground"
         >
           ← journal
         </Link>
-        <p className="mt-6 font-serif text-sm text-muted-foreground tabular-nums">
-          {formatDate(entry.entry_date)}
-        </p>
+        <div className="mt-6 flex items-baseline gap-3">
+          <p className="font-serif text-sm text-muted-foreground tabular-nums">
+            {formatDate(entry.entry_date)}
+          </p>
+          {!isAuthor && authorName && (
+            <p className="font-serif text-sm text-muted-foreground">
+              {authorName}
+            </p>
+          )}
+        </div>
         {isQuote ? (
           <QuoteEntryView
             entryId={entry.id}
             quote={entry.pull_quote ?? ""}
             attribution={entry.quote_attribution}
+            readOnly={!isAuthor}
           />
         ) : isRecap ? (
           <RecapEntryView
             entryId={entry.id}
             title={entry.title?.trim() || "Untitled"}
             body={entry.recap_body ?? ""}
+            readOnly={!isAuthor}
           />
         ) : (
           <EntryTitle
             entryId={entry.id}
             title={entry.title?.trim() || "Untitled"}
+            readOnly={!isAuthor}
+          />
+        )}
+        {isAuthor && (
+          <VisibilityToggle
+            entryId={entry.id}
+            initialVisibility={entry.visibility}
+            status={entry.status}
           />
         )}
       </div>
       <JournalPhotoGallery
         entryId={entry.id}
         initialPhotos={photos}
-        editable
+        editable={isAuthor}
       />
       {/* Only standard entries have a conversation — no transcript or reply
           box for quote and recap entries. */}
@@ -89,6 +123,7 @@ export default async function EntryPage({
           initialStatus={entry.status}
           initialMessages={messages}
           viewMode="history"
+          readOnly={!isAuthor}
         />
       )}
     </div>

@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed:photos": "node supabase/seed-journal-photos.mjs"
+    "seed:photos": "node supabase/seed-journal-photos.mjs",
+    "seed:family": "node supabase/seed-family.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

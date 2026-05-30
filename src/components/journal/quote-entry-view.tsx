@@ -27,10 +27,13 @@ export function QuoteEntryView({
   entryId,
   quote,
   attribution,
+  readOnly = false,
 }: {
   entryId: string;
   quote: string;
   attribution: string | null;
+  /** A family member viewing someone else's shared quote: no edit/delete. */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -61,6 +64,23 @@ export function QuoteEntryView({
     setAttributionText(attribution ?? "");
     setError(null);
     setEditing(false);
+  }
+
+  if (readOnly) {
+    return (
+      <div className="mt-6">
+        <blockquote className="font-serif text-3xl leading-snug text-foreground">
+          <span className="mr-1 text-muted-foreground/50">“</span>
+          {quote}
+          <span className="ml-0.5 text-muted-foreground/50">”</span>
+        </blockquote>
+        {attribution && (
+          <p className="mt-4 font-serif text-base italic leading-relaxed text-muted-foreground">
+            {attribution}
+          </p>
+        )}
+      </div>
+    );
   }
 
   if (editing) {

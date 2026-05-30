@@ -25,14 +25,26 @@ import { Button } from "@/components/ui/button";
 export function EntryTitle({
   entryId,
   title,
+  readOnly = false,
 }: {
   entryId: string;
   title: string;
+  /** A family member viewing someone else's shared entry: title only, no edit
+   * or delete affordances. */
+  readOnly?: boolean;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [isRegenerating, startRegenerate] = useTransition();
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
+
+  if (readOnly) {
+    return (
+      <h1 className="mt-2 font-serif text-3xl leading-tight text-foreground">
+        {title}
+      </h1>
+    );
+  }
 
   return (
     <div className="mt-2">
