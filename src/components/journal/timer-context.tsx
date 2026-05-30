@@ -25,10 +25,10 @@ type Ctx = {
 const JournalTimerContext = createContext<Ctx | null>(null);
 
 /**
- * Holds the five-minute zen-timer state for the journal. Lives above the
- * header so the timer can render in the centered header (visible while
- * scrolled) while the chat surface drives when it starts and reads when it's
- * done — completion is the cue to stop asking follow-up questions.
+ * Holds the five-minute zen-timer state for the journal. The chat surface
+ * drives when it starts, renders its progress as the "Finish post" button's
+ * leading icon (a pie that fills, then settles into a checkmark), and reads
+ * when it's done — completion is the cue to stop asking follow-up questions.
  *
  * The timer is anchored to a wall-clock timestamp (the moment the entry's
  * opening question appeared) rather than counted from page load, so its

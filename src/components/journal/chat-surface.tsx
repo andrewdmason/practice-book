@@ -71,7 +71,13 @@ export function ChatSurface({
     useState<JournalVisibility>(initialVisibility);
 
   const router = useRouter();
-  const { begin: beginTimer, stop: stopTimer, done: timerDone } = useJournalTimer();
+  const {
+    begin: beginTimer,
+    stop: stopTimer,
+    done: timerDone,
+    running: timerRunning,
+    degrees: timerDegrees,
+  } = useJournalTimer();
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // Scroll to bottom on new content
@@ -280,7 +286,17 @@ export function ChatSurface({
             disabled={closing || streaming || messages.length === 0}
             className="inline-flex h-9 shrink-0 items-center gap-2 rounded-md border border-border bg-background px-3 font-serif text-sm text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground disabled:opacity-40"
           >
-            <CheckCircle2 className="h-4 w-4" aria-hidden />
+            {timerRunning && !timerDone ? (
+              <span
+                aria-hidden
+                className="h-4 w-4 rounded-full shadow-[0_0_0_1px_var(--muted)]"
+                style={{
+                  background: `conic-gradient(oklch(0.68 0.02 50) ${timerDegrees}deg, var(--muted) 0deg)`,
+                }}
+              />
+            ) : (
+              <CheckCircle2 className="h-4 w-4" aria-hidden />
+            )}
             {closing ? "Wrapping..." : "Finish post"}
           </button>
           <FinishPostDialog

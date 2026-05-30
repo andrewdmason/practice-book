@@ -4,7 +4,6 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Flame, Pencil, Plus, Settings, Star, Trophy } from "lucide-react";
-import { ZenTimer } from "@/components/journal/zen-timer";
 import {
   Tooltip,
   TooltipContent,
@@ -36,9 +35,6 @@ export function JournalHeaderClient({
               <Plus className="h-5 w-5" />
             </Link>
             <JournalStreakBadge streak={streak} />
-          </div>
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-            <ZenTimer />
           </div>
           <Link
             href="/settings"
