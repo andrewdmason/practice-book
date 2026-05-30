@@ -4,11 +4,14 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Play } from "lucide-react";
+import { MemberAvatar } from "@/components/journal/member-avatar";
+import { cn } from "@/lib/utils";
 import type { JournalEntry, JournalMediaType } from "@/lib/types";
 
 type HistoryEntry = JournalEntry & {
   photos: { id: string; displayUrl: string; mediaType: JournalMediaType }[];
   authorName?: string | null;
+  authorPhotoUrl?: string | null;
 };
 
 // A just-closed entry whose wrap pass (title/summary/pull_quote) hasn't landed
@@ -56,16 +59,21 @@ export function HistoryList({
         const generating = isGenerating(e);
         return (
           <li key={e.id}>
-            <Link href={`/journal/${e.id}`} className="block group">
+            <Link href={`/journal/${e.id}`} className="group block">
+              <div className="flex items-center gap-4">
+              {mode === "family" && (
+                <MemberAvatar
+                  name={e.authorName}
+                  url={e.authorPhotoUrl}
+                  size="lg"
+                  className="shrink-0 shadow-sm ring-1 ring-foreground/10 transition group-hover:ring-foreground/25"
+                />
+              )}
+              <div className="min-w-0 flex-1">
               <div className="flex items-baseline gap-3">
                 <span className="font-serif text-xs text-muted-foreground tabular-nums">
                   {formatDate(e.entry_date)}
                 </span>
-                {mode === "family" && e.authorName && (
-                  <span className="font-serif text-xs text-muted-foreground">
-                    {e.authorName}
-                  </span>
-                )}
                 {e.status === "open" && (
                   <span className="font-serif text-[10px] uppercase tracking-wider text-muted-foreground">
                     open
@@ -131,8 +139,15 @@ export function HistoryList({
                   )}
                 </>
               )}
+              </div>
+              </div>
               {e.photos.length > 0 && (
-                <div className="mt-4 flex gap-2">
+                <div
+                  className={cn(
+                    "mt-4 flex gap-2",
+                    mode === "family" && "pl-[60px]"
+                  )}
+                >
                   {e.photos.slice(0, 3).map((photo) => (
                     <div
                       key={photo.id}
