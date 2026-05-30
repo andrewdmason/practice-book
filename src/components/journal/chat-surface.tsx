@@ -13,19 +13,25 @@ import {
   TIMER_DONE_COLOR,
   useJournalTimer,
 } from "@/components/journal/timer-context";
-import type { JournalMessageRole } from "@/lib/types";
+import { VisibilityToggle } from "@/components/journal/visibility-toggle";
+import type { JournalMessageRole, JournalVisibility } from "@/lib/types";
 
 type Msg = { role: JournalMessageRole; content: string };
 
 export function ChatSurface({
   entryId,
   initialStatus,
+  initialVisibility = "private",
   initialMessages,
   viewMode = "today",
   timerStartedAt = null,
+  readOnly = false,
 }: {
   entryId: string;
   initialStatus: "open" | "closed";
+  /** The entry's current visibility — surfaces the Private/Family toggle while
+   * writing (today mode), so it's never a hidden setting. */
+  initialVisibility?: JournalVisibility;
   initialMessages: Msg[];
   /**
    * "today" — the in-progress entry flow at /journal/new.
@@ -39,6 +45,11 @@ export function ChatSurface({
    * survive refreshes and reopens.
    */
   timerStartedAt?: string | null;
+  /**
+   * A family member reading another member's shared entry: show the transcript
+   * only — no reply box, no reopen, no edit controls (writes are theirs alone).
+   */
+  readOnly?: boolean;
 }) {
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
   const [streaming, setStreaming] = useState(false);
@@ -259,6 +270,15 @@ export function ChatSurface({
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6 pb-24 pt-12">
+      {viewMode === "today" && !readOnly && (
+        <div className="mb-8">
+          <VisibilityToggle
+            entryId={entryId}
+            initialVisibility={initialVisibility}
+            status={status}
+          />
+        </div>
+      )}
       <div className="flex-1 space-y-6 font-serif text-lg leading-relaxed">
         {messages.map((m, i) => {
           const isLast = i === messages.length - 1;
@@ -339,7 +359,7 @@ export function ChatSurface({
         </div>
       )}
 
-      {isHistoryClosed ? (
+      {readOnly ? null : isHistoryClosed ? (
         <div className="mt-12">
           <button
             type="button"

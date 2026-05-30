@@ -9,14 +9,25 @@ export function normalizeCandidates(raw: unknown): JournalOpeningCandidate[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((c): JournalOpeningCandidate => {
-      if (typeof c === "string") return { text: c, type: null };
-      const obj = (c ?? {}) as { text?: unknown; type?: unknown };
+      if (typeof c === "string") return { text: c, type: null, visibility: "private" };
+      const obj = (c ?? {}) as { text?: unknown; type?: unknown; visibility?: unknown };
       return {
         text: typeof obj.text === "string" ? obj.text : "",
         type: typeof obj.type === "string" ? obj.type : null,
+        // Legacy rows (and any unexpected value) default to private — sharing is
+        // always an explicit, opt-in act.
+        visibility: obj.visibility === "family" ? "family" : "private",
       };
     })
     .filter((c) => c.text.length > 0);
+}
+
+/** Look up a candidate by its exact question text. */
+export function candidateByText(
+  raw: unknown,
+  text: string
+): JournalOpeningCandidate | undefined {
+  return normalizeCandidates(raw).find((c) => c.text === text);
 }
 
 /** Just the question texts, for skip/avoid lists. */

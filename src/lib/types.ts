@@ -392,12 +392,22 @@ export type JournalMember = {
   seeded_at: string | null;
 };
 
+/** Whether an entry is private to its author or shared to the whole family. */
+export type JournalVisibility = "private" | "family";
+
 /**
  * One proposed opening question. `type` is the kebab-case question-type name it
  * was generated for (e.g. "recent-calendar"), or null when it isn't tied to a
- * specific type. Persisted in `journal_entries.opening_candidates` (jsonb).
+ * specific type. `visibility` is the model's suggested default for the resulting
+ * entry — "family" for questions about shared/social moments, "private"
+ * otherwise — which pre-sets (but doesn't lock) the entry's visibility toggle.
+ * Persisted in `journal_entries.opening_candidates` (jsonb).
  */
-export type JournalOpeningCandidate = { text: string; type: string | null };
+export type JournalOpeningCandidate = {
+  text: string;
+  type: string | null;
+  visibility: JournalVisibility;
+};
 
 export type JournalEntryStatus = "open" | "closed";
 
@@ -414,8 +424,10 @@ export type JournalEntryType = "standard" | "quote" | "recap";
 export type JournalEntry = {
   id: string;
   entry_date: string; // YYYY-MM-DD
+  user_id: string;
   status: JournalEntryStatus;
   entry_type: JournalEntryType;
+  visibility: JournalVisibility;
   opening_question: string | null;
   opening_candidates: JournalOpeningCandidate[] | null;
   candidates_reroll_count: number;

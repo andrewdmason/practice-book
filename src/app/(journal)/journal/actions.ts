@@ -7,7 +7,7 @@ import { requireUserId } from "@/lib/journal/auth";
 import { todayLocal } from "@/lib/journal/today";
 import { runWrap } from "@/lib/journal/wrap";
 import { summarizeRecap } from "@/lib/journal/recap-summary";
-import { candidateTexts, normalizeCandidates } from "@/lib/journal/candidates";
+import { candidateByText, candidateTexts, normalizeCandidates } from "@/lib/journal/candidates";
 import { applyProfileDocChange } from "@/lib/journal/profile-suggestions";
 import type {
   JournalAgentFileName,
@@ -15,6 +15,7 @@ import type {
   JournalOpeningCandidate,
   JournalProfileSuggestion,
   JournalQuestionType,
+  JournalVisibility,
 } from "@/lib/types";
 
 /** The zen timer's five-minute minimum — kept in sync with timer-context.tsx. */
@@ -81,6 +82,7 @@ async function pruneAbandonedEntries(
 export async function getOrCreateTodayEntry(): Promise<{
   id: string;
   status: "open" | "closed";
+  visibility: JournalVisibility;
   opening_question: string | null;
   opening_candidates: JournalOpeningCandidate[] | null;
   candidates_reroll_count: number;
@@ -89,7 +91,7 @@ export async function getOrCreateTodayEntry(): Promise<{
   const supabase = await createClient();
   const date = await todayLocal();
   const columns =
-    "id, status, opening_question, opening_candidates, candidates_reroll_count, freeform_started_at";
+    "id, status, visibility, opening_question, opening_candidates, candidates_reroll_count, freeform_started_at";
 
   await pruneAbandonedEntries(supabase, date);
 
@@ -110,6 +112,7 @@ export async function getOrCreateTodayEntry(): Promise<{
     return {
       id: existing.id,
       status: existing.status as "open" | "closed",
+      visibility: existing.visibility as JournalVisibility,
       opening_question: existing.opening_question,
       opening_candidates: normalizeCandidates(existing.opening_candidates),
       candidates_reroll_count: existing.candidates_reroll_count,
@@ -129,6 +132,7 @@ export async function getOrCreateTodayEntry(): Promise<{
   return {
     id: created.id,
     status: created.status as "open" | "closed",
+    visibility: created.visibility as JournalVisibility,
     opening_question: created.opening_question,
     opening_candidates: normalizeCandidates(created.opening_candidates),
     candidates_reroll_count: created.candidates_reroll_count,
@@ -144,6 +148,7 @@ export async function getOrCreateTodayEntry(): Promise<{
 export async function getEntryById(entryId: string): Promise<{
   id: string;
   status: "open" | "closed";
+  visibility: JournalVisibility;
   opening_question: string | null;
   opening_candidates: JournalOpeningCandidate[] | null;
   candidates_reroll_count: number;
@@ -153,7 +158,7 @@ export async function getEntryById(entryId: string): Promise<{
   const { data, error } = await supabase
     .from("journal_entries")
     .select(
-      "id, status, opening_question, opening_candidates, candidates_reroll_count, freeform_started_at"
+      "id, status, visibility, opening_question, opening_candidates, candidates_reroll_count, freeform_started_at"
     )
     .eq("id", entryId)
     .single();
@@ -161,6 +166,7 @@ export async function getEntryById(entryId: string): Promise<{
   return {
     id: data.id,
     status: data.status as "open" | "closed",
+    visibility: data.visibility as JournalVisibility,
     opening_question: data.opening_question,
     opening_candidates: normalizeCandidates(data.opening_candidates),
     candidates_reroll_count: data.candidates_reroll_count,
@@ -270,10 +276,11 @@ export async function pickOpeningQuestion(entryId: string, question: string) {
   if (entryErr || !entry) throw new Error("entry not found");
   if (entry.status !== "open") throw new Error("entry is closed");
 
-  const candidates = candidateTexts(entry.opening_candidates);
-  if (!candidates.includes(question)) {
+  const picked = candidateByText(entry.opening_candidates, question);
+  if (!picked) {
     throw new Error("question is not one of the offered candidates");
   }
+  const candidates = candidateTexts(entry.opening_candidates);
 
   const { count, error: countErr } = await supabase
     .from("journal_messages")
@@ -287,9 +294,16 @@ export async function pickOpeningQuestion(entryId: string, question: string) {
     .insert({ entry_id: entryId, role: "assistant", content: question, user_id: userId });
   if (msgErr) throw new Error(msgErr.message);
 
+  // The picked question's model-suggested visibility pre-sets the entry's
+  // toggle (the author can still change it). It won't actually surface in the
+  // family feed until the entry is closed.
   const { error: updateErr } = await supabase
     .from("journal_entries")
-    .update({ opening_question: question, opening_candidates: null })
+    .update({
+      opening_question: question,
+      opening_candidates: null,
+      visibility: picked.visibility,
+    })
     .eq("id", entryId);
   if (updateErr) throw new Error(updateErr.message);
 
@@ -611,6 +625,27 @@ export async function closeEntry(entryId: string): Promise<void> {
 export async function regenerateEntryWrap(entryId: string): Promise<void> {
   const result = await runWrap(entryId);
   if (!result.ok) throw new Error(result.error);
+  revalidatePath("/journal");
+  revalidatePath(`/journal/${entryId}`);
+}
+
+/**
+ * Set an entry's visibility (private ↔ family). Own-row only via RLS, so a
+ * member can only change the visibility of their own posts. Flipping to
+ * 'family' surfaces a *closed* entry (and its transcript/photos) in the family
+ * feed; flipping back to 'private' immediately removes it and re-restricts its
+ * children. Sharing is always an explicit, opt-in act.
+ */
+export async function setEntryVisibility(
+  entryId: string,
+  visibility: JournalVisibility
+) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("journal_entries")
+    .update({ visibility })
+    .eq("id", entryId);
+  if (error) throw new Error(error.message);
   revalidatePath("/journal");
   revalidatePath(`/journal/${entryId}`);
 }

@@ -76,8 +76,9 @@ export type BuiltinQuestionType = {
 
 /**
  * The built-in question types. The first 13 mirror migration 00047; the next 4
- * (added in 00055) are playful/concrete types that shine for kids; the last
- * (added in 00056) invites reminiscing about the past. Their weight here is the
+ * (added in 00055) are playful/concrete types that shine for kids; the next
+ * (added in 00056) invites reminiscing about the past; the last (added in 00057)
+ * weaves in what another family member has shared. Their weight here is the
  * *adult* default — the four kid types default to 0 (off), and the age templates
  * turn them on with an age-appropriate mix.
  */
@@ -100,4 +101,5 @@ export const BUILTIN_QUESTION_TYPES: BuiltinQuestionType[] = [
   { name: "proud-moment", weight: 0, sort_order: 16, base_description: "Asks about something you figured out, pulled off, or feel proud of." },
   { name: "funny-moment", weight: 0, sort_order: 17, base_description: "Asks about something that made you laugh recently." },
   { name: "reminiscence", weight: 3, sort_order: 18, base_description: "Invites the user to tell a story from their past or reminisce on something old — a memory, a place, a person, a turning point. Draw on the Past doc to make it specific." },
+  { name: "family-followup", weight: 3, sort_order: 19, base_description: "Draws on a recent entry another family member shared to the family feed and asks the user about it, referencing that member by name (e.g. \"Jenny wrote about the camping trip — how was that for you?\"). Only fires when another member has shared something." },
 ];

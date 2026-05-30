@@ -30,10 +30,13 @@ export function RecapEntryView({
   entryId,
   title,
   body,
+  readOnly = false,
 }: {
   entryId: string;
   title: string;
   body: string;
+  /** A family member viewing someone else's shared recap: no edit/delete. */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -64,6 +67,17 @@ export function RecapEntryView({
     setBodyText(body);
     setError(null);
     setEditing(false);
+  }
+
+  if (readOnly) {
+    return (
+      <div className="mt-6">
+        <h1 className="font-serif text-3xl leading-snug text-foreground">
+          {title}
+        </h1>
+        <RecapMarkdown body={body} />
+      </div>
+    );
   }
 
   if (editing) {

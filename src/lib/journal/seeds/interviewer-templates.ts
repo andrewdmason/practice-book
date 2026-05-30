@@ -127,6 +127,7 @@ const ELEMENTARY_MIX: Record<string, number> = {
   "sensory-moment": 3,
   "mood-check-in": 3,
   curveball: 3,
+  "family-followup": 3,
 };
 
 const MIDDLE_MIX: Record<string, number> = {
@@ -147,6 +148,7 @@ const MIDDLE_MIX: Record<string, number> = {
   reminiscence: 1,
   "deep-introspective": 1,
   "unresolved-loop": 1,
+  "family-followup": 3,
 };
 
 const HIGH_MIX: Record<string, number> = {
@@ -166,6 +168,7 @@ const HIGH_MIX: Record<string, number> = {
   reminiscence: 3,
   curveball: 1,
   imagination: 1,
+  "family-followup": 3,
 };
 
 // Adult = today's defaults; the four kid types stay off.
@@ -184,6 +187,7 @@ const ADULT_MIX: Record<string, number> = {
   reminiscence: 3,
   curveball: 1,
   "sensory-moment": 3,
+  "family-followup": 3,
 };
 
 /**

@@ -10,6 +10,7 @@ import {
 import { loadCalendarBlock } from "@/lib/journal/calendar";
 import { formatNow, getUserTimezone, localDate } from "@/lib/date-utils";
 import { createClient } from "@/lib/supabase/server";
+import { requireUserId } from "@/lib/journal/auth";
 import type { JournalOpeningCandidate, JournalQuestionType } from "@/lib/types";
 
 export const OPENING_CANDIDATES_TOOL_NAME = "propose_questions";
@@ -40,8 +41,14 @@ export function buildOpeningCandidatesTool(n: number) {
                 description:
                   "ONLY the question itself as the user will read it, in your voice — one or two sentences. Never include your reasoning, the category name, or any explanation of how or why you chose it or whether a constraint could be met.",
               },
+              visibility: {
+                type: "string",
+                enum: ["private", "family"],
+                description:
+                  "Where an entry answering this question would most naturally go: \"family\" if it's about a shared moment, event, or something the family would enjoy seeing (always for family-followup questions); \"private\" for intimate, introspective, or sensitive reflections. This only pre-selects a toggle the user can change — default to \"private\" when unsure.",
+              },
             },
-            required: ["text"],
+            required: ["text", "visibility"],
           },
         },
       },
@@ -114,7 +121,7 @@ export function buildCandidatesInstruction(
 ): string {
   const lines: string[] = ["", "=== Today's question picker ==="];
   const voiceNote =
-    "Each question should still sound like you (see the Interviewer file): one or two sentences, warm, like a friend texting in the morning. Each question's text is exactly what the user reads — never narrate your reasoning, name the category, or explain your choice inside it. A category's extra instructions are soft preferences: if one can't be satisfied from the available context, quietly ask a natural question of that category instead — never write about the conflict or that you're skipping or substituting anything.";
+    "Each question should still sound like you (see the Interviewer file): one or two sentences, warm, like a friend texting in the morning. Each question's text is exactly what the user reads — never narrate your reasoning, name the category, or explain your choice inside it. A category's extra instructions are soft preferences: if one can't be satisfied from the available context, quietly ask a natural question of that category instead — never write about the conflict or that you're skipping or substituting anything. For each question, also set its `visibility` (see the tool): \"family\" for shared/social/event questions or anything drawn from another member's shared entry, \"private\" otherwise.";
   if (forcedCategory) {
     lines.push(
       `The user asked specifically for questions of one kind. Propose exactly ${n} opening question(s) by calling the \`propose_questions\` tool, all in this single category — make them genuinely different angles on it, not restatements of one question:`,
@@ -170,6 +177,72 @@ export async function loadRecentlyShown(today: string): Promise<string[]> {
   return [...new Set((data ?? []).map((r) => r.question as string))];
 }
 
+/** The family-followup question type's kebab name. */
+const FAMILY_FOLLOWUP = "family-followup";
+
+type FamilyFollowupSource = {
+  authorName: string;
+  entry_date: string;
+  title: string | null;
+  summary: string | null;
+  pull_quote: string | null;
+};
+
+/**
+ * The most recent entry another family member has shared to the family feed
+ * (closed + visibility 'family', authored by someone else), at summary level —
+ * title, summary, pull_quote, and author name. The family-followup question type
+ * references this so the interviewer can ask the user about it. Null when no
+ * other member has shared anything (the type then no-ops / is dropped).
+ */
+export async function loadFamilyFollowupSource(): Promise<FamilyFollowupSource | null> {
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
+
+  const { data: entry } = await supabase
+    .from("journal_entries")
+    .select("user_id, entry_date, title, summary, pull_quote")
+    .eq("visibility", "family")
+    .eq("status", "closed")
+    .neq("user_id", userId)
+    .order("entry_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!entry) return null;
+
+  const { data: member } = await supabase
+    .from("journal_members")
+    .select("name")
+    .eq("user_id", entry.user_id)
+    .maybeSingle();
+
+  return {
+    authorName: member?.name?.trim() || "a family member",
+    entry_date: entry.entry_date as string,
+    title: (entry.title as string | null) ?? null,
+    summary: (entry.summary as string | null) ?? null,
+    pull_quote: (entry.pull_quote as string | null) ?? null,
+  };
+}
+
+/**
+ * Fold a family-followup source's summary-level content into the category
+ * description so the model can reference the other member's entry by name.
+ */
+function withFamilySource(
+  category: QuestionCategory,
+  source: FamilyFollowupSource
+): QuestionCategory {
+  const parts = [
+    `Another family member, ${source.authorName}, recently shared an entry to the family feed (${source.entry_date}). Reference it by their name and ask the user a warm question about it. Use only this summary-level content — do not invent details beyond it:`,
+    source.title ? `- Title: ${source.title}` : null,
+    source.summary ? `- Summary: ${source.summary}` : null,
+    source.pull_quote ? `- A line they wrote: "${source.pull_quote}"` : null,
+  ].filter(Boolean);
+  return { ...category, description: `${category.description} ${parts.join("\n")}` };
+}
+
 /**
  * Generate the day's varied opening-question candidates for an entry.
  * `rejected` lists questions the user already turned down (from prior rerolls)
@@ -184,7 +257,7 @@ export async function generateCandidates(
 ): Promise<JournalOpeningCandidate[]> {
   const tz = await getUserTimezone();
   const today = localDate(new Date(), tz);
-  const [files, history, calendarBlock, recentlyShown, questionTypes, settings, familyDoc] =
+  const [files, history, calendarBlock, recentlyShown, questionTypes, settings, familyDoc, familySource] =
     await Promise.all([
       loadAgentFiles(),
       loadHistory(today, entryId),
@@ -193,6 +266,7 @@ export async function generateCandidates(
       loadQuestionTypes(),
       loadSettings(),
       loadFamilyDoc(),
+      loadFamilyFollowupSource(),
     ]);
 
   const n = settings.questions_per_day;
@@ -201,12 +275,22 @@ export async function generateCandidates(
   let forced: QuestionCategory | undefined;
   if (forcedCategoryName) {
     const t = questionTypes.find((q) => q.name === forcedCategoryName);
-    forced = t ? questionTypeToCategory(t) : undefined;
+    let cat = t ? questionTypeToCategory(t) : undefined;
+    // A forced family-followup needs a source to reference; fold it in when present.
+    if (cat && cat.name === FAMILY_FOLLOWUP && familySource) {
+      cat = withFamilySource(cat, familySource);
+    }
+    forced = cat;
   } else {
     const enabled = questionTypes
       .filter((t) => t.enabled && t.weight > 0)
+      // Drop family-followup from the pool entirely when no other member has
+      // shared anything, so the sampler never picks a slot it can't fill.
+      .filter((t) => t.name !== FAMILY_FOLLOWUP || familySource !== null)
       .map(questionTypeToCategory);
-    sampled = sampleQuestionMix(enabled, n);
+    sampled = sampleQuestionMix(enabled, n).map((c) =>
+      c.name === FAMILY_FOLLOWUP && familySource ? withFamilySource(c, familySource) : c
+    );
   }
 
   const system =
@@ -228,18 +312,32 @@ export async function generateCandidates(
   if (!toolUse || toolUse.type !== "tool_use") {
     throw new Error("model did not return question candidates");
   }
-  const input = toolUse.input as { questions?: { text?: unknown }[] };
-  const questions = (input.questions ?? [])
-    .map((q) => (typeof q.text === "string" ? q.text.trim() : ""))
-    .filter((t) => t.length > 0);
-  if (questions.length !== n) {
-    throw new Error(`expected ${n} question candidates, got ${questions.length}`);
+  const input = toolUse.input as {
+    questions?: { text?: unknown; visibility?: unknown }[];
+  };
+  const parsed = (input.questions ?? [])
+    .map((q) => ({
+      text: typeof q.text === "string" ? q.text.trim() : "",
+      // Sharing is opt-in: any unexpected value falls back to private.
+      visibility: (q.visibility === "family" ? "family" : "private") as
+        | "family"
+        | "private",
+    }))
+    .filter((q) => q.text.length > 0);
+  if (parsed.length !== n) {
+    throw new Error(`expected ${n} question candidates, got ${parsed.length}`);
   }
   // Label each question with the type it was generated for: the forced type
   // (all questions), the per-slot sampled type (one each, in order), or null
-  // when we fell back to an untyped varied set.
-  return questions.map((text, i) => ({
-    text,
-    type: forced ? forced.name : sampled.length === n ? sampled[i]?.name ?? null : null,
-  }));
+  // when we fell back to an untyped varied set. A family-followup question is
+  // always shared — it's about another member's family post — regardless of
+  // what the model suggested.
+  return parsed.map((q, i) => {
+    const type = forced ? forced.name : sampled.length === n ? sampled[i]?.name ?? null : null;
+    return {
+      text: q.text,
+      type,
+      visibility: type === FAMILY_FOLLOWUP ? "family" : q.visibility,
+    };
+  });
 }
