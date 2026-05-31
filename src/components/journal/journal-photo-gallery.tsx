@@ -35,6 +35,7 @@ export function JournalPhotoGallery({
   actionSlot = null,
   photoGenerationStatus = null,
   containerClassName = "mx-auto w-full max-w-2xl px-6 pt-6",
+  attachActionClassName,
 }: {
   entryId: string;
   initialPhotos: Media[];
@@ -43,6 +44,9 @@ export function JournalPhotoGallery({
   actionSlot?: React.ReactNode;
   photoGenerationStatus?: PhotoGenerationStatus | null;
   containerClassName?: string;
+  /** Extra classes for the attach-action row — e.g. a hover-reveal treatment
+   *  when the caller wants the "Attach a photo" control to appear on demand. */
+  attachActionClassName?: string;
 }) {
   const router = useRouter();
   const [media, setMedia] = useState<Media[]>(initialPhotos);
@@ -292,7 +296,12 @@ export function JournalPhotoGallery({
                 </div>
               )}
               {((editable && showAttachAction) || actionSlot) && (
-                <div className="flex flex-wrap items-start gap-x-6 gap-y-2">
+                <div
+                  className={cn(
+                    "flex flex-wrap items-start gap-x-6 gap-y-2",
+                    attachActionClassName
+                  )}
+                >
                   {editable && showAttachAction && (
                     <>
                       <input

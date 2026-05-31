@@ -90,11 +90,12 @@ export async function getOrCreateTodayEntry(): Promise<{
   opening_candidates: JournalOpeningCandidate[] | null;
   candidates_reroll_count: number;
   freeform_started_at: string | null;
+  title: string | null;
 }> {
   const supabase = await createClient();
   const date = await todayLocal();
   const columns =
-    "id, status, visibility, opening_question, opening_candidates, candidates_reroll_count, freeform_started_at";
+    "id, status, visibility, opening_question, opening_candidates, candidates_reroll_count, freeform_started_at, title";
 
   await pruneAbandonedEntries(supabase, date);
 
@@ -120,6 +121,7 @@ export async function getOrCreateTodayEntry(): Promise<{
       opening_candidates: normalizeCandidates(existing.opening_candidates),
       candidates_reroll_count: existing.candidates_reroll_count,
       freeform_started_at: existing.freeform_started_at,
+      title: existing.title,
     };
   }
 
@@ -140,6 +142,7 @@ export async function getOrCreateTodayEntry(): Promise<{
     opening_candidates: normalizeCandidates(created.opening_candidates),
     candidates_reroll_count: created.candidates_reroll_count,
     freeform_started_at: created.freeform_started_at,
+    title: created.title,
   };
 }
 
@@ -156,12 +159,13 @@ export async function getEntryById(entryId: string): Promise<{
   opening_candidates: JournalOpeningCandidate[] | null;
   candidates_reroll_count: number;
   freeform_started_at: string | null;
+  title: string | null;
 }> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("journal_entries")
     .select(
-      "id, status, visibility, opening_question, opening_candidates, candidates_reroll_count, freeform_started_at"
+      "id, status, visibility, opening_question, opening_candidates, candidates_reroll_count, freeform_started_at, title"
     )
     .eq("id", entryId)
     .single();
@@ -174,6 +178,7 @@ export async function getEntryById(entryId: string): Promise<{
     opening_candidates: normalizeCandidates(data.opening_candidates),
     candidates_reroll_count: data.candidates_reroll_count,
     freeform_started_at: data.freeform_started_at,
+    title: data.title,
   };
 }
 
@@ -603,6 +608,63 @@ export async function appendUserMessage(entryId: string, content: string) {
     .from("journal_messages")
     .insert({ entry_id: entryId, role: "user", content: trimmed, user_id: userId });
   if (error) throw new Error(error.message);
+}
+
+/**
+ * Persist a freeform blog post's draft: its user-written title and body. The
+ * body is kept as the entry's single user message (inserted the first time,
+ * updated thereafter) so it flows through the same transcript, edit, and wrap
+ * paths as any other entry — the only difference is there's no AI conversation.
+ * Called as a debounced autosave from the composer and once more on finish, so
+ * leaving the page mid-post never loses writing.
+ */
+export async function saveFreeformDraft(
+  entryId: string,
+  title: string,
+  body: string
+) {
+  const supabase = await createClient();
+
+  const { data: entry, error: entryErr } = await supabase
+    .from("journal_entries")
+    .select("id, status")
+    .eq("id", entryId)
+    .single();
+  if (entryErr || !entry) throw new Error("entry not found");
+  if (entry.status !== "open") throw new Error("entry is closed");
+
+  const trimmedTitle = title.trim();
+  const { error: titleErr } = await supabase
+    .from("journal_entries")
+    .update({ title: trimmedTitle || null })
+    .eq("id", entryId);
+  if (titleErr) throw new Error(titleErr.message);
+
+  // A freeform entry has at most one message — the body. Update it in place if
+  // it exists; otherwise insert it (only once there's something to save).
+  const { data: existing, error: existingErr } = await supabase
+    .from("journal_messages")
+    .select("id")
+    .eq("entry_id", entryId)
+    .eq("role", "user")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (existingErr) throw new Error(existingErr.message);
+
+  if (existing) {
+    const { error } = await supabase
+      .from("journal_messages")
+      .update({ content: body })
+      .eq("id", existing.id);
+    if (error) throw new Error(error.message);
+  } else if (body.trim().length > 0) {
+    const userId = await requireUserId(supabase);
+    const { error } = await supabase
+      .from("journal_messages")
+      .insert({ entry_id: entryId, role: "user", content: body, user_id: userId });
+    if (error) throw new Error(error.message);
+  }
 }
 
 /**
