@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Pencil, Settings, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MemberAvatar } from "@/components/journal/member-avatar";
@@ -173,6 +174,25 @@ export function FamilyManager({
                     </span>
                   </div>
                   <MemberPostingStats stats={stats} />
+                  {!m.is_owner &&
+                    (m.seeded_at ? (
+                      <Link
+                        href={`/settings/user?member=${encodeURIComponent(m.email)}`}
+                        aria-label={`Edit ${m.name || m.email}'s settings`}
+                        title="Edit settings"
+                        className="text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Link>
+                    ) : (
+                      <span
+                        aria-label="Pending first sign-in"
+                        title="Settings open once they've signed in"
+                        className="text-muted-foreground opacity-40"
+                      >
+                        <Settings className="h-4 w-4" />
+                      </span>
+                    ))}
                   <button
                     type="button"
                     onClick={() => startEdit(m)}

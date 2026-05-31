@@ -1,38 +1,52 @@
+import { redirect } from "next/navigation";
 import { SingleFileEditor } from "@/components/journal/agent-file-editor";
 import { UserDocPrompt } from "@/components/journal/user-doc-prompt";
 import { InterviewerAgeSelector } from "@/components/journal/interviewer-age-selector";
-import { createClient } from "@/lib/supabase/server";
+import { EditingMemberBanner } from "@/components/journal/editing-member-banner";
 import { loadFamilyDoc } from "@/lib/journal/context";
-import { requireUserId } from "@/lib/journal/auth";
+import { resolveSettingsScope, type SettingsScope } from "@/lib/journal/scope";
 import { buildUserDocPrompt } from "@/lib/journal/seeds/user-doc-prompt";
 import { buildPastDocPrompt } from "@/lib/journal/seeds/past-doc-prompt";
 import { matchTemplateId } from "@/lib/journal/seeds/interviewer-templates";
 
 export const dynamic = "force-dynamic";
 
-export default async function UserSettingsPage() {
-  const supabase = await createClient();
-  const userId = await requireUserId(supabase);
+export default async function UserSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ member?: string }>;
+}) {
+  const { member } = await searchParams;
+  let scope: SettingsScope;
+  try {
+    scope = await resolveSettingsScope(member ?? null);
+  } catch {
+    redirect("/settings/user");
+  }
+  const { client, userId, isMemberMode } = scope;
 
   const [presentRes, pastRes, interviewerRes, familyDoc, memberRes] =
     await Promise.all([
-      supabase
+      client
         .from("journal_agent_files")
         .select("content")
         .eq("name", "Present")
+        .eq("user_id", userId)
         .maybeSingle(),
-      supabase
+      client
         .from("journal_agent_files")
         .select("content")
         .eq("name", "Past")
+        .eq("user_id", userId)
         .maybeSingle(),
-      supabase
+      client
         .from("journal_agent_files")
         .select("content")
         .eq("name", "Interviewer")
+        .eq("user_id", userId)
         .maybeSingle(),
       loadFamilyDoc(),
-      supabase
+      client
         .from("journal_members")
         .select("name")
         .eq("user_id", userId)
@@ -46,8 +60,13 @@ export default async function UserSettingsPage() {
 
   return (
     <>
+      {isMemberMode && (
+        <EditingMemberBanner memberName={memberName ?? member ?? "this member"} />
+      )}
+
       <InterviewerAgeSelector
         interviewerContent={interviewerRes.data?.content ?? ""}
+        memberEmail={isMemberMode ? member : undefined}
       />
 
       <section className="mt-6">
@@ -60,6 +79,7 @@ export default async function UserSettingsPage() {
         <SingleFileEditor
           target={{ kind: "agent", name: "Present" }}
           initialMarkdown={presentRes.data?.content ?? ""}
+          memberEmail={isMemberMode ? member : undefined}
         />
       </section>
 
@@ -73,6 +93,7 @@ export default async function UserSettingsPage() {
         <SingleFileEditor
           target={{ kind: "agent", name: "Past" }}
           initialMarkdown={pastRes.data?.content ?? ""}
+          memberEmail={isMemberMode ? member : undefined}
         />
       </section>
     </>

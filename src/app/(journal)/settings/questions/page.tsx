@@ -1,20 +1,45 @@
+import { redirect } from "next/navigation";
 import { QuestionsEditor } from "@/components/journal/questions-editor";
-import { createClient } from "@/lib/supabase/server";
+import { EditingMemberBanner } from "@/components/journal/editing-member-banner";
+import { resolveSettingsScope, type SettingsScope } from "@/lib/journal/scope";
 import type { JournalQuestionType, JournalSettings } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function QuestionsSettingsPage() {
-  const supabase = await createClient();
-  const [typesRes, settingsRes] = await Promise.all([
-    supabase
+export default async function QuestionsSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ member?: string }>;
+}) {
+  const { member } = await searchParams;
+  let scope: SettingsScope;
+  try {
+    scope = await resolveSettingsScope(member ?? null);
+  } catch {
+    redirect("/settings/questions");
+  }
+  const { client, userId, isMemberMode } = scope;
+
+  const [typesRes, settingsRes, memberRes] = await Promise.all([
+    client
       .from("journal_question_types")
       .select(
         "id, name, base_description, style_note, weight, enabled, is_builtin, sort_order, created_at, updated_at"
       )
+      .eq("user_id", userId)
       .order("sort_order", { ascending: true }),
-    // One settings row per user — RLS scopes to the caller's row.
-    supabase.from("journal_settings").select("questions_per_day").maybeSingle(),
+    client
+      .from("journal_settings")
+      .select("questions_per_day")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    isMemberMode
+      ? client
+          .from("journal_members")
+          .select("name")
+          .eq("user_id", userId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   const questionTypes = (typesRes.data ?? []) as JournalQuestionType[];
@@ -22,5 +47,18 @@ export default async function QuestionsSettingsPage() {
     questions_per_day: settingsRes.data?.questions_per_day ?? 3,
   };
 
-  return <QuestionsEditor questionTypes={questionTypes} settings={settings} />;
+  return (
+    <>
+      {isMemberMode && (
+        <EditingMemberBanner
+          memberName={memberRes.data?.name ?? member ?? "this member"}
+        />
+      )}
+      <QuestionsEditor
+        questionTypes={questionTypes}
+        settings={settings}
+        memberEmail={isMemberMode ? member : undefined}
+      />
+    </>
+  );
 }
