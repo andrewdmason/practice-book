@@ -112,6 +112,67 @@ const ENTRIES = {
   ],
 };
 
+// Inline comments on the family-shared entries above, so the Family feed and
+// post views show the commenting feature with real content. Each comment is
+// anchored to a block_index — for these standard entries that's the message
+// ordinal (0 = opening question, 1 = first answer, 2 = next question, 3 = next
+// answer). `commenter` is an email resolved to a user_id at seed time; any
+// commenter without a provisioned member row is skipped. Array order sets the
+// comment timestamps, which the byline uses to order "with comments from …".
+const COMMENTS = [
+  // Jenny's "camping trip" — the kids (and Dad) chime in.
+  {
+    entryId: "a0000002-0001-4001-8001-000000000001",
+    commenter: "oscar@mason.io",
+    blockIndex: 1,
+    content: "I was NOT feral 😤",
+  },
+  {
+    entryId: "a0000002-0001-4001-8001-000000000001",
+    commenter: "sebastian@mason.io",
+    blockIndex: 3,
+    content: "the trees were SO tall i couldn't see the top",
+  },
+  {
+    entryId: "a0000002-0001-4001-8001-000000000001",
+    commenter: "andrew@mason.io",
+    blockIndex: 3,
+    content: "I got the photo of that exact face. Framing it.",
+  },
+  // Oscar's "the volcano won" — Mom and brother celebrate.
+  {
+    entryId: "a0000002-0002-4001-8001-000000000001",
+    commenter: "jenny@mason.io",
+    blockIndex: 1,
+    content: "We are SO proud of you, bud. 🌋",
+  },
+  {
+    entryId: "a0000002-0002-4001-8001-000000000001",
+    commenter: "sebastian@mason.io",
+    blockIndex: 1,
+    content: "it was the loudest one!!!",
+  },
+  {
+    entryId: "a0000002-0002-4001-8001-000000000001",
+    commenter: "jenny@mason.io",
+    blockIndex: 3,
+    content: "Future scientist over here.",
+  },
+  // Sebastian's "i scored a goal" — Mom and brother.
+  {
+    entryId: "a0000002-0003-4001-8001-000000000001",
+    commenter: "jenny@mason.io",
+    blockIndex: 1,
+    content: "I cheered so loud I lost my voice. Worth it.",
+  },
+  {
+    entryId: "a0000002-0003-4001-8001-000000000001",
+    commenter: "oscar@mason.io",
+    blockIndex: 3,
+    content: "haha the good kind. nice one seb",
+  },
+];
+
 function supabaseConfig() {
   const status = JSON.parse(
     execSync("npx supabase status -o json", { encoding: "utf8" })
@@ -203,6 +264,54 @@ async function seedEntries(supabase, userId, entries) {
   }
 }
 
+async function seedComments(supabase) {
+  // Resolve commenter emails to user_ids from the membership table, so any
+  // provisioned member (including the account owner) can comment.
+  const { data: members, error: membersErr } = await supabase
+    .from("journal_members")
+    .select("email, user_id");
+  if (membersErr) throw membersErr;
+  const userIdByEmail = new Map(
+    (members ?? [])
+      .filter((m) => m.user_id)
+      .map((m) => [m.email, m.user_id])
+  );
+
+  // Idempotent: clear comments on the entries we're about to seed. (Reseeding
+  // an entry already cascade-deletes its comments, but this also covers running
+  // the comment seed on its own.)
+  const entryIds = [...new Set(COMMENTS.map((c) => c.entryId))];
+  await supabase.from("journal_inline_comments").delete().in("entry_id", entryIds);
+
+  let order = 0;
+  const rows = [];
+  for (const c of COMMENTS) {
+    const userId = userIdByEmail.get(c.commenter);
+    if (!userId) {
+      console.log(`  skipped comment from ${c.commenter} (no member row)`);
+      continue;
+    }
+    // Stamp created_at in array order so the byline lists commenters in a
+    // stable, intentional sequence. Anchor a few minutes after entries close.
+    const created = new Date(Date.UTC(2026, 4, 29, 15, 0, 0) + order * 60_000);
+    order += 1;
+    rows.push({
+      entry_id: c.entryId,
+      user_id: userId,
+      block_index: c.blockIndex,
+      content: c.content,
+      created_at: created.toISOString(),
+      updated_at: created.toISOString(),
+    });
+  }
+
+  if (rows.length > 0) {
+    const { error } = await supabase.from("journal_inline_comments").insert(rows);
+    if (error) throw error;
+  }
+  console.log(`Seeded ${rows.length} inline comments.`);
+}
+
 async function main() {
   const { url, serviceKey } = supabaseConfig();
   const supabase = createClient(url, serviceKey, {
@@ -215,7 +324,9 @@ async function main() {
     await seedEntries(supabase, userId, ENTRIES[member.email] ?? []);
   }
 
-  console.log("Done seeding family members and entries.");
+  await seedComments(supabase);
+
+  console.log("Done seeding family members, entries, and comments.");
 }
 
 main().catch((err) => {
