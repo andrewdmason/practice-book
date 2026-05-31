@@ -479,6 +479,27 @@ export type JournalMessage = {
   created_at: string;
 };
 
+/**
+ * A family member's inline comment on a finished, shared entry. Anchored to a
+ * block_index (the ordinal position of a paragraph / message / the quote within
+ * the entry — see src/lib/journal/entry-blocks.ts). Flat: comments at the same
+ * block_index stack in created_at order.
+ */
+export type JournalInlineComment = {
+  id: string;
+  entry_id: string;
+  user_id: string; // the commenter
+  block_index: number;
+  content: string;
+  created_at: string;
+  updated_at: string;
+};
+
+/** A comment plus the commenter's resolved display name, for rendering. */
+export type JournalInlineCommentWithAuthor = JournalInlineComment & {
+  authorName: string;
+};
+
 export type JournalMemoryProposal = {
   id: string;
   entry_id: string;

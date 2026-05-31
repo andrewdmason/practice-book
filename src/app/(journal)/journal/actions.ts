@@ -14,6 +14,8 @@ import { applyProfileDocChange } from "@/lib/journal/profile-suggestions";
 import { runEntryPhotoGeneration } from "@/lib/journal/generated-photo";
 import type {
   JournalAgentFileName,
+  JournalInlineComment,
+  JournalInlineCommentWithAuthor,
   JournalMediaType,
   JournalPhotoSource,
   JournalOpeningCandidate,
@@ -1320,4 +1322,110 @@ export async function getEntryPhotos(entryId: string): Promise<
         ? videoUrlByPath.get(row.original_path as string) ?? null
         : null,
   }));
+}
+
+// ============================================================
+// Inline family comments
+//
+// Comments live on finished, shared posts: family members reply between the
+// content blocks of each other's entries. RLS (00065) is the real gate; the
+// guards here surface friendly errors before the round-trip.
+// ============================================================
+
+/**
+ * Add a comment anchored to `blockIndex` on a closed, family-shared entry.
+ * Returns the persisted row plus the commenter's display name, so the client
+ * can render it immediately with a real id (no temp-id reconciliation).
+ */
+export async function addInlineComment(
+  entryId: string,
+  blockIndex: number,
+  content: string
+): Promise<JournalInlineCommentWithAuthor> {
+  const trimmed = content.trim();
+  if (!trimmed) throw new Error("Comment is empty.");
+  if (!Number.isInteger(blockIndex) || blockIndex < 0) {
+    throw new Error("Invalid comment anchor.");
+  }
+
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
+
+  const { data: entry } = await supabase
+    .from("journal_entries")
+    .select("id, status, visibility")
+    .eq("id", entryId)
+    .maybeSingle();
+  if (!entry) throw new Error("Entry not found.");
+  if (entry.status !== "closed" || entry.visibility !== "family") {
+    throw new Error("Comments are only allowed on finished, shared posts.");
+  }
+
+  const { data, error } = await supabase
+    .from("journal_inline_comments")
+    .insert({
+      entry_id: entryId,
+      user_id: userId,
+      block_index: blockIndex,
+      content: trimmed,
+    })
+    .select("id, entry_id, user_id, block_index, content, created_at, updated_at")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "Couldn't add comment.");
+
+  const { data: member } = await supabase
+    .from("journal_members")
+    .select("name, email")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const authorName =
+    (member?.name as string | null)?.trim() ||
+    (member?.email as string | undefined) ||
+    "A family member";
+
+  revalidatePath(`/journal/${entryId}`);
+  return { ...(data as JournalInlineComment), authorName };
+}
+
+/** Edit one of your own comments. RLS restricts this to the comment's author. */
+export async function editInlineComment(commentId: string, content: string) {
+  const trimmed = content.trim();
+  if (!trimmed) throw new Error("Comment is empty.");
+
+  const supabase = await createClient();
+  await requireUserId(supabase);
+
+  const { data, error } = await supabase
+    .from("journal_inline_comments")
+    .update({ content: trimmed })
+    .eq("id", commentId)
+    .select("entry_id")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Couldn't edit that comment.");
+
+  revalidatePath(`/journal/${data.entry_id as string}`);
+}
+
+/**
+ * Delete a comment. RLS allows the comment's author or the account owner
+ * (moderation). We read entry_id first so we can revalidate the right page.
+ */
+export async function deleteInlineComment(commentId: string) {
+  const supabase = await createClient();
+  await requireUserId(supabase);
+
+  const { data: row } = await supabase
+    .from("journal_inline_comments")
+    .select("entry_id")
+    .eq("id", commentId)
+    .maybeSingle();
+
+  const { error } = await supabase
+    .from("journal_inline_comments")
+    .delete()
+    .eq("id", commentId);
+  if (error) throw new Error(error.message);
+
+  if (row?.entry_id) revalidatePath(`/journal/${row.entry_id as string}`);
 }

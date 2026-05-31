@@ -10,6 +10,7 @@ import type {
   JournalPhotoSource,
 } from "@/lib/types";
 import { AiPhotoFrame } from "@/components/journal/ai-photo-frame";
+import { buildByline } from "@/lib/journal/byline";
 
 type HistoryEntry = JournalEntry & {
   photos: {
@@ -20,6 +21,7 @@ type HistoryEntry = JournalEntry & {
   }[];
   photoGenerationStatus?: "pending" | "generating" | null;
   authorName?: string | null;
+  commenterNames?: string[];
   authorPhotoUrl?: string | null;
 };
 
@@ -93,7 +95,7 @@ export function HistoryList({
                 </span>
                 {mode === "family" && e.authorName && (
                   <span className="font-serif text-xs text-muted-foreground">
-                    {e.authorName}
+                    {buildByline(e.authorName, e.commenterNames ?? [])}
                   </span>
                 )}
                 {e.status === "open" && (

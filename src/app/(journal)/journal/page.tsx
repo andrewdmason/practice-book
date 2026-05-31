@@ -86,6 +86,36 @@ export default async function JournalPage({
   }
 
   const entryIds = entries.map((e) => e.id);
+
+  // Commenters per family entry, for the byline ("… with comments from Jenny").
+  // One batched query over the visible entries; distinct commenters excluding
+  // the post's author, in the order they first commented.
+  const commenterNamesByEntry = new Map<string, string[]>();
+  if (isFamily && entryIds.length > 0) {
+    const authorIdByEntry = new Map(entries.map((e) => [e.id, e.user_id]));
+    const { data: commentRows } = await supabase
+      .from("journal_inline_comments")
+      .select("entry_id, user_id, created_at")
+      .in("entry_id", entryIds)
+      .order("created_at", { ascending: true });
+    const seenByEntry = new Map<string, Set<string>>();
+    for (const c of commentRows ?? []) {
+      const eid = c.entry_id as string;
+      const uid = c.user_id as string;
+      if (uid === authorIdByEntry.get(eid)) continue;
+      let seen = seenByEntry.get(eid);
+      if (!seen) {
+        seen = new Set<string>();
+        seenByEntry.set(eid, seen);
+      }
+      if (seen.has(uid)) continue;
+      seen.add(uid);
+      const names = commenterNamesByEntry.get(eid) ?? [];
+      names.push(authorByUser.get(uid) ?? "Family member");
+      commenterNamesByEntry.set(eid, names);
+    }
+  }
+
   const [photosByEntry, imageGenerationByEntry] = await Promise.all([
     getEntriesPhotos(entryIds),
     getEntriesImageGenerationStates(entryIds),
@@ -98,6 +128,7 @@ export default async function JournalPage({
       authorName: isFamily
         ? authorByUser.get(e.user_id) ?? "Family member"
         : null,
+      commenterNames: isFamily ? commenterNamesByEntry.get(e.id) ?? [] : [],
       authorPhotoUrl: isFamily ? authorPhotoByUser.get(e.user_id) ?? null : null,
     }))
     // Hide abandoned entries: an open entry never started (no opening question
