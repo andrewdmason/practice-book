@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getIsOwner, requireUserId } from "@/lib/journal/auth";
+import { resolveSettingsScope } from "@/lib/journal/scope";
 import { todayLocal } from "@/lib/journal/today";
 import { runWrap } from "@/lib/journal/wrap";
 import { summarizeRecap } from "@/lib/journal/recap-summary";
@@ -753,13 +754,15 @@ export async function deleteEntry(entryId: string) {
 
 export async function saveAgentFile(
   name: JournalAgentFileName,
-  content: string
+  content: string,
+  memberEmail?: string
 ) {
-  const supabase = await createClient();
-  const { error } = await supabase
+  const { client, userId } = await resolveSettingsScope(memberEmail);
+  const { error } = await client
     .from("journal_agent_files")
     .update({ content })
-    .eq("name", name);
+    .eq("name", name)
+    .eq("user_id", userId);
   if (error) throw new Error(error.message);
   revalidatePath("/settings", "layout");
 }
@@ -780,17 +783,19 @@ export type QuestionTypeUpdate = {
  */
 export async function saveQuestionConfig(
   rows: QuestionTypeUpdate[],
-  questionsPerDay: number
+  questionsPerDay: number,
+  memberEmail?: string
 ) {
   if (!Number.isInteger(questionsPerDay) || questionsPerDay < 1 || questionsPerDay > 5) {
     throw new Error("Questions per day must be between 1 and 5.");
   }
 
-  const supabase = await createClient();
+  const { client, userId } = await resolveSettingsScope(memberEmail);
 
-  const { data: existing, error: loadErr } = await supabase
+  const { data: existing, error: loadErr } = await client
     .from("journal_question_types")
-    .select("id, is_builtin");
+    .select("id, is_builtin")
+    .eq("user_id", userId);
   if (loadErr) throw new Error(loadErr.message);
   const builtinById = new Map(
     (existing ?? []).map((r) => [r.id as string, r.is_builtin as boolean])
@@ -808,18 +813,17 @@ export async function saveQuestionConfig(
           enabled: row.enabled,
           base_description: row.base_description,
         };
-    const { error } = await supabase
+    const { error } = await client
       .from("journal_question_types")
       .update(update)
-      .eq("id", row.id);
+      .eq("id", row.id)
+      .eq("user_id", userId);
     if (error) throw new Error(error.message);
   }
 
-  // Settings is one row per user (keyed by user_id, not the old id=1 singleton);
-  // RLS scopes the update to the caller's row. Upsert so a member whose row
-  // wasn't seeded yet still gets one.
-  const userId = await requireUserId(supabase);
-  const { error: settingsErr } = await supabase
+  // Settings is one row per user (keyed by user_id, not the old id=1 singleton).
+  // Upsert so a member whose row wasn't seeded yet still gets one.
+  const { error: settingsErr } = await client
     .from("journal_settings")
     .upsert({ user_id: userId, questions_per_day: questionsPerDay });
   if (settingsErr) throw new Error(settingsErr.message);
@@ -831,7 +835,8 @@ export async function saveQuestionConfig(
  * break the enabled-weights-sum-to-100 invariant until the user rebalances. */
 export async function addCustomQuestionType(
   name: string,
-  baseDescription: string
+  baseDescription: string,
+  memberEmail?: string
 ): Promise<JournalQuestionType> {
   const slug = name.trim().toLowerCase().replace(/\s+/g, "-");
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {
@@ -841,17 +846,17 @@ export async function addCustomQuestionType(
     throw new Error("Give the question type a short description.");
   }
 
-  const supabase = await createClient();
-  const userId = await requireUserId(supabase);
-  const { data: maxRow } = await supabase
+  const { client, userId } = await resolveSettingsScope(memberEmail);
+  const { data: maxRow } = await client
     .from("journal_question_types")
     .select("sort_order")
+    .eq("user_id", userId)
     .order("sort_order", { ascending: false })
     .limit(1)
     .maybeSingle();
   const sortOrder = (maxRow?.sort_order ?? 0) + 1;
 
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from("journal_question_types")
     .insert({
       name: slug,
@@ -876,13 +881,14 @@ export async function addCustomQuestionType(
 
 /** Delete a custom question type. Built-ins are protected by the `is_builtin`
  * guard in the query and can only be disabled, never removed. */
-export async function deleteCustomQuestionType(id: string) {
-  const supabase = await createClient();
-  const { error } = await supabase
+export async function deleteCustomQuestionType(id: string, memberEmail?: string) {
+  const { client, userId } = await resolveSettingsScope(memberEmail);
+  const { error } = await client
     .from("journal_question_types")
     .delete()
     .eq("id", id)
-    .eq("is_builtin", false);
+    .eq("is_builtin", false)
+    .eq("user_id", userId);
   if (error) throw new Error(error.message);
   revalidatePath("/settings", "layout");
 }

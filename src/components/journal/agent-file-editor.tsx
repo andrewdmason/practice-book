@@ -25,9 +25,12 @@ function getMarkdown(editor: Editor): string {
 export function SingleFileEditor({
   target,
   initialMarkdown,
+  memberEmail,
 }: {
   target: EditorTarget;
   initialMarkdown: string;
+  /** When the owner is editing on a member's behalf, the member's email. */
+  memberEmail?: string;
 }) {
   const [dirty, setDirty] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
@@ -79,7 +82,7 @@ export function SingleFileEditor({
         if (target.kind === "family") {
           await saveFamilyDoc(md);
         } else {
-          await saveAgentFile(target.name, md);
+          await saveAgentFile(target.name, md, memberEmail);
         }
         setDirty(false);
         setJustSaved(true);

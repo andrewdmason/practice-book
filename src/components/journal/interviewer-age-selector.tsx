@@ -15,8 +15,11 @@ function matchAge(content: string): string {
 
 export function InterviewerAgeSelector({
   interviewerContent,
+  memberEmail,
 }: {
   interviewerContent: string;
+  /** When the owner is editing on a member's behalf, the member's email. */
+  memberEmail?: string;
 }) {
   const [selected, setSelected] = useState(() => matchAge(interviewerContent));
   const [justApplied, setJustApplied] = useState(false);
@@ -39,7 +42,7 @@ export function InterviewerAgeSelector({
     setJustApplied(false);
     startTransition(async () => {
       try {
-        await applyInterviewerTemplate(id);
+        await applyInterviewerTemplate(id, memberEmail);
         setJustApplied(true);
       } catch (err) {
         setSelected(matchAge(interviewerContent));

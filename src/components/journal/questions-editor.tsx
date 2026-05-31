@@ -131,9 +131,12 @@ function toRow(t: JournalQuestionType): Row {
 export function QuestionsEditor({
   questionTypes,
   settings,
+  memberEmail,
 }: {
   questionTypes: JournalQuestionType[];
   settings: JournalSettings;
+  /** When the owner is editing on a member's behalf, the member's email. */
+  memberEmail?: string;
 }) {
   const [rows, setRows] = useState<Row[]>(() => questionTypes.map(toRow));
   const [perDay, setPerDay] = useState(settings.questions_per_day);
@@ -178,7 +181,8 @@ export function QuestionsEditor({
             base_description: r.base_description,
             enabled: r.enabled,
           })),
-          perDay
+          perDay,
+          memberEmail
         );
         setDirty(false);
         setJustSaved(true);
@@ -191,7 +195,7 @@ export function QuestionsEditor({
   function handleAdd() {
     startTransition(async () => {
       try {
-        const created = await addCustomQuestionType(newName, newDesc);
+        const created = await addCustomQuestionType(newName, newDesc, memberEmail);
         setRows((rs) => [...rs, toRow(created)]);
         setNewName("");
         setNewDesc("");
@@ -205,7 +209,7 @@ export function QuestionsEditor({
   function handleDelete(id: string) {
     startTransition(async () => {
       try {
-        await deleteCustomQuestionType(id);
+        await deleteCustomQuestionType(id, memberEmail);
         setRows((rs) => rs.filter((r) => r.id !== id));
       } catch (err) {
         alert(err instanceof Error ? err.message : String(err));
