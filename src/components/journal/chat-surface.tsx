@@ -78,12 +78,37 @@ export function ChatSurface({
     running: timerRunning,
     degrees: timerDegrees,
   } = useJournalTimer();
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const isHistoryClosed = status === "closed" && viewMode === "history";
+  const showWritingControls = !readOnly && !isHistoryClosed;
+  // A finished post being read (a shared entry, or a closed entry in history)
+  // is view-only: open it at the top like any article, never jump to the end.
+  const isViewingOnly = readOnly || isHistoryClosed;
 
-  // Scroll to bottom on new content
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Whether the reader is sitting at the bottom of the page. We only follow new
+  // content when they already are — otherwise scrolling up to re-read an earlier
+  // turn gets yanked back down by the next streamed token. Appending content
+  // never fires a scroll event and the programmatic scroll below only moves
+  // toward the bottom, so the only thing that un-pins is the user scrolling up.
+  const pinnedToBottom = useRef(true);
+
   useEffect(() => {
+    const updatePinned = () => {
+      const distanceFromBottom =
+        document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+      pinnedToBottom.current = distanceFromBottom < 120;
+    };
+    updatePinned();
+    window.addEventListener("scroll", updatePinned, { passive: true });
+    return () => window.removeEventListener("scroll", updatePinned);
+  }, []);
+
+  // Follow new content only while pinned to the bottom — and never in a
+  // view-only post, which should open at the top.
+  useEffect(() => {
+    if (isViewingOnly || !pinnedToBottom.current) return;
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streaming]);
+  }, [messages, streaming, isViewingOnly]);
 
   // Anchor the zen timer to the opening question's timestamp. beginTimer is
   // idempotent for the same anchor, so it's safe to call on every render.
@@ -272,9 +297,6 @@ export function ChatSurface({
     router.push("/journal");
     router.refresh();
   }
-
-  const isHistoryClosed = status === "closed" && viewMode === "history";
-  const showWritingControls = !readOnly && !isHistoryClosed;
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-6 pb-24 pt-12">
