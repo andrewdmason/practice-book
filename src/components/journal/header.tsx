@@ -1,6 +1,7 @@
 import { JournalHeaderClient } from "@/components/journal/header-client";
 import { getUserTimezone, localDate } from "@/lib/date-utils";
 import { requireUserId } from "@/lib/journal/auth";
+import { getJournalNotifications } from "@/lib/journal/notifications";
 import { createClient } from "@/lib/supabase/server";
 
 export type JournalStreakStats = {
@@ -20,15 +21,21 @@ type StreakEntry = {
 };
 
 export async function JournalHeader() {
-  const streak = await getJournalStreakStats();
-
-  return <JournalHeaderClient streak={streak} />;
-}
-
-async function getJournalStreakStats(): Promise<JournalStreakStats> {
   const supabase = await createClient();
   const userId = await requireUserId(supabase);
 
+  const [streak, notifications] = await Promise.all([
+    getJournalStreakStats(supabase, userId),
+    getJournalNotifications(supabase, userId),
+  ]);
+
+  return <JournalHeaderClient streak={streak} notifications={notifications} />;
+}
+
+async function getJournalStreakStats(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+): Promise<JournalStreakStats> {
   const [{ data }, tz] = await Promise.all([
     supabase
       .from("journal_entries")

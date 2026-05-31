@@ -1387,6 +1387,28 @@ export async function addInlineComment(
   return { ...(data as JournalInlineComment), authorName };
 }
 
+/**
+ * Record that the current user has opened an entry's page, dismissing its
+ * notification. Upserts journal_entry_views.last_viewed_at = now() — which
+ * clears both "new post" and "unread comments" at once (see
+ * src/lib/journal/notifications.ts). Revalidates the journal layout so the
+ * header badge recomputes. Fired once on mount from the entry page; safe to
+ * call for any entry (only family posts ever contribute to the badge).
+ */
+export async function markEntryViewed(entryId: string): Promise<void> {
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
+
+  await supabase
+    .from("journal_entry_views")
+    .upsert(
+      { user_id: userId, entry_id: entryId, last_viewed_at: new Date().toISOString() },
+      { onConflict: "user_id,entry_id" }
+    );
+
+  revalidatePath("/journal", "layout");
+}
+
 /** Edit one of your own comments. RLS restricts this to the comment's author. */
 export async function editInlineComment(commentId: string, content: string) {
   const trimmed = content.trim();

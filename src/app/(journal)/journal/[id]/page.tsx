@@ -8,6 +8,7 @@ import { EntryTitle } from "@/components/journal/entry-title";
 import { QuoteEntryView } from "@/components/journal/quote-entry-view";
 import { RecapEntryView } from "@/components/journal/recap-entry-view";
 import { JournalPhotoGallery } from "@/components/journal/journal-photo-gallery";
+import { MarkEntryViewed } from "@/components/journal/mark-entry-viewed";
 import { createClient } from "@/lib/supabase/server";
 import { getIsOwner, requireUserId } from "@/lib/journal/auth";
 import { getEntryBlocks } from "@/lib/journal/entry-blocks";
@@ -154,6 +155,7 @@ export default async function EntryPage({
 
   return (
     <div className="flex flex-1 flex-col">
+      {commentsEnabled && <MarkEntryViewed entryId={entry.id} />}
       <div className="mx-auto w-full max-w-2xl px-6 pt-8">
         <Link
           href={isAuthor ? "/journal" : "/journal?feed=family"}

@@ -500,6 +500,33 @@ export type JournalInlineCommentWithAuthor = JournalInlineComment & {
   authorName: string;
 };
 
+/**
+ * Per-user read state for an entry: the last time the user opened its page.
+ * Drives the notification badge (see src/lib/journal/notifications.ts).
+ */
+export type JournalEntryView = {
+  user_id: string;
+  entry_id: string;
+  last_viewed_at: string;
+};
+
+/**
+ * One unread post in the notification dropdown. `reason` is the human label
+ * ("New post" or "2 new comments"); a post appears at most once regardless of
+ * how many reasons apply.
+ */
+export type JournalNotification = {
+  entryId: string;
+  title: string;
+  reason: string;
+};
+
+/** The header badge's data: the unread posts and their count (== items.length). */
+export type JournalNotifications = {
+  count: number;
+  items: JournalNotification[];
+};
+
 export type JournalMemoryProposal = {
   id: string;
   entry_id: string;

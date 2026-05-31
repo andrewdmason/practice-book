@@ -10,13 +10,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { NotificationBell } from "@/components/journal/notification-bell";
 import { cn } from "@/lib/utils";
 import type { JournalStreakStats } from "@/components/journal/header";
+import type { JournalNotifications } from "@/lib/types";
 
 export function JournalHeaderClient({
   streak,
+  notifications,
 }: {
   streak: JournalStreakStats;
+  notifications: JournalNotifications;
 }) {
   return (
     <TooltipProvider>
@@ -36,14 +40,17 @@ export function JournalHeaderClient({
             </Link>
             <JournalStreakBadge streak={streak} />
           </div>
-          <Link
-            href="/settings"
-            aria-label="Settings"
-            title="Settings"
-            className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <Settings className="h-5 w-5" />
-          </Link>
+          <div className="flex items-center gap-1">
+            <NotificationBell notifications={notifications} />
+            <Link
+              href="/settings"
+              aria-label="Settings"
+              title="Settings"
+              className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Settings className="h-5 w-5" />
+            </Link>
+          </div>
         </div>
       </header>
     </TooltipProvider>
