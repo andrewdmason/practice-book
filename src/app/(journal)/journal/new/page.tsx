@@ -1,4 +1,5 @@
 import { ChatSurface } from "@/components/journal/chat-surface";
+import { FreeformComposer } from "@/components/journal/freeform-composer";
 import { OpeningPicker } from "@/components/journal/opening-picker";
 import { JournalPhotoGallery } from "@/components/journal/journal-photo-gallery";
 import { createClient } from "@/lib/supabase/server";
@@ -53,8 +54,27 @@ export default async function NewEntryPage({
 
   // A fresh open entry with no messages starts in the three-question picker;
   // picking one inserts the opening message and hands off to the chat. Once
-  // "write freely" is clicked the picker is bypassed straight to the chat.
+  // "write freely" is clicked the picker is bypassed straight to the freeform
+  // blog composer; picking a question hands off to the AI-interview chat.
   const showPicker = messages.length === 0 && !entry.freeform_started_at;
+  const isFreeform = !showPicker && Boolean(entry.freeform_started_at);
+
+  // The freeform composer renders and positions its own photos inline (a blog
+  // post, not a floating attach action), so the page-level gallery is only for
+  // the picker and the AI-interview chat.
+  if (isFreeform) {
+    const body =
+      messageRows.find((m) => m.role === "user")?.content ?? "";
+    return (
+      <FreeformComposer
+        entryId={entry.id}
+        initialTitle={entry.title ?? ""}
+        initialBody={body}
+        initialVisibility={entry.visibility}
+        initialPhotos={photos}
+      />
+    );
+  }
 
   return (
     <>

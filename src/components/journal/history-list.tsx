@@ -36,6 +36,19 @@ function isGenerating(e: JournalEntry): boolean {
   return Date.now() - Date.parse(e.closed_at) < 60_000;
 }
 
+// A standard entry whose wrap pass (summary/pull_quote) hasn't landed yet,
+// bounded to 60s after closing. Covers freeform blog posts, which close with a
+// user-written title already in place (so isGenerating is false) but still wait
+// on the AI pull quote — we poll until it arrives without showing the
+// "summing up…" placeholder over the title.
+function isAwaitingWrap(e: JournalEntry): boolean {
+  if (e.status !== "closed") return false;
+  if (e.entry_type !== "standard") return false;
+  if (e.summary && e.summary.trim().length > 0) return false;
+  if (!e.closed_at) return false;
+  return Date.now() - Date.parse(e.closed_at) < 60_000;
+}
+
 export function HistoryList({
   entries,
   mode = "mine",
@@ -51,7 +64,12 @@ export function HistoryList({
 
   // While any entry is mid-wrap, poll the server until its AI fields land.
   useEffect(() => {
-    if (!entries.some((e) => isGenerating(e) || e.photoGenerationStatus)) return;
+    if (
+      !entries.some(
+        (e) => isGenerating(e) || isAwaitingWrap(e) || e.photoGenerationStatus
+      )
+    )
+      return;
     const id = setInterval(() => router.refresh(), 1500);
     return () => clearInterval(id);
   }, [entries, router]);

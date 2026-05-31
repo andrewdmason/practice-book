@@ -85,7 +85,7 @@ export async function runWrap(entryId: string): Promise<WrapResult> {
 
   const { data: entry, error: entryErr } = await supabase
     .from("journal_entries")
-    .select("id, entry_date, status, summary, user_id")
+    .select("id, entry_date, status, summary, title, user_id")
     .eq("id", entryId)
     .single();
   if (entryErr || !entry) {
@@ -251,7 +251,12 @@ After your tool calls, you may stop. The user does not see the wrap output.`;
 
   const update: Record<string, unknown> = { summary_stale: false };
   if (summary !== null) update.summary = summary;
-  if (title !== null) update.title = title;
+  // Freeform blog posts carry a user-written title — never overwrite it. The
+  // wrap still runs to produce the summary and pull quote; only AI-interview
+  // entries (which close untitled) take the model's generated title.
+  const hasUserTitle =
+    typeof entry.title === "string" && entry.title.trim().length > 0;
+  if (title !== null && !hasUserTitle) update.title = title;
   // pull_quote can be set to null explicitly when the AI chose not to surface one
   update.pull_quote = pullQuote;
   await supabase.from("journal_entries").update(update).eq("id", entryId);
