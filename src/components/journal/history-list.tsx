@@ -23,6 +23,9 @@ type HistoryEntry = JournalEntry & {
   authorName?: string | null;
   commenterNames?: string[];
   authorPhotoUrl?: string | null;
+  /** Family feed: true when this post is unread for the caller (new post, or
+   * new comments since they last viewed it). */
+  unread?: boolean;
 };
 
 // A just-closed entry whose wrap pass (title/summary/pull_quote) hasn't landed
@@ -90,6 +93,13 @@ export function HistoryList({
           <li key={e.id}>
             <Link href={`/journal/${e.id}`} className="group block">
               <div className="flex items-baseline gap-3">
+                {e.unread && (
+                  <span
+                    aria-label="Unread"
+                    title="New since you last viewed this post"
+                    className="size-2 shrink-0 self-center rounded-full bg-primary"
+                  />
+                )}
                 <span className="font-serif text-xs text-muted-foreground tabular-nums">
                   {formatDate(e.entry_date)}
                 </span>

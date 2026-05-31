@@ -2,6 +2,7 @@ import { HistoryList } from "@/components/journal/history-list";
 import { JournalListDropZone } from "@/components/journal/journal-list-drop-zone";
 import { createClient } from "@/lib/supabase/server";
 import { requireUserId } from "@/lib/journal/auth";
+import { getUnreadFamilyEntryIds } from "@/lib/journal/notifications";
 import {
   getEntriesImageGenerationStates,
   getEntriesPhotos,
@@ -116,6 +117,12 @@ export default async function JournalPage({
     }
   }
 
+  // Which family posts are unread for the caller — same definition as the
+  // header notification badge (new post, or new comments since last view).
+  const unreadEntryIds = isFamily
+    ? await getUnreadFamilyEntryIds(supabase, userId)
+    : new Set<string>();
+
   const [photosByEntry, imageGenerationByEntry] = await Promise.all([
     getEntriesPhotos(entryIds),
     getEntriesImageGenerationStates(entryIds),
@@ -130,6 +137,7 @@ export default async function JournalPage({
         : null,
       commenterNames: isFamily ? commenterNamesByEntry.get(e.id) ?? [] : [],
       authorPhotoUrl: isFamily ? authorPhotoByUser.get(e.user_id) ?? null : null,
+      unread: isFamily ? unreadEntryIds.has(e.id) : false,
     }))
     // Hide abandoned entries: an open entry never started (no opening question
     // picked, no freeform writing) with nothing attached is a row left behind
