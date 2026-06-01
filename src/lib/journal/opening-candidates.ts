@@ -9,7 +9,7 @@ import {
 } from "@/lib/journal/context";
 import { loadCalendarBlock } from "@/lib/journal/calendar";
 import type { CalendarWindow } from "@/lib/journal/calendar/types";
-import { formatNow, getUserTimezone, localDate } from "@/lib/date-utils";
+import { formatNow, localDate, resolveTimezone } from "@/lib/date-utils";
 import { createClient } from "@/lib/supabase/server";
 import { requireUserId } from "@/lib/journal/auth";
 import type { JournalOpeningCandidate, JournalQuestionType } from "@/lib/types";
@@ -324,13 +324,19 @@ const EMPTY_HISTORY = { recent: [], older: [] } as Awaited<ReturnType<typeof loa
  * Each candidate is generated in its own model call against a prompt scoped to
  * just that category's sources (see CONTEXT_SPECS), so a type can't drift onto
  * data it has no business asking about. The calls run in parallel.
+ *
+ * `clientTz` is the caller's IANA timezone, sent with the request so date
+ * reasoning doesn't depend on the tz cookie having been written yet (it's set
+ * client-side after mount, so it can be missing on a fresh session — which makes
+ * the day boundary fall back to UTC and mislabels evening events as "yesterday").
  */
 export async function generateCandidates(
   entryId: string,
   rejected: string[],
-  forcedCategoryName?: string
+  forcedCategoryName?: string,
+  clientTz?: string
 ): Promise<JournalOpeningCandidate[]> {
-  const tz = await getUserTimezone();
+  const tz = await resolveTimezone(clientTz);
   const today = localDate(new Date(), tz);
   const nowLabel = formatNow(new Date(), tz);
 

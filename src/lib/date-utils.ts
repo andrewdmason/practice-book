@@ -43,11 +43,40 @@ export function formatNow(date: Date, timeZone: string): string {
 }
 
 /**
+ * True if `tz` is a usable IANA timezone name. Lets server code trust a
+ * client-supplied timezone before computing dates with it.
+ */
+export function isValidTimeZone(tz: string | undefined | null): tz is string {
+  if (!tz) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Read the user's IANA timezone from the `tz` cookie (set by TimezoneProvider).
  * Only call from server code — uses `next/headers`.
+ *
+ * The cookie is set client-side after mount, so it can be missing on a brand-new
+ * session (and child effects fire before the provider's). Prefer a timezone the
+ * client sends explicitly with the request (see resolveTimezone) over this.
  */
 export async function getUserTimezone(): Promise<string> {
   const { cookies } = await import("next/headers");
   const jar = await cookies();
   return jar.get("tz")?.value ?? "UTC";
+}
+
+/**
+ * Resolve the timezone to compute dates in: a valid client-supplied tz wins;
+ * otherwise fall back to the cookie (then UTC). Use this in any request that
+ * does date-sensitive work the moment the page loads, before the tz cookie may
+ * have been written.
+ */
+export async function resolveTimezone(clientTz?: string | null): Promise<string> {
+  if (isValidTimeZone(clientTz)) return clientTz;
+  return getUserTimezone();
 }

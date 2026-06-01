@@ -108,10 +108,15 @@ export function OpeningPicker({
     setLoading(true);
     setError(null);
     try {
+      // Send the browser's timezone so date reasoning doesn't depend on the tz
+      // cookie, which the provider only writes after mount (and child effects
+      // run first) — on a fresh session it'd otherwise fall back to UTC and
+      // mislabel this evening's events as "yesterday".
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entryId, ...extra }),
+        body: JSON.stringify({ entryId, tz, ...extra }),
       });
       if (!res.ok) {
         setError((await res.text().catch(() => "")) || "request failed");
