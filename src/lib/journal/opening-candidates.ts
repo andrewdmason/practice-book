@@ -9,6 +9,7 @@ import {
 } from "@/lib/journal/context";
 import { loadCalendarBlock } from "@/lib/journal/calendar";
 import type { CalendarWindow } from "@/lib/journal/calendar/types";
+import { FAMILY_FOLLOWUP, specFor } from "@/lib/journal/question-sources";
 import { formatNow, localDate, resolveTimezone } from "@/lib/date-utils";
 import { createClient } from "@/lib/supabase/server";
 import { requireUserId } from "@/lib/journal/auth";
@@ -183,70 +184,6 @@ export async function loadRecentlyShown(today: string): Promise<string[]> {
   if (error) throw error;
 
   return [...new Set((data ?? []).map((r) => r.question as string))];
-}
-
-/** The family-followup question type's kebab name. */
-const FAMILY_FOLLOWUP = "family-followup";
-
-/**
- * The sources a question type is allowed to see. Each candidate is generated in
- * its own model call against a prompt built from only these sources, so a type
- * structurally *cannot* draw on data it isn't given — no prose "never ask
- * about…" guard required. `calendar` also picks the time window (see
- * CalendarWindow): "recap" excludes today entirely, so a recap question can't
- * reach a today event and back-date it; "ahead" is the only window that looks
- * forward.
- */
-export type CategoryContextSpec = {
-  present: boolean;
-  past: boolean;
-  history: boolean;
-  calendar: CalendarWindow | "none";
-};
-
-/**
- * Per-built-in source specs. A type's `base_description` still says what it asks
- * about; this controls what data it can actually see while asking. Keep the two
- * in sync — e.g. me-topic's description says "stays in the Present doc" and its
- * spec gives it only the Present doc.
- */
-const CONTEXT_SPECS: Record<string, CategoryContextSpec> = {
-  "recent-calendar": { present: false, past: false, history: false, calendar: "recent" },
-  "upcoming-calendar": { present: false, past: false, history: false, calendar: "ahead" },
-  "historical-followup": { present: false, past: false, history: true, calendar: "none" },
-  "me-topic": { present: true, past: false, history: false, calendar: "none" },
-  "deep-introspective": { present: true, past: true, history: true, calendar: "none" },
-  gratitude: { present: false, past: false, history: false, calendar: "none" },
-  "mood-check-in": { present: false, past: false, history: false, calendar: "none" },
-  "daily-recap": { present: false, past: false, history: false, calendar: "recap" },
-  intentions: { present: true, past: false, history: false, calendar: "ahead" },
-  "unresolved-loop": { present: false, past: false, history: true, calendar: "none" },
-  relationship: { present: true, past: false, history: true, calendar: "none" },
-  curveball: { present: false, past: false, history: false, calendar: "none" },
-  "sensory-moment": { present: false, past: false, history: false, calendar: "none" },
-  favorites: { present: false, past: false, history: false, calendar: "none" },
-  imagination: { present: false, past: false, history: false, calendar: "none" },
-  "proud-moment": { present: false, past: false, history: true, calendar: "none" },
-  "funny-moment": { present: false, past: false, history: true, calendar: "none" },
-  reminiscence: { present: false, past: true, history: false, calendar: "none" },
-  "family-followup": { present: false, past: false, history: false, calendar: "none" },
-};
-
-/**
- * Custom (user-authored) types and the untyped fallback get generous grounding
- * minus the calendar — the calendar is the big drift source, and a custom type
- * shouldn't silently inherit it. They still get Present, Past, and history so a
- * user-authored type has material to work with.
- */
-const DEFAULT_SPEC: CategoryContextSpec = {
-  present: true,
-  past: true,
-  history: true,
-  calendar: "none",
-};
-
-function specFor(name: string | undefined): CategoryContextSpec {
-  return (name && CONTEXT_SPECS[name]) || DEFAULT_SPEC;
 }
 
 type FamilyFollowupSource = {

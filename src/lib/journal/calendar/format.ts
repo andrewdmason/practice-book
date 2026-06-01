@@ -78,11 +78,9 @@ export function formatCalendarBlock(
   now: Date = new Date(),
   // The window decides which days appear (see CalendarWindow):
   // - "recent": last 3 days, today's not-yet-happened timed events stripped.
-  // - "recap":  last 3 days but no today at all — so a recap question can't
-  //             reach a today event and back-date it.
   // - "ahead":  last 3 days plus the next 7 — the only forward-looking window.
-  // Today's all-day events are kept under "recent"/"ahead" (ongoing, not
-  // scheduled-for-later) and dropped under "recap" with the rest of today.
+  // Today's all-day events are kept under both windows (ongoing, not
+  // scheduled-for-later).
   window: CalendarWindow = "recent",
 ): string {
   if (results.length === 0) return "";
@@ -127,9 +125,8 @@ export function formatCalendarBlock(
   // All feeds failed → no block.
   if (failed.length === results.length) return "";
 
-  // Last day shown: "ahead" reaches into next week, "recent" stops at today,
-  // "recap" stops at yesterday (today is excluded entirely).
-  const maxD = window === "ahead" ? 7 : window === "recap" ? -1 : 0;
+  // Last day shown: "ahead" reaches into next week, "recent" stops at today.
+  const maxD = window === "ahead" ? 7 : 0;
 
   const lines: string[] = [];
   for (let d = -3; d <= maxD; d++) {
@@ -183,8 +180,6 @@ export function formatCalendarBlock(
   const header =
     window === "ahead"
       ? "=== Calendar — last 3 days + next 7 ==="
-      : window === "recap"
-        ? "=== Calendar — the last few days (not today) ==="
-        : "=== Calendar — last 3 days ===";
+      : "=== Calendar — last 3 days ===";
   return [header, ...lines].join("\n");
 }
