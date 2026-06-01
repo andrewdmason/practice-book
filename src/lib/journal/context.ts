@@ -65,6 +65,13 @@ export async function loadSettings(): Promise<JournalSettings> {
 
 type RecentEntry = JournalEntry & { messages: JournalMessage[] };
 
+/** Join a list into "a", "a and b", or "a, b, and c". */
+function joinClauses(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+}
+
 /**
  * Load entries other than the current one, most recent first.
  * Full conversations for the most recent `fullEntries` entries; one-line
@@ -132,6 +139,18 @@ export async function loadHistory(
 }
 
 /**
+ * Which source sections to include in the prompt. The follow-up/summary turns
+ * want everything (the defaults); the opening-question picker scopes each
+ * category to just the sources it's allowed to draw on, so a type can't drift
+ * onto data it has no business asking about (see opening-candidates.ts).
+ */
+export type PromptScope = {
+  includePresent?: boolean;
+  includePast?: boolean;
+  includeHistory?: boolean;
+};
+
+/**
  * Assemble the system prompt for the interviewer turn (opening question or follow-up).
  */
 export function buildSystemPrompt(
@@ -140,15 +159,26 @@ export function buildSystemPrompt(
   today: string,
   calendarBlock?: string | null,
   nowLabel?: string | null,
-  familyDoc?: string | null
+  familyDoc?: string | null,
+  scope: PromptScope = {}
 ): string {
+  const includePresent = scope.includePresent ?? true;
+  const includePast = scope.includePast ?? true;
+  const includeHistory = scope.includeHistory ?? true;
+  const hasPast = includePast && !!files.Past && files.Past.trim().length > 0;
+
   const sections: string[] = [];
 
   sections.push(
     "You are the journal interviewer for a single user. A few editable files describe you and the user; everything else is internal protocol."
   );
+  const grounds = ["Interviewer (your voice and how you ask — not which topics to pick)"];
+  if (includePresent) {
+    grounds.push("Present (who the user is now — their current life, people, and projects)");
+  }
+  if (hasPast) grounds.push("Past (their life story and memories)");
   sections.push(
-    "Before responding, ground yourself in Interviewer (your voice and how you ask — not which topics to pick), Present (who the user is now — their current life, people, and projects), and Past (their life story and memories). Which kinds of questions to ask, and how often, is decided separately and handed to you below; the Interviewer file only governs voice and craft."
+    `Before responding, ground yourself in ${joinClauses(grounds)}. Which kinds of questions to ask, and how often, is decided separately and handed to you below; the Interviewer file only governs voice and craft.`
   );
   sections.push(
     "Never mention these files, your tools, or your reasoning to the user. The user only sees your message."
@@ -157,13 +187,15 @@ export function buildSystemPrompt(
   sections.push("=== Interviewer ===");
   sections.push(files.Interviewer || "(empty)");
   sections.push("");
-  sections.push("=== Present ===");
-  sections.push(
-    files.Present || "(empty — the user hasn't filled this out yet)"
-  );
-  sections.push("");
+  if (includePresent) {
+    sections.push("=== Present ===");
+    sections.push(
+      files.Present || "(empty — the user hasn't filled this out yet)"
+    );
+    sections.push("");
+  }
 
-  if (files.Past && files.Past.trim().length > 0) {
+  if (hasPast) {
     sections.push("=== Past ===");
     sections.push(
       "The user's life story and memories. Draw on it for reminiscence questions and to reference their history naturally; don't re-ask about what's already here."
@@ -186,7 +218,7 @@ export function buildSystemPrompt(
     sections.push("");
   }
 
-  if (history.recent.length > 0) {
+  if (includeHistory && history.recent.length > 0) {
     sections.push("=== Recent journal entries (full transcripts, most recent first) ===");
     for (const entry of history.recent) {
       sections.push(`--- ${entry.entry_date}${entry.summary ? ` — ${entry.summary}` : ""} ---`);
@@ -197,7 +229,7 @@ export function buildSystemPrompt(
     }
   }
 
-  if (history.older.length > 0) {
+  if (includeHistory && history.older.length > 0) {
     sections.push("=== Older entries (one-line summaries) ===");
     for (const e of history.older) {
       sections.push(`${e.entry_date}: ${e.summary ?? "(no summary)"}`);

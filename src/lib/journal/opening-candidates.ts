@@ -8,6 +8,7 @@ import {
   loadSettings,
 } from "@/lib/journal/context";
 import { loadCalendarBlock } from "@/lib/journal/calendar";
+import type { CalendarWindow } from "@/lib/journal/calendar/types";
 import { formatNow, getUserTimezone, localDate } from "@/lib/date-utils";
 import { createClient } from "@/lib/supabase/server";
 import { requireUserId } from "@/lib/journal/auth";
@@ -112,35 +113,42 @@ export function sampleQuestionMix(
   return picks;
 }
 
-export function buildCandidatesInstruction(
-  n: number,
+const VOICE_NOTE =
+  "Each question should still sound like you (see the Interviewer file): one or two sentences, warm, like a friend texting in the morning. Each question's text is exactly what the user reads — never narrate your reasoning, name the category, or explain your choice inside it. A category's extra instructions are soft preferences: if one can't be satisfied from the available context, quietly ask a natural question of that category instead — never write about the conflict or that you're skipping or substituting anything. For each question, also set its `visibility` (see the tool): \"family\" for shared/social/event questions or anything drawn from another member's shared entry, \"private\" otherwise.";
+
+/**
+ * Build the picker instruction for a single slot. Each slot is generated in its
+ * own model call against a prompt scoped to just that category's sources, so the
+ * instruction only ever describes one category (or an untyped fallback). `count`
+ * is the number of questions this call should return — 1 for a normal per-slot
+ * call, N for a forced single-category reroll, N for the untyped fallback.
+ */
+export function buildCategoryInstruction(
+  count: number,
+  category: QuestionCategory | undefined,
+  siblingNames: string[],
   rejected: string[],
-  recentlyShown: string[] = [],
-  sampled: QuestionCategory[] = [],
-  forcedCategory?: QuestionCategory
+  recentlyShown: string[] = []
 ): string {
   const lines: string[] = ["", "=== Today's question picker ==="];
-  const voiceNote =
-    "Each question should still sound like you (see the Interviewer file): one or two sentences, warm, like a friend texting in the morning. Each question's text is exactly what the user reads — never narrate your reasoning, name the category, or explain your choice inside it. A category's extra instructions are soft preferences: if one can't be satisfied from the available context, quietly ask a natural question of that category instead — never write about the conflict or that you're skipping or substituting anything. For each question, also set its `visibility` (see the tool): \"family\" for shared/social/event questions or anything drawn from another member's shared entry, \"private\" otherwise.";
-  if (forcedCategory) {
+  if (category) {
     lines.push(
-      `The user asked specifically for questions of one kind. Propose exactly ${n} opening question(s) by calling the \`propose_questions\` tool, all in this single category — make them genuinely different angles on it, not restatements of one question:`,
-      `- ${forcedCategory.name} — ${forcedCategory.description}`,
-      voiceNote
+      count > 1
+        ? `Propose exactly ${count} opening question(s) by calling the \`propose_questions\` tool, all in this single category — genuinely different angles on it, not restatements of one question:`
+        : "Propose exactly one opening question by calling the `propose_questions` tool, in this category:",
+      `- ${category.name} — ${category.description}`
     );
-  } else if (sampled.length === n) {
-    lines.push(
-      `Propose exactly ${n} opening question(s) for today by calling the \`propose_questions\` tool. The categories below were sampled this morning from the user's configured question types. Produce one question per category, in this order — do not merge, swap, or substitute categories, and do not let two questions collapse into the same domain:`
-    );
-    sampled.forEach((c, i) => {
-      lines.push(`${i + 1}. ${c.name} — ${c.description}`);
-    });
-    lines.push(voiceNote);
+    if (siblingNames.length > 0) {
+      lines.push(
+        `The user will also see question(s) of these other kinds today: ${siblingNames.join(", ")}. Keep yours clearly distinct in topic and mood — don't collapse into the same domain as those.`
+      );
+    }
   } else {
     lines.push(
-      `Instead of asking a single opening question, propose exactly ${n} for the user to choose from by calling the \`propose_questions\` tool. Make them genuinely different in mood and angle — never variations of one question, never the same domain twice. ${voiceNote}`
+      `Propose exactly ${count} opening question(s) for the user to choose from by calling the \`propose_questions\` tool. Make them genuinely different in mood and angle — never variations of one question, never the same domain twice.`
     );
   }
+  lines.push(VOICE_NOTE);
   if (rejected.length > 0) {
     lines.push(
       "",
@@ -181,24 +189,65 @@ export async function loadRecentlyShown(today: string): Promise<string[]> {
 const FAMILY_FOLLOWUP = "family-followup";
 
 /**
- * The only question type allowed to look ahead. When it's among the categories
- * being generated, the calendar block includes future events; otherwise the
- * block is past-only so no other type can drift onto something upcoming.
+ * The sources a question type is allowed to see. Each candidate is generated in
+ * its own model call against a prompt built from only these sources, so a type
+ * structurally *cannot* draw on data it isn't given — no prose "never ask
+ * about…" guard required. `calendar` also picks the time window (see
+ * CalendarWindow): "recap" excludes today entirely, so a recap question can't
+ * reach a today event and back-date it; "ahead" is the only window that looks
+ * forward.
  */
-const UPCOMING_CALENDAR = "upcoming-calendar";
+export type CategoryContextSpec = {
+  present: boolean;
+  past: boolean;
+  history: boolean;
+  calendar: CalendarWindow | "none";
+};
 
 /**
- * Question types that legitimately read the calendar. When none of the
- * categories in play this round is one of these, the calendar block is left out
- * of the prompt entirely — so a non-calendar type (me-topic, relationship, …)
- * can't drift onto an event it has no business asking about.
+ * Per-built-in source specs. A type's `base_description` still says what it asks
+ * about; this controls what data it can actually see while asking. Keep the two
+ * in sync — e.g. me-topic's description says "stays in the Present doc" and its
+ * spec gives it only the Present doc.
  */
-const CALENDAR_CATEGORIES = new Set<string>([
-  "recent-calendar",
-  UPCOMING_CALENDAR,
-  "daily-recap",
-  "intentions",
-]);
+const CONTEXT_SPECS: Record<string, CategoryContextSpec> = {
+  "recent-calendar": { present: false, past: false, history: false, calendar: "recent" },
+  "upcoming-calendar": { present: false, past: false, history: false, calendar: "ahead" },
+  "historical-followup": { present: false, past: false, history: true, calendar: "none" },
+  "me-topic": { present: true, past: false, history: false, calendar: "none" },
+  "deep-introspective": { present: true, past: true, history: true, calendar: "none" },
+  gratitude: { present: false, past: false, history: false, calendar: "none" },
+  "mood-check-in": { present: false, past: false, history: false, calendar: "none" },
+  "daily-recap": { present: false, past: false, history: false, calendar: "recap" },
+  intentions: { present: true, past: false, history: false, calendar: "ahead" },
+  "unresolved-loop": { present: false, past: false, history: true, calendar: "none" },
+  relationship: { present: true, past: false, history: true, calendar: "none" },
+  curveball: { present: false, past: false, history: false, calendar: "none" },
+  "sensory-moment": { present: false, past: false, history: false, calendar: "none" },
+  favorites: { present: false, past: false, history: false, calendar: "none" },
+  imagination: { present: false, past: false, history: false, calendar: "none" },
+  "proud-moment": { present: false, past: false, history: true, calendar: "none" },
+  "funny-moment": { present: false, past: false, history: true, calendar: "none" },
+  reminiscence: { present: false, past: true, history: false, calendar: "none" },
+  "family-followup": { present: false, past: false, history: false, calendar: "none" },
+};
+
+/**
+ * Custom (user-authored) types and the untyped fallback get generous grounding
+ * minus the calendar — the calendar is the big drift source, and a custom type
+ * shouldn't silently inherit it. They still get Present, Past, and history so a
+ * user-authored type has material to work with.
+ */
+const DEFAULT_SPEC: CategoryContextSpec = {
+  present: true,
+  past: true,
+  history: true,
+  calendar: "none",
+};
+
+function specFor(name: string | undefined): CategoryContextSpec {
+  return (name && CONTEXT_SPECS[name]) || DEFAULT_SPEC;
+}
 
 type FamilyFollowupSource = {
   authorName: string;
@@ -263,12 +312,18 @@ function withFamilySource(
   return { ...category, description: `${category.description} ${parts.join("\n")}` };
 }
 
+const EMPTY_HISTORY = { recent: [], older: [] } as Awaited<ReturnType<typeof loadHistory>>;
+
 /**
  * Generate the day's varied opening-question candidates for an entry.
  * `rejected` lists questions the user already turned down (from prior rerolls)
  * so the model avoids repeating them. When `forcedCategoryName` is given, all
  * candidates are produced in that single question type (the user asked for a
  * specific kind), even if that type is currently disabled.
+ *
+ * Each candidate is generated in its own model call against a prompt scoped to
+ * just that category's sources (see CONTEXT_SPECS), so a type can't drift onto
+ * data it has no business asking about. The calls run in parallel.
  */
 export async function generateCandidates(
   entryId: string,
@@ -277,101 +332,134 @@ export async function generateCandidates(
 ): Promise<JournalOpeningCandidate[]> {
   const tz = await getUserTimezone();
   const today = localDate(new Date(), tz);
+  const nowLabel = formatNow(new Date(), tz);
 
-  // Sampling needs the question types, settings, and family source, so load
-  // those first. Which categories we land on decides whether the calendar block
-  // may include future events — so the calendar load waits until we know.
-  const [questionTypes, settings, familySource] = await Promise.all([
-    loadQuestionTypes(),
-    loadSettings(),
-    loadFamilyFollowupSource(),
-  ]);
+  const [questionTypes, settings, familySource, files, recentlyShown, familyDoc] =
+    await Promise.all([
+      loadQuestionTypes(),
+      loadSettings(),
+      loadFamilyFollowupSource(),
+      loadAgentFiles(),
+      loadRecentlyShown(today),
+      loadFamilyDoc(),
+    ]);
 
   const n = settings.questions_per_day;
 
-  let sampled: QuestionCategory[] = [];
-  let forced: QuestionCategory | undefined;
+  // Lazy, deduped loaders: history is fetched at most once and reused; each
+  // calendar window is fetched at most once even when several slots want it.
+  let historyPromise: ReturnType<typeof loadHistory> | null = null;
+  const historyFor = () => (historyPromise ??= loadHistory(today, entryId));
+  const calendarCache = new Map<CalendarWindow, Promise<string | null>>();
+  const calendarFor = (window: CalendarWindow) => {
+    let p = calendarCache.get(window);
+    if (!p) {
+      p = loadCalendarBlock(today, tz, window);
+      calendarCache.set(window, p);
+    }
+    return p;
+  };
+
+  const client = anthropic();
+
+  // Generate one slot: `count` questions in a single category (or untyped),
+  // against a prompt holding only that category's allowed sources.
+  async function generateSlot(
+    count: number,
+    category: QuestionCategory | undefined,
+    siblingNames: string[]
+  ): Promise<JournalOpeningCandidate[]> {
+    const spec = specFor(category?.name);
+    const [calendarBlock, history] = await Promise.all([
+      spec.calendar === "none" ? Promise.resolve(null) : calendarFor(spec.calendar),
+      spec.history ? historyFor() : Promise.resolve(EMPTY_HISTORY),
+    ]);
+
+    const system =
+      buildSystemPrompt(files, history, today, calendarBlock, nowLabel, familyDoc, {
+        includePresent: spec.present,
+        includePast: spec.past,
+        includeHistory: spec.history,
+      }) +
+      "\n" +
+      buildCategoryInstruction(count, category, siblingNames, rejected, recentlyShown);
+
+    const message = await client.messages.create({
+      model: JOURNAL_MODEL,
+      max_tokens: 1024,
+      system,
+      tools: [buildOpeningCandidatesTool(count)],
+      tool_choice: { type: "tool", name: OPENING_CANDIDATES_TOOL_NAME },
+      messages: [{ role: "user", content: "It's morning. Propose today's questions." }],
+    });
+
+    const toolUse = message.content.find((b) => b.type === "tool_use");
+    if (!toolUse || toolUse.type !== "tool_use") {
+      throw new Error("model did not return question candidates");
+    }
+    const input = toolUse.input as {
+      questions?: { text?: unknown; visibility?: unknown }[];
+    };
+    const parsed = (input.questions ?? [])
+      .map((q) => ({
+        text: typeof q.text === "string" ? q.text.trim() : "",
+        // Sharing is opt-in: any unexpected value falls back to private.
+        visibility: (q.visibility === "family" ? "family" : "private") as
+          | "family"
+          | "private",
+      }))
+      .filter((q) => q.text.length > 0);
+    if (parsed.length !== count) {
+      throw new Error(`expected ${count} question candidate(s), got ${parsed.length}`);
+    }
+    // A family-followup question is always shared — it's about another member's
+    // family post — regardless of what the model suggested.
+    return parsed.map((q) => ({
+      text: q.text,
+      type: category?.name ?? null,
+      visibility: category?.name === FAMILY_FOLLOWUP ? "family" : q.visibility,
+    }));
+  }
+
+  // Forced single category (a reroll asking for one specific kind): N questions,
+  // one call, scoped to that category.
   if (forcedCategoryName) {
     const t = questionTypes.find((q) => q.name === forcedCategoryName);
     let cat = t ? questionTypeToCategory(t) : undefined;
-    // A forced family-followup needs a source to reference; fold it in when present.
     if (cat && cat.name === FAMILY_FOLLOWUP && familySource) {
       cat = withFamilySource(cat, familySource);
     }
-    forced = cat;
-  } else {
-    const enabled = questionTypes
-      .filter((t) => t.enabled && t.weight > 0)
-      // Drop family-followup from the pool entirely when no other member has
-      // shared anything, so the sampler never picks a slot it can't fill.
-      .filter((t) => t.name !== FAMILY_FOLLOWUP || familySource !== null)
-      .map(questionTypeToCategory);
-    sampled = sampleQuestionMix(enabled, n).map((c) =>
-      c.name === FAMILY_FOLLOWUP && familySource ? withFamilySource(c, familySource) : c
-    );
+    // Unknown forced category falls back to an untyped varied set.
+    return generateSlot(n, cat, []);
   }
 
-  // Only pull the calendar into the prompt when a calendar-consuming question is
-  // actually being generated this round — and only pull *future* events when an
-  // upcoming-events question is among them. A round of purely non-calendar types
-  // gets no calendar block at all, so none of them can drift onto an event.
-  const categoriesInPlay = forced ? [forced] : sampled;
-  const includeFuture = categoriesInPlay.some((c) => c.name === UPCOMING_CALENDAR);
-  const includeCalendar = categoriesInPlay.some((c) => CALENDAR_CATEGORIES.has(c.name));
+  // Normal morning: sample N distinct categories and generate each in its own
+  // scoped call, in parallel.
+  const enabled = questionTypes
+    .filter((t) => t.enabled && t.weight > 0)
+    // Drop family-followup from the pool entirely when no other member has
+    // shared anything, so the sampler never picks a slot it can't fill.
+    .filter((t) => t.name !== FAMILY_FOLLOWUP || familySource !== null)
+    .map(questionTypeToCategory);
+  const sampled = sampleQuestionMix(enabled, n).map((c) =>
+    c.name === FAMILY_FOLLOWUP && familySource ? withFamilySource(c, familySource) : c
+  );
 
-  const [files, history, calendarBlock, recentlyShown, familyDoc] = await Promise.all([
-    loadAgentFiles(),
-    loadHistory(today, entryId),
-    includeCalendar ? loadCalendarBlock(today, tz, includeFuture) : Promise.resolve(null),
-    loadRecentlyShown(today),
-    loadFamilyDoc(),
-  ]);
-
-  const system =
-    buildSystemPrompt(files, history, today, calendarBlock, formatNow(new Date(), tz), familyDoc) +
-    "\n" +
-    buildCandidatesInstruction(n, rejected, recentlyShown, sampled, forced);
-
-  const client = anthropic();
-  const message = await client.messages.create({
-    model: JOURNAL_MODEL,
-    max_tokens: 1024,
-    system,
-    tools: [buildOpeningCandidatesTool(n)],
-    tool_choice: { type: "tool", name: OPENING_CANDIDATES_TOOL_NAME },
-    messages: [{ role: "user", content: "It's morning. Propose today's questions." }],
-  });
-
-  const toolUse = message.content.find((b) => b.type === "tool_use");
-  if (!toolUse || toolUse.type !== "tool_use") {
-    throw new Error("model did not return question candidates");
+  // If sampling can't fill every slot (too few enabled types), fall back to a
+  // single untyped call for the whole set rather than leaving slots empty.
+  if (sampled.length !== n) {
+    return generateSlot(n, undefined, []);
   }
-  const input = toolUse.input as {
-    questions?: { text?: unknown; visibility?: unknown }[];
-  };
-  const parsed = (input.questions ?? [])
-    .map((q) => ({
-      text: typeof q.text === "string" ? q.text.trim() : "",
-      // Sharing is opt-in: any unexpected value falls back to private.
-      visibility: (q.visibility === "family" ? "family" : "private") as
-        | "family"
-        | "private",
-    }))
-    .filter((q) => q.text.length > 0);
-  if (parsed.length !== n) {
-    throw new Error(`expected ${n} question candidates, got ${parsed.length}`);
-  }
-  // Label each question with the type it was generated for: the forced type
-  // (all questions), the per-slot sampled type (one each, in order), or null
-  // when we fell back to an untyped varied set. A family-followup question is
-  // always shared — it's about another member's family post — regardless of
-  // what the model suggested.
-  return parsed.map((q, i) => {
-    const type = forced ? forced.name : sampled.length === n ? sampled[i]?.name ?? null : null;
-    return {
-      text: q.text,
-      type,
-      visibility: type === FAMILY_FOLLOWUP ? "family" : q.visibility,
-    };
-  });
+
+  const names = sampled.map((c) => c.name);
+  const perSlot = await Promise.all(
+    sampled.map((cat, i) =>
+      generateSlot(
+        1,
+        cat,
+        names.filter((_, j) => j !== i)
+      )
+    )
+  );
+  return perSlot.flat();
 }
