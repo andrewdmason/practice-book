@@ -206,9 +206,12 @@ export function buildSystemPrompt(
   }
 
   if (nowLabel) {
-    sections.push(
-      `Right now it's ${nowLabel}. Use this to judge whether a calendar event has already happened or is still upcoming — an event later today has not happened yet.`
-    );
+    let line = `Right now it's ${nowLabel}. Use this to judge whether a calendar event has already happened or is still upcoming — an event later today has not happened yet.`;
+    if (calendarBlock && calendarBlock.trim().length > 0) {
+      line +=
+        ` Each calendar event is listed under the exact day it falls on (Yesterday, Today, and so on); always refer to an event by that day. Never restate an event as a different day to fit the question you want to ask — don't call a Today event "yesterday" or "last night", and don't move a Yesterday event onto today.`;
+    }
+    sections.push(line);
   } else {
     sections.push(`Today's date: ${today}.`);
   }

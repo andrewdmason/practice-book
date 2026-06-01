@@ -187,6 +187,19 @@ const FAMILY_FOLLOWUP = "family-followup";
  */
 const UPCOMING_CALENDAR = "upcoming-calendar";
 
+/**
+ * Question types that legitimately read the calendar. When none of the
+ * categories in play this round is one of these, the calendar block is left out
+ * of the prompt entirely — so a non-calendar type (me-topic, relationship, …)
+ * can't drift onto an event it has no business asking about.
+ */
+const CALENDAR_CATEGORIES = new Set<string>([
+  "recent-calendar",
+  UPCOMING_CALENDAR,
+  "daily-recap",
+  "intentions",
+]);
+
 type FamilyFollowupSource = {
   authorName: string;
   entry_date: string;
@@ -298,15 +311,18 @@ export async function generateCandidates(
     );
   }
 
-  // Only pull future calendar events into the prompt when an upcoming-events
-  // question is actually being generated this round.
+  // Only pull the calendar into the prompt when a calendar-consuming question is
+  // actually being generated this round — and only pull *future* events when an
+  // upcoming-events question is among them. A round of purely non-calendar types
+  // gets no calendar block at all, so none of them can drift onto an event.
   const categoriesInPlay = forced ? [forced] : sampled;
   const includeFuture = categoriesInPlay.some((c) => c.name === UPCOMING_CALENDAR);
+  const includeCalendar = categoriesInPlay.some((c) => CALENDAR_CATEGORIES.has(c.name));
 
   const [files, history, calendarBlock, recentlyShown, familyDoc] = await Promise.all([
     loadAgentFiles(),
     loadHistory(today, entryId),
-    loadCalendarBlock(today, tz, includeFuture),
+    includeCalendar ? loadCalendarBlock(today, tz, includeFuture) : Promise.resolve(null),
     loadRecentlyShown(today),
     loadFamilyDoc(),
   ]);
