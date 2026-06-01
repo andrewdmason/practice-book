@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ImagePlus, Loader2, Play } from "lucide-react";
+import { ImagePlus, Loader2, Lock, Play } from "lucide-react";
 import type {
   JournalEntry,
   JournalMediaType,
@@ -56,13 +56,9 @@ function isAwaitingWrap(e: JournalEntry): boolean {
 
 export function HistoryList({
   entries,
-  mode = "mine",
   emptyMessage = "No entries yet.",
 }: {
   entries: HistoryEntry[];
-  /** "mine" shows a "shared" badge on own family posts; "family" shows the
-   * author's name on every card. */
-  mode?: "mine" | "family";
   emptyMessage?: string;
 }) {
   const router = useRouter();
@@ -89,6 +85,15 @@ export function HistoryList({
     <ul className="space-y-10">
       {entries.map((e) => {
         const generating = isGenerating(e);
+        // Closed personal posts get a lock beside the title so they read as
+        // private at a glance (no lock = shared). Drafts keep their own badge.
+        const personal = e.status === "closed" && e.visibility === "private";
+        const lockIcon = personal ? (
+          <Lock
+            aria-label="Personal"
+            className="mr-2 inline-block size-4 shrink-0 align-[-0.15em] text-muted-foreground"
+          />
+        ) : null;
         return (
           <li key={e.id}>
             <Link href={`/journal/${e.id}`} className="group block">
@@ -103,7 +108,7 @@ export function HistoryList({
                 <span className="font-serif text-xs text-muted-foreground tabular-nums">
                   {formatDate(e.entry_date)}
                 </span>
-                {mode === "family" && e.authorName && (
+                {e.authorName && (
                   <span className="font-serif text-xs text-muted-foreground">
                     {buildByline(e.authorName, e.commenterNames ?? [])}
                   </span>
@@ -116,13 +121,6 @@ export function HistoryList({
                     draft
                   </span>
                 )}
-                {mode === "mine" &&
-                  e.visibility === "family" &&
-                  e.status === "closed" && (
-                    <span className="font-serif text-[10px] uppercase tracking-wider text-muted-foreground/80">
-                      shared to family
-                    </span>
-                  )}
               </div>
               {generating ? (
                 <p className="mt-2 font-serif text-2xl italic leading-tight text-muted-foreground/50 animate-pulse">
@@ -135,6 +133,7 @@ export function HistoryList({
                 // around them.
                 <>
                   <p className="mt-2 font-serif text-2xl italic leading-tight text-foreground group-hover:underline group-hover:underline-offset-4 group-hover:decoration-foreground/30">
+                    {lockIcon}
                     <span
                       aria-hidden
                       className="mr-1 align-[-0.2em] font-serif text-4xl not-italic leading-none text-muted-foreground/40"
@@ -154,6 +153,7 @@ export function HistoryList({
                 // summarizing the month's threads.
                 <>
                   <p className="mt-2 font-serif text-2xl leading-tight text-foreground group-hover:underline group-hover:underline-offset-4 group-hover:decoration-foreground/30">
+                    {lockIcon}
                     {displayTitle(e)}
                   </p>
                   {e.summary && (
@@ -165,6 +165,7 @@ export function HistoryList({
               ) : (
                 <>
                   <p className="mt-2 font-serif text-2xl leading-tight text-foreground group-hover:underline group-hover:underline-offset-4 group-hover:decoration-foreground/30">
+                    {lockIcon}
                     {displayTitle(e)}
                   </p>
                   {e.pull_quote && (

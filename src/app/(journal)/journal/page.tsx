@@ -1,4 +1,5 @@
 import { HistoryList } from "@/components/journal/history-list";
+import { JournalFeedToggle, type JournalFeed } from "@/components/journal/feed-toggle";
 import { JournalListDropZone } from "@/components/journal/journal-list-drop-zone";
 import { createClient } from "@/lib/supabase/server";
 import { requireUserId } from "@/lib/journal/auth";
@@ -17,7 +18,12 @@ export default async function JournalPage({
   searchParams: Promise<{ feed?: string }>;
 }) {
   const { feed } = await searchParams;
-  const isFamily = feed === "family";
+  const mode: JournalFeed =
+    feed === "me" ? "me" : feed === "family" ? "family" : "all";
+  const isFamily = mode === "family";
+  // Feeds that surface *other* members' posts (Family and All) need the author
+  // enrichment — names, photos, comment bylines, unread state.
+  const showsOthers = mode !== "me";
 
   const supabase = await createClient();
   const userId = await requireUserId(supabase);
@@ -25,14 +31,23 @@ export default async function JournalPage({
   const columns =
     "id, entry_date, user_id, status, entry_type, visibility, opening_question, freeform_started_at, summary, title, pull_quote, quote_attribution, summary_stale, closed_at, created_at, updated_at";
 
-  // Mine: the caller's own entries (private + family). The entries SELECT policy
-  // is "own rows OR visibility = 'family'", so without the user_id filter this
-  // query would also pull in *other* members' shared entries — Mine must stay
-  // own-only. Family: every member's closed, family-shared entries.
+  // The entries SELECT policy is "own rows OR visibility = 'family'".
+  // Me: the caller's own entries (private + family); the user_id filter keeps
+  // out other members' shared rows the policy would otherwise allow.
+  // Family: every member's closed, family-shared entries.
+  // All: the caller's own rows (any status/visibility) plus every member's
+  // closed, family-shared rows — one OR query; a row matching both arms is
+  // still returned once, so no dedupe is needed.
   let query = supabase.from("journal_entries").select(columns);
-  query = isFamily
-    ? query.eq("visibility", "family").eq("status", "closed")
-    : query.eq("user_id", userId);
+  if (mode === "me") {
+    query = query.eq("user_id", userId);
+  } else if (mode === "family") {
+    query = query.eq("visibility", "family").eq("status", "closed");
+  } else {
+    query = query.or(
+      `user_id.eq.${userId},and(visibility.eq.family,status.eq.closed)`
+    );
+  }
   const { data } = await query;
 
   // Newest-first by entry_date — the date shown in the feed — with created_at
@@ -48,7 +63,7 @@ export default async function JournalPage({
   // email, then a generic label.
   const authorByUser = new Map<string, string>();
   const authorPhotoByUser = new Map<string, string>();
-  if (isFamily && entries.length > 0) {
+  if (showsOthers && entries.length > 0) {
     const { data: members } = await supabase
       .from("journal_members")
       .select("user_id, name, email");
@@ -92,7 +107,7 @@ export default async function JournalPage({
   // One batched query over the visible entries; distinct commenters excluding
   // the post's author, in the order they first commented.
   const commenterNamesByEntry = new Map<string, string[]>();
-  if (isFamily && entryIds.length > 0) {
+  if (showsOthers && entryIds.length > 0) {
     const authorIdByEntry = new Map(entries.map((e) => [e.id, e.user_id]));
     const { data: commentRows } = await supabase
       .from("journal_inline_comments")
@@ -119,7 +134,7 @@ export default async function JournalPage({
 
   // Which family posts are unread for the caller — same definition as the
   // header notification badge (new post, or new comments since last view).
-  const unreadEntryIds = isFamily
+  const unreadEntryIds = showsOthers
     ? await getUnreadFamilyEntryIds(supabase, userId)
     : new Set<string>();
 
@@ -128,17 +143,25 @@ export default async function JournalPage({
     getEntriesImageGenerationStates(entryIds),
   ]);
   const entriesWithPhotos = entries
-    .map((e) => ({
-      ...e,
-      photos: photosByEntry[e.id] ?? [],
-      photoGenerationStatus: imageGenerationByEntry[e.id] ?? null,
-      authorName: isFamily
-        ? authorByUser.get(e.user_id) ?? "Family member"
-        : null,
-      commenterNames: isFamily ? commenterNamesByEntry.get(e.id) ?? [] : [],
-      authorPhotoUrl: isFamily ? authorPhotoByUser.get(e.user_id) ?? null : null,
-      unread: isFamily ? unreadEntryIds.has(e.id) : false,
-    }))
+    .map((e) => {
+      // In All, the byline/avatar/unread dot belong on *other* members' posts,
+      // not the caller's own — own posts read like the Me feed. Family shows
+      // them on every card.
+      const showsAuthor = isFamily || (mode === "all" && e.user_id !== userId);
+      return {
+        ...e,
+        photos: photosByEntry[e.id] ?? [],
+        photoGenerationStatus: imageGenerationByEntry[e.id] ?? null,
+        authorName: showsAuthor
+          ? authorByUser.get(e.user_id) ?? "Family member"
+          : null,
+        commenterNames: showsAuthor ? commenterNamesByEntry.get(e.id) ?? [] : [],
+        authorPhotoUrl: showsAuthor
+          ? authorPhotoByUser.get(e.user_id) ?? null
+          : null,
+        unread: showsAuthor ? unreadEntryIds.has(e.id) : false,
+      };
+    })
     // Hide abandoned entries: an open entry never started (no opening question
     // picked, no freeform writing) with nothing attached is a row left behind
     // by visiting /journal/new without writing — not a real entry. (Family
@@ -156,9 +179,11 @@ export default async function JournalPage({
   return (
     <div className="mx-auto w-full max-w-2xl px-6 pb-24 pt-12">
       <JournalListDropZone />
+      <div className="mb-8">
+        <JournalFeedToggle feed={mode} />
+      </div>
       <HistoryList
         entries={entriesWithPhotos}
-        mode={isFamily ? "family" : "mine"}
         emptyMessage={
           isFamily ? "Nothing shared with the family yet." : "No entries yet."
         }

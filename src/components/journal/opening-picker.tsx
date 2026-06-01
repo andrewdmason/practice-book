@@ -43,11 +43,16 @@ export function OpeningPicker({
   initialCandidates,
   initialRerollCount,
   questionTypeNames = [],
+  initialMode,
 }: {
   entryId: string;
   initialCandidates: JournalOpeningCandidate[] | null;
   initialRerollCount: number;
   questionTypeNames?: string[];
+  /** Deep-link the picker straight into one way to start (from the header's
+   * "New ▾" menu). "freeform" auto-starts a blog entry on mount; "quote" and
+   * "recap" open their compose form directly. */
+  initialMode?: "freeform" | "quote" | "recap";
 }) {
   const [candidates, setCandidates] = useState<JournalOpeningCandidate[]>(() =>
     normalizeCandidates(initialCandidates)
@@ -57,7 +62,12 @@ export function OpeningPicker({
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [shown, setShown] = useState(false);
-  const [mode, setMode] = useState<"pick" | "quote" | "recap">("pick");
+  const [mode, setMode] = useState<"pick" | "quote" | "recap">(
+    initialMode === "quote" || initialMode === "recap" ? initialMode : "pick"
+  );
+  // True while a deep-linked "write freely" start is in flight, so we show a
+  // loader instead of flashing the question picker before the composer loads.
+  const [autoFreeform, setAutoFreeform] = useState(initialMode === "freeform");
   const [quoteText, setQuoteText] = useState("");
   const [attribution, setAttribution] = useState("");
   const [savingQuote, setSavingQuote] = useState(false);
@@ -70,10 +80,17 @@ export function OpeningPicker({
   const initialLoadRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // On mount, fetch the candidates if the entry doesn't have them yet.
+  // On mount, either honor a deep-linked start mode or fetch the opening
+  // questions. Freeform auto-starts; quote/recap open straight into their
+  // compose form (no questions needed); otherwise fetch candidates if absent.
   useEffect(() => {
     if (initialLoadRef.current) return;
     initialLoadRef.current = true;
+    if (initialMode === "freeform") {
+      handleWriteFreely();
+      return;
+    }
+    if (initialMode === "quote" || initialMode === "recap") return;
     if (candidates.length > 0) return;
     void fetchCandidates("/journal/api/opening-candidates");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -149,6 +166,8 @@ export function OpeningPicker({
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
+        // Drop back to the picker so the error (and the other options) show.
+        setAutoFreeform(false);
       }
     });
   }
@@ -212,6 +231,16 @@ export function OpeningPicker({
         setSavingRecap(false);
       }
     });
+  }
+
+  // Deep-linked "write freely": hold a quiet loader until the freeform start
+  // lands and the page swaps in the composer (or an error drops us back).
+  if (autoFreeform && !error) {
+    return (
+      <div className="mx-auto flex w-full max-w-2xl flex-1 items-center justify-center px-6 pb-24 pt-12 text-muted-foreground">
+        <Loader2 className="size-5 animate-spin" aria-label="Starting…" />
+      </div>
+    );
   }
 
   // Recap-compose mode: paste a monthly chatbot recap (markdown) with an

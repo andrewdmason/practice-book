@@ -15,9 +15,14 @@ export const dynamic = "force-dynamic";
 export default async function NewEntryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ entry?: string }>;
+  searchParams: Promise<{ entry?: string; start?: string }>;
 }) {
-  const { entry: entryParam } = await searchParams;
+  const { entry: entryParam, start } = await searchParams;
+  // Deep-link from the header's "New ▾" menu into a specific way to start.
+  const initialMode =
+    start === "freeform" || start === "quote" || start === "recap"
+      ? start
+      : undefined;
   const entry = entryParam
     ? await getEntryById(entryParam)
     : await getOrCreateTodayEntry();
@@ -90,6 +95,7 @@ export default async function NewEntryPage({
           initialCandidates={entry.opening_candidates}
           initialRerollCount={entry.candidates_reroll_count}
           questionTypeNames={questionTypeNames}
+          initialMode={initialMode}
         />
       ) : (
         <ChatSurface
