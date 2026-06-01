@@ -1,10 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { PencilIcon } from "lucide-react";
+import { MoreVerticalIcon, PencilIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { PerformanceFormDialog } from "./performance-form-dialog";
 import { updateWork } from "@/app/practice/repertoire/actions";
 import type { Work } from "@/lib/types";
 
@@ -15,6 +22,7 @@ export function WorkDetailHeader({ work }: { work: Work }) {
   const [notes, setNotes] = useState(work.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [addPerformanceOpen, setAddPerformanceOpen] = useState(false);
 
   async function handleSave() {
     setSaving(true);
@@ -90,13 +98,24 @@ export function WorkDetailHeader({ work }: { work: Work }) {
     <div className="mb-6">
       <div className="flex items-start gap-2">
         <h1 className="font-heading text-2xl font-semibold">{work.name}</h1>
-        <button
-          onClick={() => setEditing(true)}
-          className="mt-1.5 text-muted-foreground transition-colors hover:text-foreground"
-          aria-label="Edit work details"
-        >
-          <PencilIcon className="size-4" />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="mt-1.5 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label="Work actions"
+          >
+            <MoreVerticalIcon className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="bottom" className="w-48">
+            <DropdownMenuItem onClick={() => setEditing(true)}>
+              <PencilIcon />
+              Edit details
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setAddPerformanceOpen(true)}>
+              <PlusIcon />
+              Add performance
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {work.composer && (
         <p className="mt-1 text-muted-foreground">{work.composer}</p>
@@ -106,6 +125,12 @@ export function WorkDetailHeader({ work }: { work: Work }) {
           {work.notes}
         </p>
       )}
+
+      <PerformanceFormDialog
+        owner={{ workId: work.id }}
+        open={addPerformanceOpen}
+        onOpenChange={setAddPerformanceOpen}
+      />
     </div>
   );
 }

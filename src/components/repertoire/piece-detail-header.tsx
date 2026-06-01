@@ -2,12 +2,26 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArchiveIcon, PencilIcon, RotateCcwIcon } from "lucide-react";
+import {
+  ArchiveIcon,
+  MoreVerticalIcon,
+  PencilIcon,
+  PlusIcon,
+  RotateCcwIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "./status-badge";
 import { ArchiveDialog } from "./archive-dialog";
+import { PerformanceFormDialog } from "./performance-form-dialog";
 import { WorkPicker } from "./work-picker";
 import { updatePieceDetails, updatePieceStatus } from "@/app/practice/repertoire/actions";
 import type { Piece, Work } from "@/lib/types";
@@ -28,6 +42,7 @@ export function PieceDetailHeader({
   const [notes, setNotes] = useState(piece.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [addPerformanceOpen, setAddPerformanceOpen] = useState(false);
   const [reactivating, setReactivating] = useState(false);
 
   async function handleSave() {
@@ -98,40 +113,44 @@ export function PieceDetailHeader({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge status={piece.status} />
-        </div>
-        {piece.status === "archived" ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleReactivate}
-            disabled={reactivating}
-          >
-            <RotateCcwIcon data-icon="inline-start" />
-            {reactivating ? "Reactivating..." : "Reactivate"}
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setArchiveOpen(true)}
-          >
-            <ArchiveIcon data-icon="inline-start" />
-            Archive
-          </Button>
-        )}
+      <div className="flex flex-wrap items-center gap-2 mb-1">
+        <StatusBadge status={piece.status} />
       </div>
       <div className="flex items-start gap-2 mt-2">
         <h2 className="text-2xl font-semibold tracking-tight">{name}</h2>
-        <button
-          onClick={() => setEditing(true)}
-          className="mt-1.5 text-muted-foreground hover:text-foreground transition-colors"
-          aria-label="Edit piece details"
-        >
-          <PencilIcon className="size-4" />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="mt-1.5 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            aria-label="Piece actions"
+          >
+            <MoreVerticalIcon className="size-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="bottom" className="w-48">
+            <DropdownMenuItem onClick={() => setEditing(true)}>
+              <PencilIcon />
+              Edit details
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setAddPerformanceOpen(true)}>
+              <PlusIcon />
+              Add performance
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {piece.status === "archived" ? (
+              <DropdownMenuItem
+                onClick={handleReactivate}
+                disabled={reactivating}
+              >
+                <RotateCcwIcon />
+                {reactivating ? "Reactivating..." : "Reactivate"}
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onClick={() => setArchiveOpen(true)}>
+                <ArchiveIcon />
+                Archive
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-muted-foreground">
         {composer && <span>{composer}</span>}
@@ -153,6 +172,12 @@ export function PieceDetailHeader({
         piece={piece}
         open={archiveOpen}
         onOpenChange={setArchiveOpen}
+      />
+
+      <PerformanceFormDialog
+        owner={{ pieceId: piece.id }}
+        open={addPerformanceOpen}
+        onOpenChange={setAddPerformanceOpen}
       />
     </div>
   );
