@@ -75,31 +75,31 @@ export type BuiltinQuestionType = {
 };
 
 /**
- * The built-in question types. The first 13 mirror migration 00047; the next 4
- * (added in 00055) are playful/concrete types that shine for kids; the next
- * (added in 00056) invites reminiscing about the past; the last (added in 00058)
- * weaves in what another family member has shared. Their weight here is the
- * *adult* default — the four kid types default to 0 (off), and the age templates
- * turn them on with an age-appropriate mix.
+ * The built-in question types. Their weight here is the *adult* default — the
+ * four kid types (favorites, imagination, proud-moment, funny-moment) default to
+ * 0 (off), and the age templates turn them on with an age-appropriate mix.
+ *
+ * The set was simplified in migration 00071, which merged four clusters of
+ * near-duplicates (daily-recap → recent-calendar, upcoming-calendar →
+ * intentions, unresolved-loop → historical-followup, and mood-check-in +
+ * sensory-moment folded into a refocused, source-grounded gratitude) and added
+ * the `principles` type. Keep this array in sync with that migration so a fresh
+ * code seed and a migrated database land on the same set.
  */
 export const BUILTIN_QUESTION_TYPES: BuiltinQuestionType[] = [
-  { name: "recent-calendar", weight: 12, sort_order: 1, base_description: "Pulls a specific event from your connected calendar in the last few days and asks about it — best once it has already happened." },
-  { name: "upcoming-calendar", weight: 3, sort_order: 2, base_description: "Looks ahead on your calendar and asks about something coming up. Used sparingly." },
-  { name: "historical-followup", weight: 6, sort_order: 3, base_description: "Re-reads your own earlier journal entries and picks up a specific thread you wrote about a while back — not today or the past day or two — referencing it directly. Favor older threads that have had time to develop or settle; leave very recent moments to the recap and loop questions. Only draws on entries you wrote yourself, never another family member's shared post." },
+  { name: "recent-calendar", weight: 12, sort_order: 1, base_description: "Asks about a specific recent moment that already happened — pulled from your connected calendar over the last few days, or just from your day, including yesterday. Best once it has already happened; don't ask about today's still-upcoming events or anything in the future." },
+  { name: "historical-followup", weight: 6, sort_order: 3, base_description: "Re-reads your own earlier journal entries and picks up a specific thread — an older one that's had time to develop or settle, or a more recent worry or tension you mentioned but left unresolved — and checks back on it, referencing it directly. Only draws on entries you wrote yourself, never another family member's shared post." },
   { name: "me-topic", weight: 6, sort_order: 4, base_description: "Draws on your Present doc — projects, interests, people — and asks about one, rotating so it doesn't fixate on the same thing. Stays in the Present doc: never pulls from your calendar at all, neither upcoming events nor past ones (a recital, a game, an appointment) — the calendar question types own those. If the Present doc is thin, ask a broader question about a known project or interest rather than reaching for a calendar event." },
   { name: "deep-introspective", weight: 6, sort_order: 5, base_description: "An open, reflective prompt aimed at something unspoken or unresolved. Not tied to any event — high risk, high reward." },
-  { name: "gratitude", weight: 3, sort_order: 6, base_description: "A simple prompt to name something you're grateful for right now. Not drawn from any particular source." },
-  { name: "mood-check-in", weight: 3, sort_order: 7, base_description: "A concrete read on how you're feeling today. General, not tied to a specific event." },
-  { name: "daily-recap", weight: 6, sort_order: 8, base_description: "Asks about a small, concrete moment from yesterday — something that already happened — leaning on your calendar rather than past entries. Never asks about today or anything still upcoming. Only draw on a calendar event that actually falls on yesterday (or earlier); if there's nothing from yesterday, ask about yesterday in general rather than borrowing a today event and back-dating it." },
-  { name: "intentions", weight: 3, sort_order: 9, base_description: "A forward-looking prompt about what you want from today or the week ahead, with a light read on what's on your calendar." },
-  { name: "unresolved-loop", weight: 3, sort_order: 10, base_description: "Scans your recent entries for an open worry or tension you mentioned but didn't resolve, and checks back on it." },
+  { name: "gratitude", weight: 3, sort_order: 6, base_description: "A prompt to name something you're grateful for — anchored to something specific, not a generic 'what are you grateful for today?'. Draw on the Present doc (a person, project, or place that matters to you) or a recent entry so the gratitude centers on a real person, thing, or moment in your life." },
+  { name: "intentions", weight: 3, sort_order: 9, base_description: "A forward-looking prompt about what's coming up and what you want from it — today, tomorrow, or the week ahead — with a light read on what's on your calendar." },
   { name: "relationship", weight: 3, sort_order: 11, base_description: "Surfaces a specific person from your Present doc or recent entries and asks about a recent moment with them. The question has to center on that person and your connection — never reframe a solo activity or calendar event (a recital, a workout, an errand) as a relationship question. If no specific person fits, ask about someone in your life rather than reaching for something on your calendar." },
   { name: "curveball", weight: 1, sort_order: 12, base_description: "A deliberately unexpected, playful prompt from an angle you wouldn't predict. Not based on your data." },
-  { name: "sensory-moment", weight: 3, sort_order: 13, base_description: "Asks you to capture a sensory detail — something you saw, heard, tasted, or felt recently. Not tied to a specific source." },
   { name: "favorites", weight: 0, sort_order: 14, base_description: "Asks you to name a favorite from today — a food, a song, a moment, something you played or watched. Light and concrete." },
   { name: "imagination", weight: 0, sort_order: 15, base_description: "A playful what-if or would-you-rather — pure imagination, not tied to your real day." },
   { name: "proud-moment", weight: 0, sort_order: 16, base_description: "Asks about something you figured out, pulled off, or feel proud of." },
   { name: "funny-moment", weight: 0, sort_order: 17, base_description: "Asks about something that made you laugh recently." },
   { name: "reminiscence", weight: 3, sort_order: 18, base_description: "Invites the user to tell a story from their past or reminisce on something old — a memory, a place, a person, a turning point. Draw on the Past doc to make it specific." },
   { name: "family-followup", weight: 3, sort_order: 19, base_description: "Draws on a recent entry another family member shared to the family feed and asks the user about it, referencing that member by name (e.g. \"Jenny wrote about the camping trip — how was that for you?\"). Only fires when another member has shared something." },
+  { name: "principles", weight: 3, sort_order: 20, base_description: "Invites you to put a principle, belief, or value into words and ground it in a real story — something that happened that taught it to you, or shows it in action. Draw on the Past and Present docs and your earlier entries to make it specific and personal. The kind of thing worth passing down." },
 ];

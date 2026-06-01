@@ -15,9 +15,11 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { sourcesFor } from "@/lib/journal/question-sources";
 import type { JournalQuestionType, JournalSettings } from "@/lib/types";
 
 const MIN_PER_DAY = 1;
@@ -434,6 +436,8 @@ function QuestionRow({
             </div>
           )}
 
+          <SourcePills name={row.name} />
+
           <div className="mt-3">
             <label className="font-serif text-xs uppercase tracking-wide text-muted-foreground">
               Custom instructions
@@ -446,6 +450,38 @@ function QuestionRow({
             />
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The data sources this question type loads into its prompt, shown as pills so
+ * you can see at a glance which docs ground it. Derived from the shared
+ * CONTEXT_SPECS (sourcesFor). An explicit "none" keeps a sourceless type (a cold,
+ * imaginative prompt like Curveball) from looking like a rendering bug.
+ */
+function SourcePills({ name }: { name: string }) {
+  const sources = sourcesFor(name);
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <span className="font-serif text-xs uppercase tracking-wide text-muted-foreground">
+        Sources
+      </span>
+      {sources.length === 0 ? (
+        <span className="font-serif text-xs italic text-muted-foreground">
+          none — asked without your docs
+        </span>
+      ) : (
+        sources.map((s) => (
+          <Badge
+            key={s}
+            variant="outline"
+            className="font-mono text-[11px] font-normal text-muted-foreground"
+          >
+            {s}
+          </Badge>
+        ))
       )}
     </div>
   );

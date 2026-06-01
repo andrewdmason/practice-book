@@ -14,8 +14,7 @@ const DAY_MS = 86400000;
  *
  * `window` defaults to "recent": the block carries only past + already-happened
  * events, so a prompt can't surface something upcoming. Pass "ahead" only when
- * generating a forward-looking question (upcoming-calendar, intentions), and
- * "recap" for a yesterday-only recap that must not see today.
+ * generating a forward-looking question (intentions).
  */
 export async function loadCalendarBlock(
   today: string,

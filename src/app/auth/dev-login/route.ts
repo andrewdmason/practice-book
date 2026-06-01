@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { supabaseUrl, supabaseAnonKey } from "@/lib/supabase/config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ensureProvisioned } from "@/lib/journal/provisioning";
+import { backfillOwnerContext } from "@/lib/journal/seeds/dev-owner-context";
 
 export async function GET(request: Request) {
   if (process.env.NODE_ENV !== "development") {
@@ -117,7 +118,14 @@ export async function GET(request: Request) {
   }
 
   // Seed this member's journal on first dev-login (idempotent thereafter).
-  await ensureProvisioned({ id: userId, email });
+  const membership = await ensureProvisioned({ id: userId, email });
+
+  // Dev convenience: give the owner a populated Present/Past so the
+  // source-grounded question types have material to draw on locally. Only fills
+  // docs that are still empty, so it never clobbers edits.
+  if (membership.allowed && membership.isOwner) {
+    await backfillOwnerContext(admin, userId);
+  }
 
   return NextResponse.redirect(origin);
 }
