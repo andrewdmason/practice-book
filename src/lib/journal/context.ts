@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { requireUserId } from "@/lib/journal/auth";
 import type {
   JournalAgentFile,
   JournalAgentFileName,
@@ -68,6 +69,13 @@ type RecentEntry = JournalEntry & { messages: JournalMessage[] };
  * Load entries other than the current one, most recent first.
  * Full conversations for the most recent `fullEntries` entries; one-line
  * summaries for older. Earlier same-day threads count as recent.
+ *
+ * Scoped to the caller's *own* entries. RLS alone would also surface other
+ * family members' shared (family-visible, closed) entries, but those don't
+ * belong in this "things you wrote" history — the interviewer would attribute
+ * them to the user (e.g. ask a historical-followup about a post a sibling
+ * wrote). Another member's shared entry reaches the prompt only through the
+ * family-followup question type, which loads it separately and names the author.
  */
 export async function loadHistory(
   today: string,
@@ -75,12 +83,14 @@ export async function loadHistory(
   fullEntries = 7
 ) {
   const supabase = await createClient();
+  const userId = await requireUserId(supabase);
 
   let query = supabase
     .from("journal_entries")
     .select(
       "id, entry_date, status, opening_question, opening_candidates, candidates_reroll_count, summary, title, pull_quote, summary_stale, closed_at, created_at, updated_at"
     )
+    .eq("user_id", userId)
     .order("entry_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(60);

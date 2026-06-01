@@ -148,12 +148,19 @@ export function formatCalendarBlock(
       // Only "today" is ambiguous about past vs. future — other days are
       // settled by their label. Mark today's timed events relative to now so
       // recent vs. upcoming questions don't treat a later-today event as past.
+      // An event that's started but not yet ended is "happening now", not
+      // "already happened" — otherwise the model can miscast a live 7pm event
+      // as something that's over (even "last night").
       let note = "";
       if (d === 0 && !ev.allDay) {
-        note =
-          ev.start.getTime() <= now.getTime()
-            ? " — already happened"
-            : " — hasn't happened yet";
+        const nowMs = now.getTime();
+        if (ev.start.getTime() > nowMs) {
+          note = " — hasn't happened yet";
+        } else if (ev.end && ev.end.getTime() > nowMs) {
+          note = " — happening now";
+        } else {
+          note = " — already happened";
+        }
       }
       lines.push(formatEventLine(ev, tz) + note);
     }
