@@ -7,7 +7,7 @@ import type { JournalOpeningCandidate } from "@/lib/types";
 export const runtime = "nodejs";
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as { entryId?: string };
+  const body = (await req.json()) as { entryId?: string; tz?: string };
   const entryId = body.entryId;
   if (!entryId) {
     return new Response("entryId required", { status: 400 });
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   let candidates: JournalOpeningCandidate[];
   try {
-    candidates = await generateCandidates(entryId, []);
+    candidates = await generateCandidates(entryId, [], undefined, body.tz);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return new Response(msg, { status: 500 });

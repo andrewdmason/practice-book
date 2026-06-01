@@ -1,7 +1,7 @@
 import { loadFeedCached } from "./cache";
 import { formatCalendarBlock } from "./format";
 import { loadCalendarSources } from "./sources";
-import type { FeedResult } from "./types";
+import type { CalendarWindow, FeedResult } from "./types";
 
 export { clearCalendarCache } from "./cache";
 
@@ -12,15 +12,15 @@ const DAY_MS = 86400000;
  * Returns null when there's nothing to inject (no sources, all failed and
  * empty, etc.) — caller treats that as "skip the block."
  *
- * `includeFuture` defaults to false: the block carries only past + already-
- * happened events, so a prompt can't surface something upcoming. Pass true only
- * when generating an "upcoming events" question, the one type meant to look
- * ahead.
+ * `window` defaults to "recent": the block carries only past + already-happened
+ * events, so a prompt can't surface something upcoming. Pass "ahead" only when
+ * generating a forward-looking question (upcoming-calendar, intentions), and
+ * "recap" for a yesterday-only recap that must not see today.
  */
 export async function loadCalendarBlock(
   today: string,
   tz: string,
-  includeFuture: boolean = false,
+  window: CalendarWindow = "recent",
 ): Promise<string | null> {
   let sources;
   try {
@@ -59,6 +59,6 @@ export async function loadCalendarBlock(
     }
   }
 
-  const block = formatCalendarBlock(results, today, tz, new Date(), includeFuture);
+  const block = formatCalendarBlock(results, today, tz, new Date(), window);
   return block === "" ? null : block;
 }

@@ -1,4 +1,4 @@
-import type { FeedResult, NormalizedEvent } from "./types";
+import type { CalendarWindow, FeedResult, NormalizedEvent } from "./types";
 
 function localDateKey(date: Date, tz: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -76,12 +76,14 @@ export function formatCalendarBlock(
   today: string,
   tz: string,
   now: Date = new Date(),
-  // When false, future events are stripped entirely: upcoming days, plus today's
-  // timed events that haven't happened yet. Only the "upcoming events" question
-  // type asks the model to look ahead, so every other prompt gets a past-only
-  // calendar and can't drift onto something that hasn't occurred. Today's all-day
-  // events are kept either way — they're ongoing, not scheduled-for-later.
-  includeFuture: boolean = false,
+  // The window decides which days appear (see CalendarWindow):
+  // - "recent": last 3 days, today's not-yet-happened timed events stripped.
+  // - "recap":  last 3 days but no today at all — so a recap question can't
+  //             reach a today event and back-date it.
+  // - "ahead":  last 3 days plus the next 7 — the only forward-looking window.
+  // Today's all-day events are kept under "recent"/"ahead" (ongoing, not
+  // scheduled-for-later) and dropped under "recap" with the rest of today.
+  window: CalendarWindow = "recent",
 ): string {
   if (results.length === 0) return "";
 
@@ -125,14 +127,17 @@ export function formatCalendarBlock(
   // All feeds failed → no block.
   if (failed.length === results.length) return "";
 
+  // Last day shown: "ahead" reaches into next week, "recent" stops at today,
+  // "recap" stops at yesterday (today is excluded entirely).
+  const maxD = window === "ahead" ? 7 : window === "recap" ? -1 : 0;
+
   const lines: string[] = [];
-  for (let d = -3; d <= 7; d++) {
-    // Past-only mode: skip future days, and drop today's not-yet-happened timed
-    // events (all-day events today are ongoing, so they stay).
-    if (!includeFuture && d >= 1) continue;
+  for (let d = -3; d <= maxD; d++) {
     const key = addDaysISO(today, d);
     let dayEvents = buckets.get(key) ?? [];
-    if (!includeFuture && d === 0) {
+    // "recent" includes today but only its already-happened/ongoing timed events
+    // (all-day events today stay — they're ongoing, not scheduled-for-later).
+    if (window === "recent" && d === 0) {
       dayEvents = dayEvents.filter(
         (ev) => ev.allDay || ev.start.getTime() <= now.getTime(),
       );
@@ -175,8 +180,11 @@ export function formatCalendarBlock(
 
   if (lines.length === 0) return "";
 
-  const header = includeFuture
-    ? "=== Calendar — last 3 days + next 7 ==="
-    : "=== Calendar — last 3 days ===";
+  const header =
+    window === "ahead"
+      ? "=== Calendar — last 3 days + next 7 ==="
+      : window === "recap"
+        ? "=== Calendar — the last few days (not today) ==="
+        : "=== Calendar — last 3 days ===";
   return [header, ...lines].join("\n");
 }

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireUserId } from "@/lib/journal/auth";
 import { generateCandidates } from "@/lib/journal/opening-candidates";
 import { candidateTexts } from "@/lib/journal/candidates";
-import { getUserTimezone, localDate } from "@/lib/date-utils";
+import { localDate, resolveTimezone } from "@/lib/date-utils";
 import type { JournalOpeningCandidate } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -13,7 +13,11 @@ export const runtime = "nodejs";
 // single question type (the user asked for a specific kind). The reroll count
 // is still tracked (it keys the picker's re-animation) but isn't capped.
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as { entryId?: string; categoryName?: string };
+  const body = (await req.json()) as {
+    entryId?: string;
+    categoryName?: string;
+    tz?: string;
+  };
   const entryId = body.entryId;
   const categoryName = body.categoryName?.trim() || undefined;
   if (!entryId) {
@@ -51,7 +55,7 @@ export async function POST(req: NextRequest) {
 
   // Persist the rejected set so future days don't resurface the same prompts.
   if (rejected.length > 0) {
-    const tz = await getUserTimezone();
+    const tz = await resolveTimezone(body.tz);
     const today = localDate(new Date(), tz);
     await supabase.from("journal_skipped_questions").insert(
       rejected.map((q) => ({ question: q, entry_id: entryId, skipped_on: today, user_id: userId }))
@@ -60,7 +64,7 @@ export async function POST(req: NextRequest) {
 
   let candidates: JournalOpeningCandidate[];
   try {
-    candidates = await generateCandidates(entryId, rejected, categoryName);
+    candidates = await generateCandidates(entryId, rejected, categoryName, body.tz);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return new Response(msg, { status: 500 });

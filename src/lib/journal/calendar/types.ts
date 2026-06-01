@@ -1,3 +1,13 @@
+/**
+ * How far the calendar block reaches, chosen per question type:
+ * - "recent": last 3 days including today's already-happened events (recent-calendar).
+ * - "recap": last 3 days excluding today entirely (daily-recap — so it can't
+ *   reach a today event and back-date it).
+ * - "ahead": last 3 days plus the next 7 (the only forward-looking window —
+ *   upcoming-calendar and intentions).
+ */
+export type CalendarWindow = "recent" | "recap" | "ahead";
+
 export type CalendarSource = {
   id: string;
   displayName: string;
