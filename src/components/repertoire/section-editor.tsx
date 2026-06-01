@@ -58,6 +58,7 @@ import {
   SECTION_STATUS_DOT_COLORS,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { extractYouTubeId } from "@/lib/youtube";
 
 /* ---------------------------- helpers ---------------------------- */
 
@@ -92,15 +93,6 @@ function parseMMSS(value: string): number | null {
   }
   const n = parseFloat(trimmed);
   return isNaN(n) ? null : n;
-}
-
-function extractVideoId(input: string): string | null {
-  const trimmed = input.trim();
-  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
-  const match = trimmed.match(
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/
-  );
-  return match ? match[1] : null;
 }
 
 type FlatRow = {
@@ -917,7 +909,7 @@ export function SectionEditor({
   };
 
   const handleAddVideo = async () => {
-    const vid = extractVideoId(videoUrl);
+    const vid = extractYouTubeId(videoUrl);
     if (!vid) return;
     setAddingVideo(true);
     await createVideo(pieceId, vid);
@@ -1005,7 +997,7 @@ export function SectionEditor({
             size="sm"
             variant="outline"
             onClick={handleAddVideo}
-            disabled={addingVideo || !extractVideoId(videoUrl)}
+            disabled={addingVideo || !extractYouTubeId(videoUrl)}
             className="h-8"
           >
             <PlusIcon className="size-3.5 mr-1" />

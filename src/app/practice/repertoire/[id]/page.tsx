@@ -23,6 +23,8 @@ import {
 } from "@/app/practice/focus-panel/actions";
 import { getSections, getProgressSnapshots } from "@/app/practice/repertoire/section-actions";
 import { getVideos, getTimestamps } from "@/app/practice/repertoire/video-actions";
+import { getPerformances } from "@/app/practice/repertoire/performance-actions";
+import { PerformancesPanel } from "@/components/repertoire/performances-panel";
 import { getPieceCumulativeData, getPieceCompletionByWeek } from "@/app/practice/reports/actions";
 import type { Piece, Work } from "@/lib/types";
 
@@ -46,13 +48,14 @@ export default async function PieceDetailPage({
 
   const typedPiece = piece as Piece;
 
-  const [{ data: allWorks }, focusData, cumulativeData, sections, videos, progressSnapshots] = await Promise.all([
+  const [{ data: allWorks }, focusData, cumulativeData, sections, videos, progressSnapshots, performances] = await Promise.all([
     supabase.from("works").select("*").order("name"),
     getAssignmentsForPiece(id),
     getPieceCumulativeData(id),
     getSections(id),
     getVideos(id),
     getProgressSnapshots(id),
+    getPerformances({ pieceId: id }),
   ]);
 
   const works = (allWorks ?? []) as Work[];
@@ -79,6 +82,8 @@ export default async function PieceDetailPage({
         <ArrowLeftIcon className="size-3.5" />
         Back to repertoire
       </Link>
+
+      <PerformancesPanel performances={performances} owner={{ pieceId: id }} />
 
       <PieceDetailHeader piece={typedPiece} work={work} works={works} />
 

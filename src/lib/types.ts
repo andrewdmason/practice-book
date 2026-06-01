@@ -570,6 +570,24 @@ export type JournalProfileSuggestion = {
   resolved_at: string | null;
 };
 
+/**
+ * The user's own YouTube recording of a performance, attached to either a piece
+ * or a work (exactly one owner). Distinct from PieceVideo, which is the
+ * section-practice reference video. Featured prominently on the detail page.
+ */
+export type Performance = {
+  id: string;
+  piece_id: string | null;
+  work_id: string | null;
+  youtube_video_id: string;
+  title: string | null;
+  performers: string | null;
+  location: string | null;
+  performed_on: string | null; // YYYY-MM-DD
+  created_at: string;
+  updated_at: string;
+};
+
 export type PieceVideo = {
   id: string;
   piece_id: string;

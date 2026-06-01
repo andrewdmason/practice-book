@@ -8,6 +8,8 @@ import { Separator } from "@/components/ui/separator";
 import {
   getWorkFocusData,
 } from "@/app/practice/repertoire/actions";
+import { getPerformances } from "@/app/practice/repertoire/performance-actions";
+import { PerformancesPanel } from "@/components/repertoire/performances-panel";
 import type { Work, Piece } from "@/lib/types";
 
 export default async function WorkDetailPage({
@@ -30,13 +32,14 @@ export default async function WorkDetailPage({
 
   const typedWork = work as Work;
 
-  const [{ data: rawPieces }, focusData] = await Promise.all([
+  const [{ data: rawPieces }, focusData, performances] = await Promise.all([
     supabase
       .from("pieces")
       .select("*")
       .eq("work_id", id)
       .order("name"),
     getWorkFocusData(id),
+    getPerformances({ workId: id }),
   ]);
 
   const pieces = (rawPieces ?? []) as Piece[];
@@ -50,6 +53,8 @@ export default async function WorkDetailPage({
         <ArrowLeftIcon className="size-3.5" />
         Back to repertoire
       </Link>
+
+      <PerformancesPanel performances={performances} owner={{ workId: id }} />
 
       <WorkDetailHeader work={typedWork} />
 
